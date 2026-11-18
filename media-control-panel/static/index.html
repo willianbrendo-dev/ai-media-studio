@@ -902,6 +902,45 @@
                     </label>
                   </div>
 
+                  <!-- MOTOR DE SOTAQUE & VOZES NORDESTINAS (v2.6) -->
+                  <div class="rounded-xl bg-[#0d1210] border border-emerald-500/25 p-2.5 space-y-2">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                      <span class="text-[11px] font-extrabold uppercase tracking-wider text-emerald-300">🎙️ Motor de Sotaque &amp; Vozes Nordestinas</span>
+                      <span id="nov-profiles-summary" class="text-[10px] font-mono text-slate-400">4 vozes regionais prontas</span>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <select id="nov-accent-engine" onchange="syncNovAccentEngine(this.value)"
+                        class="w-full min-h-[44px] bg-[#070a08] border border-white/10 focus:border-emerald-400 rounded-xl px-2.5 text-xs text-white outline-none min-w-0">
+                        <option value="nordestino_raiz" selected>🌵 Nordestino Raiz (Gemini Native TTS + SoXR 48kHz)</option>
+                        <option value="f5_tts_clone">🧬 F5-TTS-PT-BR Clone (Colab GPU Zero-Shot)</option>
+                        <option value="seed_vc_guide">🎤 Seed-VC Guia de Voz (Sua Entonação + Timbre IA)</option>
+                      </select>
+                      <button id="btn-nov-preview-voice" type="button" onclick="previewRegionalVoices()"
+                        class="touch-btn w-full min-h-[44px] px-3 rounded-xl text-xs font-extrabold bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200 border border-emerald-400/40 transition cursor-pointer">
+                        🔊 Testar Vozes Nordestinas
+                      </button>
+                    </div>
+                    <audio id="nov-voice-preview-player" controls preload="none" class="hidden w-full h-9 rounded-lg"></audio>
+                    <details class="rounded-lg bg-[#070a08] border border-white/10 px-2.5 py-1.5 text-[11px]">
+                      <summary class="cursor-pointer font-semibold text-slate-300 select-none">🎛️ Amostra de Timbre Regional (Upload 6s–15s para F5-TTS / Seed-VC)</summary>
+                      <div class="mt-2 flex flex-col sm:flex-row gap-2 items-stretch sm:items-center">
+                        <select id="nov-ref-char" class="min-h-[38px] bg-[#0d1210] border border-white/10 rounded-lg px-2 text-xs text-white outline-none">
+                          <option value="dona_socorro">Dona Socorro</option>
+                          <option value="seu_bastiao">Seu Bastião</option>
+                          <option value="enzo">Enzo</option>
+                          <option value="narrador_sertao">Narrador Sertão</option>
+                        </select>
+                        <input id="nov-ref-file" type="file" accept="audio/*"
+                          class="flex-1 min-w-0 min-h-[38px] bg-[#0d1210] border border-white/10 rounded-lg px-2 py-1 text-[11px] text-slate-300 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:bg-emerald-500/20 file:text-emerald-200" />
+                        <button id="btn-nov-upload-ref" type="button" onclick="uploadRegionalVoiceSample()"
+                          class="touch-btn shrink-0 min-h-[38px] px-3 rounded-lg text-xs font-bold bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200 border border-emerald-400/40 cursor-pointer">
+                          ⬆️ Salvar Timbre
+                        </button>
+                      </div>
+                      <div id="nov-ref-badges" class="mt-2 flex flex-wrap gap-1.5 text-[10px]"></div>
+                    </details>
+                  </div>
+
                   <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
                     <button id="gp-nov-mode-flow_pack" type="button" onclick="setNovelaRenderMode('flow_pack')"
                       class="touch-btn min-h-[52px] px-3 py-2 rounded-xl border text-left transition cursor-pointer bg-amber-500/20 border-amber-400/70 text-amber-200 min-w-0">
@@ -940,11 +979,15 @@
                     <div class="rounded-xl bg-[#0d1210] border border-cyan-500/25 p-3 space-y-2.5">
                       <div class="flex flex-wrap items-center justify-between gap-2">
                         <span class="text-xs font-extrabold text-cyan-300">🎞️ Costurar Takes do Google Flow (.mp4)</span>
-                        <select id="nov-stitch-subtitles" class="min-h-[38px] bg-[#070a08] border border-white/10 rounded-lg px-2 text-[11px] text-white outline-none">
+                        <select id="nov-stitch-subtitles" class="min-h-[38px] bg-[#070a08] border border-white/10 rounded-lg px-2 text-[11px] text-white outline-none max-w-full">
                           <option value="none" selected>Legenda: Tela 100% Limpa (Sem Texto)</option>
                           <option value="minimal">Legenda: Minimalista (1 linha fina)</option>
                         </select>
                       </div>
+                      <label class="inline-flex items-center gap-2 text-[11px] text-emerald-200 cursor-pointer min-h-[36px]">
+                        <input id="nov-stitch-redub" type="checkbox" class="w-4 h-4 accent-emerald-500 rounded" />
+                        <span>🌵 Redublar Takes com Sotaque Nordestino (troca o áudio do Flow/Colab pelas vozes regionais 48kHz)</span>
+                      </label>
                       <div class="flex flex-col sm:flex-row gap-2">
                         <input id="nov-stitch-files" type="file" accept="video/*" multiple onchange="uploadNovelaTakes(event)"
                           class="w-full min-h-[44px] bg-[#070a08] border border-white/10 rounded-xl px-2.5 py-2 text-[11px] text-slate-300 file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:bg-cyan-500/20 file:text-cyan-200" />
@@ -1908,6 +1951,25 @@
                     <span>Clean Cinema (Sem Caixas/Placas)</span>
                   </label>
                 </div>
+              </div>
+
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 items-center rounded-2xl bg-[#070a08] border border-emerald-500/25 p-3">
+                <div class="sm:col-span-2 space-y-1">
+                  <label class="text-[11px] font-semibold text-emerald-300 block">🎙️ Motor de Sotaque Nordestino</label>
+                  <select id="qnv-accent-engine" onchange="syncNovAccentEngine(this.value)"
+                    class="w-full min-h-[44px] bg-[#0d1210] border border-white/10 rounded-xl px-2.5 text-xs text-white outline-none">
+                    <option value="nordestino_raiz" selected>🌵 Nordestino Raiz (Gemini Native TTS · SoXR 48kHz)</option>
+                    <option value="f5_tts_clone">🧬 F5-TTS-PT-BR Clone (Colab GPU Zero-Shot)</option>
+                    <option value="seed_vc_guide">🎤 Seed-VC Guia de Voz (Entonação do Seu Mic)</option>
+                  </select>
+                </div>
+                <div class="flex flex-col justify-end pt-1 sm:pt-5">
+                  <button id="btn-qnv-preview-voice" type="button" onclick="previewRegionalVoices('hard')"
+                    class="touch-btn w-full min-h-[44px] px-3 rounded-xl text-xs font-extrabold bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200 border border-emerald-400/40 cursor-pointer transition">
+                    🔊 Ouvir Cast Regional
+                  </button>
+                </div>
+                <audio id="qnv-voice-preview-player" controls preload="none" class="hidden sm:col-span-3 w-full h-9 rounded-lg"></audio>
               </div>
 
               <div class="flex flex-wrap gap-2">
@@ -4854,6 +4916,7 @@
           subtitles_mode: document.getElementById('gp-nov-subtitles')?.value || 'none',
           render_mode: document.getElementById('gp-nov-render-mode')?.value || 'flow_pack',
           colab_engine: document.getElementById('nov-colab-engine')?.value || 'echomimic_v3',
+          accent_engine: document.getElementById('nov-accent-engine')?.value || 'nordestino_raiz',
         };
         if (Array.isArray(gpNovGeneratedDialogue) && gpNovGeneratedDialogue.length) {
           out.dialogue = gpNovGeneratedDialogue;
@@ -5193,8 +5256,24 @@
               Remover
             </button>
           </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <button id="btn-qnv-line-play-${idx}" type="button" onclick="previewSingleNovelaLine(${idx})"
+              class="btn-qnv-line-play px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200 border border-emerald-400/40 cursor-pointer transition">
+              ▶️ Ouvir Fala
+            </button>
+            <button id="btn-qnv-line-guide-${idx}" type="button" onclick="toggleGuideAudioForLine(${idx})"
+              class="btn-qnv-line-guide px-2.5 py-1.5 rounded-lg text-[11px] font-bold ${qnvActiveRecIdx === idx ? 'bg-rose-500/30 text-rose-200 border-rose-400/60' : 'bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-200 border-cyan-400/40'} border cursor-pointer transition">
+              ${qnvActiveRecIdx === idx ? '⏹️ Parar Guia' : '🎙️ Guia'}
+            </button>
+            <input id="qnv-guide-file-${idx}" type="file" accept="audio/*" class="hidden" onchange="uploadGuideFileForLine(${idx}, event)" />
+            <button type="button" onclick="document.getElementById('qnv-guide-file-${idx}')?.click()"
+              class="px-2 py-1.5 rounded-lg text-[11px] font-semibold bg-white/[0.04] hover:bg-white/[0.09] text-slate-300 border border-white/10 cursor-pointer" title="Subir arquivo de áudio-guia">
+              📁 Áudio
+            </button>
+            ${row.guide_audio_path ? `<span class="px-2 py-1 rounded-md text-[10px] font-mono bg-emerald-500/15 text-emerald-300 border border-emerald-400/30">✅ Guia (${escapeHtml(String(row.guide_duration || 'OK'))}s)</span>` : ''}
+          </div>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            <input type="text" value="${escapeHtml(row.tts_text || '')}" placeholder="Texto Falado Fonético (edge-tts)"
+            <input type="text" value="${escapeHtml(row.tts_text || '')}" placeholder="Texto Falado / Prosódia Regional"
               onchange="qnvDialogueRows[${idx}].tts_text = this.value"
               class="w-full min-h-[38px] bg-[#0d1210] border border-white/10 rounded-xl px-2.5 text-xs text-slate-200 outline-none" />
             <input type="text" value="${escapeHtml(row.subtitle_text || '')}" placeholder="Legenda Limpa na Tela"
@@ -5440,6 +5519,190 @@
       }
     }
 
+    let qnvActiveRecIdx = -1;
+    let qnvMediaRecorder = null;
+    let qnvRecChunks = [];
+
+    function syncNovAccentEngine(val) {
+      const v = (val || 'nordestino_raiz').trim();
+      const s1 = document.getElementById('nov-accent-engine');
+      const s2 = document.getElementById('qnv-accent-engine');
+      if (s1 && s1.value !== v) s1.value = v;
+      if (s2 && s2.value !== v) s2.value = v;
+    }
+
+    async function loadRegionalVoiceProfiles() {
+      try {
+        const res = await fetch('/api/voices/regional/profiles');
+        if (!res.ok) return;
+        const data = await res.json();
+        const profs = Array.isArray(data.profiles) ? data.profiles : [];
+        const sumEl = document.getElementById('nov-profiles-summary');
+        const badgesEl = document.getElementById('nov-ref-badges');
+        const customCount = profs.filter(p => p.has_sample).length;
+        if (sumEl) sumEl.textContent = `${profs.length} vozes regionais · ${customCount} timbre(s) gravado(s)`;
+        if (badgesEl) {
+          badgesEl.innerHTML = profs.map(p => `
+            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border ${p.has_sample ? 'bg-emerald-500/15 border-emerald-400/40 text-emerald-200' : 'bg-white/[0.04] border-white/10 text-slate-400'}">
+              ${escapeHtml(p.label || p.character_id)} · ${escapeHtml(p.gemini_voice || '')}${p.has_sample ? ' ✓' : ''}
+            </span>
+          `).join('');
+        }
+      } catch (_) {}
+    }
+
+    async function uploadRegionalVoiceSample() {
+      const charSel = document.getElementById('nov-ref-char');
+      const fileInput = document.getElementById('nov-ref-file');
+      const btn = document.getElementById('btn-nov-upload-ref');
+      const file = fileInput?.files?.[0];
+      if (!file) {
+        showToast('Selecione um arquivo de áudio (6s–15s .wav/.mp3) primeiro.', 'error');
+        return;
+      }
+      const fd = new FormData();
+      fd.append('character_id', charSel?.value || 'dona_socorro');
+      fd.append('file', file);
+      if (btn) { btn.disabled = true; btn.textContent = '⏳ Salvando...'; }
+      try {
+        const res = await fetch('/api/voices/regional/upload-reference', { method: 'POST', body: fd });
+        const data = await res.json();
+        if (!res.ok || !data.ok) throw new Error(data.detail || 'Erro no upload de timbre');
+        await loadRegionalVoiceProfiles();
+        showToast(`Amostra de timbre salva para ${data.character_id}!`, 'success');
+      } catch (err) {
+        showToast(`Erro ao salvar timbre: ${err.message}`, 'error');
+      } finally {
+        if (btn) { btn.disabled = false; btn.textContent = '⬆️ Salvar Timbre'; }
+      }
+    }
+
+    async function previewRegionalVoices(source = 'guided') {
+      const isHard = source === 'hard';
+      const btn = document.getElementById(isHard ? 'btn-qnv-preview-voice' : 'btn-nov-preview-voice');
+      const player = document.getElementById(isHard ? 'qnv-voice-preview-player' : 'nov-voice-preview-player');
+      const accentEngine = document.getElementById(isHard ? 'qnv-accent-engine' : 'nov-accent-engine')?.value || 'nordestino_raiz';
+      const dlg = isHard
+        ? qnvDialogueRows
+        : (Array.isArray(gpNovGeneratedDialogue) && gpNovGeneratedDialogue.length ? gpNovGeneratedDialogue : []);
+      if (btn) { btn.disabled = true; btn.textContent = '⏳ Sintetizando vozes nordestinas...'; }
+      try {
+        const res = await fetch('/api/quick/novela/preview-voice', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ accent_engine: accentEngine, dialogue: dlg.slice(0, 3) }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok || !data.audio_url) throw new Error(data.detail || 'Falha ao gerar prévia vocal');
+        if (player) {
+          player.src = data.audio_url;
+          player.classList.remove('hidden');
+          player.play().catch(() => {});
+        }
+        showToast(`Prévia 48kHz pronta (${(data.engines_used || []).join(', ')})!`, 'success');
+      } catch (err) {
+        showToast(`Erro na prévia vocal: ${err.message}`, 'error');
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = isHard ? '🔊 Ouvir Cast Regional' : '🔊 Testar Vozes Nordestinas';
+        }
+      }
+    }
+
+    async function previewSingleNovelaLine(idx) {
+      const row = qnvDialogueRows[idx];
+      if (!row) return;
+      const btn = document.getElementById(`btn-qnv-line-play-${idx}`);
+      const player = document.getElementById('qnv-voice-preview-player');
+      const accentEngine = document.getElementById('qnv-accent-engine')?.value || document.getElementById('nov-accent-engine')?.value || 'nordestino_raiz';
+      if (btn) { btn.disabled = true; btn.textContent = '⏳ ...'; }
+      try {
+        const res = await fetch('/api/quick/novela/preview-voice', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            accent_engine: accentEngine,
+            speaker: row.speaker || 'Dona Socorro',
+            emotion: row.emotion || 'warm',
+            text: row.tts_text || row.subtitle_text || 'Ôxente, meu filho!',
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok || !data.audio_url) throw new Error(data.detail || 'Falha ao ouvir fala');
+        if (player) {
+          player.src = data.audio_url;
+          player.classList.remove('hidden');
+          player.play().catch(() => {});
+        }
+        showToast(`Fala #${idx + 1} (${row.speaker}) sintetizada!`, 'success');
+      } catch (err) {
+        showToast(`Erro ao ouvir fala #${idx + 1}: ${err.message}`, 'error');
+      } finally {
+        if (btn) { btn.disabled = false; btn.textContent = '▶️ Ouvir Fala'; }
+      }
+    }
+
+    async function _uploadGuideBlobForLine(idx, blob, filename) {
+      const fd = new FormData();
+      fd.append('line_index', String(idx));
+      fd.append('speaker', qnvDialogueRows[idx]?.speaker || 'dona_socorro');
+      fd.append('file', blob, filename || `guide_${idx}.webm`);
+      const res = await fetch('/api/quick/novela/upload-line-audio', { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.detail || 'Falha no upload do áudio-guia');
+      qnvDialogueRows[idx].guide_audio_path = data.guide_audio_path;
+      qnvDialogueRows[idx].guide_duration = data.duration;
+      syncNovAccentEngine('seed_vc_guide');
+      renderHardNovelaRows();
+      showToast(`Áudio-guia 48kHz anexado à Fala #${idx + 1}!`, 'success');
+    }
+
+    async function uploadGuideFileForLine(idx, e) {
+      const file = e.target?.files?.[0];
+      if (!file) return;
+      try {
+        await _uploadGuideBlobForLine(idx, file, file.name);
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    }
+
+    async function toggleGuideAudioForLine(idx) {
+      if (qnvActiveRecIdx === idx && qnvMediaRecorder) {
+        qnvMediaRecorder.stop();
+        return;
+      }
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof MediaRecorder === 'undefined') {
+        document.getElementById(`qnv-guide-file-${idx}`)?.click();
+        return;
+      }
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        qnvRecChunks = [];
+        qnvActiveRecIdx = idx;
+        qnvMediaRecorder = new MediaRecorder(stream);
+        qnvMediaRecorder.ondataavailable = ev => { if (ev.data?.size) qnvRecChunks.push(ev.data); };
+        qnvMediaRecorder.onstop = async () => {
+          stream.getTracks().forEach(t => t.stop());
+          const blob = new Blob(qnvRecChunks, { type: qnvMediaRecorder?.mimeType || 'audio/webm' });
+          qnvActiveRecIdx = -1;
+          qnvMediaRecorder = null;
+          renderHardNovelaRows();
+          if (blob.size > 256) {
+            try { await _uploadGuideBlobForLine(idx, blob, `mic_guide_${idx}.webm`); }
+            catch (err) { showToast(err.message, 'error'); }
+          }
+        };
+        qnvMediaRecorder.start();
+        renderHardNovelaRows();
+      } catch (_) {
+        qnvActiveRecIdx = -1;
+        qnvMediaRecorder = null;
+        document.getElementById(`qnv-guide-file-${idx}`)?.click();
+      }
+    }
+
     async function stitchNovelaTakes() {
       if (!novStitchBatchId || !novStitchTakes.length) {
         showToast('Selecione os takes .mp4 do Google Flow antes de costurar.', 'error');
@@ -5447,6 +5710,9 @@
       }
       const btn = document.getElementById('btn-nov-stitch');
       const resBox = document.getElementById('nov-stitch-result');
+      const redubChecked = Boolean(document.getElementById('nov-stitch-redub')?.checked);
+      const accentEngine = document.getElementById('nov-accent-engine')?.value || document.getElementById('qnv-accent-engine')?.value || 'nordestino_raiz';
+      const dlgForRedub = (Array.isArray(gpNovGeneratedDialogue) && gpNovGeneratedDialogue.length) ? gpNovGeneratedDialogue : qnvDialogueRows;
       if (btn) { btn.disabled = true; btn.textContent = '⏳ Costurando com Whisper + SoXR...'; }
       if (resBox) { resBox.classList.remove('hidden'); resBox.innerHTML = '<div class="text-xs text-cyan-300">Aparando silêncios e equalizando 48kHz...</div>'; }
       try {
@@ -5460,6 +5726,9 @@
             platform_preset: guidedPlatform || 'tiktok_reels',
             subtitles_mode: document.getElementById('nov-stitch-subtitles')?.value || 'none',
             trim_silence: true,
+            redub_with_regional_tts: redubChecked,
+            accent_engine: accentEngine,
+            dialogue: redubChecked ? dlgForRedub : [],
           }),
         });
         const job = await res.json();
@@ -5528,6 +5797,7 @@
             subtitles_mode: document.getElementById('qnv-subtitles-mode')?.value || 'none',
             render_mode: rmode,
             colab_engine: document.getElementById('nov-colab-engine')?.value || 'echomimic_v3',
+            accent_engine: document.getElementById('qnv-accent-engine')?.value || document.getElementById('nov-accent-engine')?.value || 'nordestino_raiz',
             dictionary: Array.isArray(parsedDict) ? parsedDict : [],
             dialogue: qnvDialogueRows,
             quality: 'standard',
@@ -5678,6 +5948,7 @@
       setNovelaRenderMode('flow_pack');
       renderHardNovelaRows();
       fetchColabStatus();
+      loadRegionalVoiceProfiles();
       setQuickStudioMode('guided');
       safeCreateIcons();
       refreshAll();

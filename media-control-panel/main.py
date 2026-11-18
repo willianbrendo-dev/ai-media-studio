@@ -1,6 +1,7 @@
 import asyncio
 import hashlib
 import hmac
+import importlib.util
 import json
 import os
 import re
@@ -2155,10 +2156,34 @@ VIDEOUSE_PYTHON = STUDIO_BASE_DIR / "tools/video-use/.venv/bin/python"
 VIDEOUSE_EDGE_TTS = STUDIO_BASE_DIR / "tools/video-use/.venv/bin/edge-tts"
 HYPERFRAMES_RUNNER = STUDIO_BASE_DIR / "tools/hyperframes/vps_ad_runner.py"
 NOVELA_RUNNER = STUDIO_BASE_DIR / "tools/hyperframes/vps_novela_runner.py"
+REGIONAL_VOICE_ENGINE = STUDIO_BASE_DIR / "tools/hyperframes/regional_voice_engine.py"
+VOICES_REGIONAL_DIR = STUDIO_BASE_DIR / "voices/regional"
 VIRAL_ANALYZER_RUNNER = STUDIO_BASE_DIR / "tools/hyperframes/viral_reference_analyzer.py"
 VIDEOUSE_INPUTS_DIR = STUDIO_BASE_DIR / ".cache/videouse_inputs"
 NOVELA_TAKES_CACHE_DIR = STUDIO_BASE_DIR / ".cache/novela_takes"
+NOVELA_LINE_AUDIO_CACHE_DIR = STUDIO_BASE_DIR / ".cache/novela_line_audio"
+NOVELA_PREVIEW_CACHE_DIR = STUDIO_BASE_DIR / ".cache/novela_previews"
 COLAB_NOTEBOOK_PATH = STUDIO_BASE_DIR / "tools/colab-gpu-worker/ai_studio_colab_novela_gpu.ipynb"
+
+_RVE_MODULE = None
+
+
+def _get_rve():
+    global _RVE_MODULE
+    if _RVE_MODULE is not None:
+        return _RVE_MODULE
+    if not REGIONAL_VOICE_ENGINE.is_file():
+        raise HTTPException(status_code=500, detail="Motor regional_voice_engine.py não encontrado na VPS.")
+    spec = importlib.util.spec_from_file_location("regional_voice_engine", str(REGIONAL_VOICE_ENGINE))
+    if spec is None or spec.loader is None:
+        raise HTTPException(status_code=500, detail="Falha ao carregar spec de regional_voice_engine.py.")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    mod.STUDIO_BASE = STUDIO_BASE_DIR
+    mod.VOICES_REGIONAL_DIR = STUDIO_BASE_DIR / "voices/regional"
+    mod.PROFILES_META_PATH = mod.VOICES_REGIONAL_DIR / "profiles.json"
+    _RVE_MODULE = mod
+    return _RVE_MODULE
 VIDEOUSE_EXPORTS_DIR = STUDIO_BASE_DIR / "exports/videouse"
 HYPERFRAMES_EXPORTS_DIR = STUDIO_BASE_DIR / "exports/hyperframes"
 NOVELA_EXPORTS_DIR = STUDIO_BASE_DIR / "exports/novela"
@@ -2935,6 +2960,7 @@ class QuickNovelaRequest(BaseModel):
     render_mode: str = "vps_preview"
     colab_engine: str = "echomimic_v3"
     colab_url: str = ""
+    accent_engine: str = "nordestino_raiz"
     output_filename: str = ""
     wait: bool = False
 
@@ -2948,6 +2974,7 @@ class QuickNovelaFlowPackRequest(BaseModel):
     expressions: List[str] = ["Oxente", "Morreu Maria Preá", "Botar Boneco"]
     tone: str = "Comédia Leve"
     episode_badge: str = "🌵 NOVELINHA DO SERTÃO • EP. 01"
+    accent_engine: str = "nordestino_raiz"
 
 
 class QuickNovelaStitchRequest(BaseModel):
@@ -2960,8 +2987,20 @@ class QuickNovelaStitchRequest(BaseModel):
     subtitles_mode: str = "none"
     trim_silence: bool = True
     ambient_bed: bool = False
+    redub_with_regional_tts: bool = False
+    accent_engine: str = "nordestino_raiz"
+    dialogue: List[Dict[str, Any]] = []
     output_filename: str = ""
     wait: bool = False
+
+
+class QuickNovelaPreviewVoiceRequest(BaseModel):
+    accent_engine: str = "nordestino_raiz"
+    dialogue: List[Dict[str, Any]] = []
+    speaker: str = ""
+    text: str = ""
+    emotion: str = "warm"
+    colab_url: str = ""
 
 
 class ColabConfigRequest(BaseModel):
@@ -3230,6 +3269,14 @@ async def api_quick_novela_stitch_takes(req: QuickNovelaStitchRequest):
 
     task_id = f"novst-{uuid.uuid4().hex[:10]}"
     _trim_local_media_jobs()
+    norm_dialogue: List[Dict[str, Any]] = []
+    for item in (req.dialogue or []):
+        if isinstance(item, dict):
+            row = dict(item)
+            if not row.get("tts_text") and row.get("text"):
+                row["tts_text"] = row["text"]
+            norm_dialogue.append(row)
+
     cfg_payload = {
         "title": req.title,
         "take_paths": [str(p) for p in resolved_paths],
@@ -3237,6 +3284,10 @@ async def api_quick_novela_stitch_takes(req: QuickNovelaStitchRequest):
         "subtitles_mode": req.subtitles_mode if req.subtitles_mode in ("none", "minimal") else "none",
         "trim_silence": bool(req.trim_silence),
         "ambient_bed": bool(req.ambient_bed),
+        "redub_with_regional_tts": bool(req.redub_with_regional_tts),
+        "accent_engine": (req.accent_engine or "nordestino_raiz").strip().lower() or "nordestino_raiz",
+        "dialogue": norm_dialogue,
+        "redub_dialogue": norm_dialogue,
     }
     _LOCAL_MEDIA_JOBS[task_id] = {
         "ok": True,
@@ -3337,6 +3388,9 @@ async def api_quick_novela(req: QuickNovelaRequest):
     NOVELA_EXPORTS_DIR.mkdir(parents=True, exist_ok=True)
     vstyle = req.visual_style if req.visual_style in ("3d_cartoon", "cinematic_tv") else "3d_cartoon"
     rmode = req.render_mode if req.render_mode in ("vps_preview", "flow_pack", "colab_gpu") else "vps_preview"
+    aengine = (req.accent_engine or "nordestino_raiz").strip().lower()
+    if aengine not in ("nordestino_raiz", "f5_tts_clone", "seed_vc_guide"):
+        aengine = "nordestino_raiz"
     raw_name = (req.output_filename or "").strip()
     if raw_name:
         safe_name = re.sub(r"[^a-zA-Z0-9_.-]+", "_", raw_name)
@@ -3352,11 +3406,13 @@ async def api_quick_novela(req: QuickNovelaRequest):
     cfg_payload = req.model_dump() if hasattr(req, "model_dump") else req.dict()
     cfg_payload["visual_style"] = vstyle
     cfg_payload["render_mode"] = rmode
+    cfg_payload["accent_engine"] = aengine
     _LOCAL_MEDIA_JOBS[task_id] = {
         "ok": True,
         "task_id": task_id,
         "engine": "novela",
         "render_mode": rmode,
+        "accent_engine": aengine,
         "status": "processing",
         "progress": 10,
         "ready": False,
@@ -3368,7 +3424,7 @@ async def api_quick_novela(req: QuickNovelaRequest):
         "subtitles_mode": req.subtitles_mode,
         "filename": safe_name,
         "created_at": time.time(),
-        "message": f"Iniciando Novela Studio v2.5 ({rmode} · {vstyle})...",
+        "message": f"Iniciando Novela Studio v2.6 ({rmode} · {vstyle} · {aengine})...",
     }
 
     task = asyncio.create_task(_execute_novela_job(task_id, out_path, cfg_payload))
@@ -3389,6 +3445,202 @@ async def api_quick_novela_task(task_id: str):
     if not job:
         raise HTTPException(status_code=404, detail="Tarefa do Novela Studio não encontrada")
     return {k: v for k, v in job.items() if k != "_task"}
+
+
+@app.get("/api/voices/regional/profiles")
+async def api_voices_regional_profiles():
+    rve = _get_rve()
+    profiles = await asyncio.to_thread(rve.list_regional_voice_profiles)
+    for prof in profiles:
+        cid = prof.get("id") or prof.get("character_id") or ""
+        prof["character_id"] = cid
+        prof["id"] = cid
+        ref_p = prof.get("reference_path") or prof.get("sample_path") or ""
+        sample_file = Path(ref_p) if ref_p else (rve.VOICES_REGIONAL_DIR / cid / f"reference_{cid}.wav")
+        prof["has_sample"] = sample_file.is_file()
+        prof["sample_url"] = f"/api/voices/regional/sample/{cid}" if prof["has_sample"] else ""
+    return {
+        "ok": True,
+        "voices_dir": str(rve.VOICES_REGIONAL_DIR),
+        "count": len(profiles),
+        "profiles": profiles,
+    }
+
+
+@app.post("/api/voices/regional/upload-reference")
+async def api_voices_regional_upload_reference(request: Request):
+    form = await request.form()
+    character_id = re.sub(r"[^a-zA-Z0-9_-]+", "", str(form.get("character_id") or "dona_socorro").strip().lower())
+    reference_text = str(form.get("reference_text") or "").strip()
+    upload = form.get("file") or form.get("audio")
+    if not character_id:
+        raise HTTPException(status_code=400, detail="character_id obrigatório.")
+    if upload is None or not hasattr(upload, "read"):
+        raise HTTPException(status_code=400, detail="Envie o arquivo de áudio de referência (campo 'file' ou 'audio').")
+    raw_bytes = await upload.read()
+    if len(raw_bytes) < 256:
+        raise HTTPException(status_code=400, detail="Arquivo de áudio vazio ou muito curto.")
+    rve = _get_rve()
+    orig_name = getattr(upload, "filename", "") or f"{character_id}.wav"
+    try:
+        saved = await asyncio.to_thread(
+            rve.save_regional_voice_reference,
+            character_id,
+            raw_bytes,
+            orig_name,
+            reference_text,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Falha ao processar amostra regional: {exc}")
+    cid_out = saved.get("character_id") or character_id
+    return {
+        "ok": True,
+        **saved,
+        "sample_url": f"/api/voices/regional/sample/{cid_out}",
+    }
+
+
+@app.get("/api/voices/regional/sample/{character_id}")
+async def api_voices_regional_sample(character_id: str):
+    safe_id = re.sub(r"[^a-zA-Z0-9_-]+", "", character_id.strip().lower())
+    if not safe_id:
+        raise HTTPException(status_code=400, detail="character_id inválido.")
+    rve = _get_rve()
+    profiles = await asyncio.to_thread(rve.list_regional_voice_profiles)
+    target_path: Optional[Path] = None
+    for prof in profiles:
+        if (prof.get("id") or prof.get("character_id")) == safe_id:
+            sp = Path(prof.get("reference_path") or prof.get("sample_path") or "")
+            if sp.is_file():
+                target_path = sp.resolve()
+                break
+    if target_path is None:
+        base_root = rve.VOICES_REGIONAL_DIR.resolve()
+        for cand in (
+            (base_root / safe_id / f"reference_{safe_id}.wav").resolve(),
+            (base_root / safe_id / f"reference_{safe_id}_seed.wav").resolve(),
+            (base_root / f"{safe_id}.wav").resolve(),
+        ):
+            if cand.is_relative_to(base_root) and cand.is_file():
+                target_path = cand
+                break
+    if target_path is None:
+        raise HTTPException(status_code=404, detail=f"Amostra de voz regional para '{safe_id}' não encontrada.")
+    return FileResponse(target_path, media_type="audio/wav", filename=target_path.name)
+
+
+@app.post("/api/quick/novela/upload-line-audio")
+async def api_quick_novela_upload_line_audio(request: Request):
+    form = await request.form()
+    upload = form.get("file") or form.get("audio")
+    speaker = re.sub(r"[^a-zA-Z0-9_-]+", "_", str(form.get("speaker") or "guide").strip().lower())[:24] or "guide"
+    line_idx = re.sub(r"[^0-9]+", "", str(form.get("line_index") or "0"))[:4] or "0"
+    if upload is None or not hasattr(upload, "read"):
+        raise HTTPException(status_code=400, detail="Envie o áudio-guia (campo 'file' ou 'audio').")
+    raw_bytes = await upload.read()
+    if len(raw_bytes) < 256:
+        raise HTTPException(status_code=400, detail="Áudio-guia vazio ou corrompido.")
+
+    NOVELA_LINE_AUDIO_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    orig_name = Path(getattr(upload, "filename", "") or "guide.webm").name
+    ext = Path(orig_name).suffix.lower()
+    if ext not in {".wav", ".mp3", ".webm", ".ogg", ".m4a", ".opus"}:
+        ext = ".webm"
+    stem = f"line_{line_idx}_{speaker}_{int(time.time())}_{uuid.uuid4().hex[:6]}"
+    raw_path = (NOVELA_LINE_AUDIO_CACHE_DIR / f"{stem}_raw{ext}").resolve()
+    out_wav = (NOVELA_LINE_AUDIO_CACHE_DIR / f"{stem}.wav").resolve()
+    raw_path.write_bytes(raw_bytes)
+    try:
+        conv = await run_cmd([
+            "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+            "-i", str(raw_path),
+            "-ar", "48000", "-ac", "2", "-c:a", "pcm_s16le",
+            str(out_wav),
+        ], timeout=45)
+        if conv.get("returncode") != 0 or not out_wav.is_file():
+            raise HTTPException(status_code=400, detail=f"Falha ao normalizar áudio-guia: {conv.get('stderr', '')[:250]}")
+        probe = await run_cmd([
+            "ffprobe", "-v", "error", "-show_entries", "format=duration",
+            "-of", "default=noprint_wrappers=1:nokey=1", str(out_wav),
+        ], timeout=15)
+        try:
+            dur_s = round(float((probe.get("stdout") or "").strip() or "0"), 2)
+        except Exception:
+            dur_s = 0.0
+        return {
+            "ok": True,
+            "filename": out_wav.name,
+            "guide_audio_path": str(out_wav),
+            "audio_path": str(out_wav),
+            "duration": dur_s,
+            "sample_rate": 48000,
+            "channels": 2,
+        }
+    finally:
+        raw_path.unlink(missing_ok=True)
+
+
+@app.post("/api/quick/novela/preview-voice")
+async def api_quick_novela_preview_voice(req: QuickNovelaPreviewVoiceRequest):
+    rve = _get_rve()
+    aengine = (req.accent_engine or "nordestino_raiz").strip().lower()
+    if aengine not in ("nordestino_raiz", "f5_tts_clone", "seed_vc_guide"):
+        aengine = "nordestino_raiz"
+
+    dlg = []
+    for x in (req.dialogue or []):
+        if isinstance(x, dict):
+            txt_v = str(x.get("text") or x.get("tts_text") or "").strip()
+            if txt_v:
+                dlg.append({**x, "text": txt_v})
+    if not dlg and (req.text or "").strip():
+        dlg = [{
+            "speaker": (req.speaker or "Dona Socorro").strip(),
+            "emotion": (req.emotion or "warm").strip(),
+            "text": req.text.strip(),
+        }]
+    if not dlg:
+        dlg = [
+            {"speaker": "Dona Socorro", "emotion": "shocked", "text": "Oxente meu filho! Você tá botando boneco por causa de um cuscuz quente?"},
+            {"speaker": "Seu Bastião", "emotion": "warm", "text": "Deixe de cunversa, Enzo, e venha provar esse café coado na hora!"},
+        ]
+
+    vault = load_vault()
+    if vault.get("GEMINI_API_KEY") and not os.environ.get("GEMINI_API_KEY"):
+        os.environ["GEMINI_API_KEY"] = vault["GEMINI_API_KEY"]
+    c_url = sanitize_base_url(req.colab_url or vault.get("COLAB_GPU_URL") or os.environ.get("COLAB_GPU_URL") or "", "")
+    c_tok = (vault.get("COLAB_GPU_TOKEN") or os.environ.get("COLAB_GPU_TOKEN") or "").strip()
+
+    NOVELA_PREVIEW_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    out_name = f"voice_preview_{aengine}_{int(time.time())}_{uuid.uuid4().hex[:6]}.mp3"
+    out_mp3 = (NOVELA_PREVIEW_CACHE_DIR / out_name).resolve()
+
+    meta = await asyncio.to_thread(
+        rve.synthesize_dialogue_preview,
+        dialogue=dlg,
+        accent_engine=aengine,
+        out_mp3=out_mp3,
+        colab_url=c_url,
+        colab_token=c_tok,
+    )
+    if not out_mp3.is_file():
+        raise HTTPException(status_code=500, detail="Falha ao gerar preview de áudio regional.")
+    return {
+        "ok": True,
+        **meta,
+        "accent_engine": aengine,
+        "filename": out_name,
+        "audio_url": f"/api/quick/novela/preview-audio/{out_name}",
+    }
+
+
+@app.get("/api/quick/novela/preview-audio/{filename}")
+async def api_quick_novela_preview_audio(filename: str):
+    safe_name = Path(filename).name
+    cand = (NOVELA_PREVIEW_CACHE_DIR / safe_name).resolve()
+    if not cand.is_relative_to(NOVELA_PREVIEW_CACHE_DIR.resolve()) or not cand.is_file():
+        raise HTTPException(status_code=404, detail="Arquivo de preview de voz não encontrado.")
+    return FileResponse(cand, media_type="audio/mpeg", filename=safe_name)
 
 
 # ==============================================================================

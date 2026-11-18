@@ -1042,6 +1042,7 @@ class GuidedPipelineOrchestrator:
         subtitles_mode = str(params.get("subtitles_mode") or ("none" if clean_cinema else "minimal")).strip().lower()
         render_mode = str(params.get("render_mode") or "vps_preview").strip().lower()
         colab_engine = str(params.get("colab_engine") or "echomimic_v3").strip().lower()
+        accent_engine = str(params.get("accent_engine") or "nordestino_raiz").strip().lower()
 
         nov_meta = await self._run_novela_cli(
             title=cp0.get("title") or params.get("title") or "Causos do Sertão — Ep. 01",
@@ -1056,6 +1057,7 @@ class GuidedPipelineOrchestrator:
             subtitles_mode=subtitles_mode,
             render_mode=render_mode,
             colab_engine=colab_engine,
+            accent_engine=accent_engine,
         )
         final_out = {
             **nov_meta,
@@ -1070,6 +1072,7 @@ class GuidedPipelineOrchestrator:
                 "clean_cinema_mode": clean_cinema,
                 "subtitles_mode": subtitles_mode,
                 "render_mode": render_mode,
+                "accent_engine": accent_engine,
             },
         }
         return {

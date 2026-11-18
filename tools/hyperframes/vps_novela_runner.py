@@ -37,6 +37,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+_THIS_DIR = str(Path(__file__).resolve().parent)
+if _THIS_DIR not in sys.path:
+    sys.path.insert(0, _THIS_DIR)
+import regional_voice_engine as rve  # noqa: E402
+
 
 for _env_k, _env_v in (("OMP_NUM_THREADS", "2"), ("MKL_NUM_THREADS", "2"), ("CT2_NUM_THREADS", "2")):
     os.environ.setdefault(_env_k, _env_v)
@@ -318,6 +323,7 @@ class TurnCompiled:
     shot_relpath: str
     shot_abs_path: Path
     asset_source: str
+    voice_engine_used: str = "nordestino_raiz"
 
 
 def _normalize_speaker_key(raw: str) -> str:
@@ -761,7 +767,8 @@ def build_veo_take_prompt(
     clean_speech = tts_text.replace('"', "'").strip()
     return (
         f"{style_desc}, set on a {setting}. {framing_cue}. "
-        f"{veo_char}, {acting_en}, and speaks energetically in Brazilian Portuguese with a strong Northeastern accent: "
+        f"{veo_char}, {acting_en}, speaking in Brazilian Portuguese with an authentic, warm Northeastern Sertão accent "
+        f"(sotaque nordestino arretado, open vowels, musical cadence): "
         f"\"{clean_speech}\" "
         f"Natural subtle handheld camera motion, authentic facial lip-sync and expressive gestures. "
         f"No subtitles, no text overlay, no watermarks, realistic lip-sync speech in Brazilian Portuguese."
@@ -1423,6 +1430,13 @@ def stitch_novela_takes(cfg: Dict[str, Any]) -> Dict[str, Any]:
     subtitles_mode = str(cfg.get("subtitles_mode") or "none").strip().lower()
     trim_silence = bool(cfg.get("trim_silence", True))
     ambient_bed = bool(cfg.get("ambient_bed", False))
+    redub_regional = bool(cfg.get("redub_with_regional_tts", False))
+    redub_dialogue: List[Dict[str, Any]] = list(cfg.get("dialogue") or cfg.get("redub_dialogue") or [])
+    accent_engine = str(cfg.get("accent_engine") or cfg.get("accent_preset") or "nordestino_raiz").strip().lower()
+    env_map = _load_secrets_env()
+    colab_url = str(cfg.get("colab_url") or env_map.get("COLAB_GPU_URL") or "").strip()
+    colab_token = str(cfg.get("colab_token") or env_map.get("COLAB_GPU_TOKEN") or "").strip()
+    redub_engines_used: List[str] = []
 
     job_id = uuid.uuid4().hex[:8]
     work_dir = Path(f"/tmp/hf_stitch_{job_id}")
@@ -1458,9 +1472,53 @@ def stitch_novela_takes(cfg: Dict[str, Any]) -> Dict[str, Any]:
 
             seg_dur = max(0.4, cut_e - cut_s)
             norm_clip = work_dir / f"norm_take_{idx:02d}.mp4"
-
             v_filter = "scale=1080:1920:force_original_aspect_ratio=increase:flags=lanczos,crop=1080:1920,setsar=1,fps=30,format=yuv420p"
-            if info["has_audio"]:
+
+            if redub_regional:
+                dlg_row = redub_dialogue[idx] if idx < len(redub_dialogue) and isinstance(redub_dialogue[idx], dict) else {}
+                spoken_from_asr = " ".join(w["word"] for w in words_meta).strip()
+                redub_txt = str(dlg_row.get("tts_text") or dlg_row.get("subtitle_text") or spoken_from_asr or "Ôxente, rapaz!").strip()
+                redub_spk = str(dlg_row.get("speaker") or ["Dona Socorro", "Enzo", "Seu Bastião"][idx % 3])
+                redub_emo = str(dlg_row.get("emotion") or "warm").strip().lower()
+                g_raw = str(dlg_row.get("guide_audio_path") or "").strip()
+                g_path = Path(g_raw) if g_raw and Path(g_raw).is_file() else None
+                dub_wav = work_dir / f"redub_{idx:02d}.wav"
+                dub_meta = rve.synthesize_regional_turn(
+                    tts_text=redub_txt,
+                    speaker=redub_spk,
+                    emotion=redub_emo,
+                    accent_engine=accent_engine,
+                    out_wav=dub_wav,
+                    guide_audio_path=g_path,
+                    colab_url=colab_url,
+                    colab_token=colab_token,
+                    lead_pad=0.02,
+                    tail_pad=0.04,
+                )
+                redub_engines_used.append(dub_meta["voice_engine_used"])
+                dub_dur = max(0.3, float(dub_meta["duration"]))
+                tempo = dub_dur / max(0.35, seg_dur)
+                tempo_clamped = max(0.70, min(1.45, tempo))
+                fitted_wav = work_dir / f"redub_fit_{idx:02d}.wav"
+                _run_checked([
+                    FFMPEG_BIN, "-y", "-i", str(dub_wav),
+                    "-af", f"atempo={tempo_clamped:.3f},aresample=48000:resampler=soxr,apad=whole_dur={seg_dur:.3f}",
+                    "-t", f"{seg_dur:.3f}",
+                    "-c:a", "pcm_s16le", "-ar", "48000", "-ac", "2",
+                    str(fitted_wav),
+                ], timeout=60)
+                cmd = [
+                    FFMPEG_BIN, "-y",
+                    "-ss", f"{cut_s:.3f}", "-t", f"{seg_dur:.3f}", "-i", str(src_clip),
+                    "-i", str(fitted_wav),
+                    "-vf", v_filter,
+                    "-map", "0:v:0", "-map", "1:a:0",
+                    "-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
+                    "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2",
+                    "-shortest",
+                    str(norm_clip),
+                ]
+            elif info["has_audio"]:
                 cmd = [
                     FFMPEG_BIN, "-y",
                     "-ss", f"{cut_s:.3f}", "-t", f"{seg_dur:.3f}", "-i", str(src_clip),
@@ -1580,6 +1638,8 @@ def stitch_novela_takes(cfg: Dict[str, Any]) -> Dict[str, Any]:
             "raw_total_duration": round(raw_total_dur, 2),
             "duration": round(final_dur, 2),
             "trimmed_seconds": round(max(0.0, raw_total_dur - final_dur), 2),
+            "redubbed_with_regional_tts": redub_regional,
+            "voice_engines_used": sorted(set(redub_engines_used)),
             "takes_metrics": takes_metrics,
             "elapsed_sec": round(time.time() - t_start, 2),
         }
@@ -1699,18 +1759,27 @@ def render_novela_episode(cfg: Dict[str, Any]) -> Dict[str, Any]:
         physical_action_en = str(raw_turn.get("physical_action_en") or "").strip()
         highlight_phrase = str(raw_turn.get("expression_highlight") or raw_turn.get("highlight") or "").strip()
 
-        raw_mp3 = audio_dir / f"turn_{idx}.mp3"
         clean_wav = audio_dir / f"turn_{idx}.wav"
-        slot_dur = _synthesize_turn_audio(
+        guide_raw = str(raw_turn.get("guide_audio_path") or "").strip()
+        guide_path = Path(guide_raw) if guide_raw and Path(guide_raw).is_file() else None
+        accent_engine = str(cfg.get("accent_engine") or cfg.get("accent_preset") or "nordestino_raiz").strip().lower()
+        colab_url_eff = str(cfg.get("colab_url") or env_map.get("COLAB_GPU_URL") or "").strip()
+        colab_tok_eff = str(cfg.get("colab_token") or env_map.get("COLAB_GPU_TOKEN") or "").strip()
+        tts_meta = rve.synthesize_regional_turn(
             tts_text=tts_text,
-            voice=str(raw_turn.get("voice") or spec["voice"]),
-            rate=str(raw_turn.get("rate") or spec["rate"]),
-            pitch=str(raw_turn.get("pitch") or spec["pitch"]),
-            raw_mp3=raw_mp3,
-            clean_wav=clean_wav,
+            speaker=spk_raw,
+            emotion=emotion,
+            accent_engine=accent_engine,
+            out_wav=clean_wav,
+            guide_audio_path=guide_path,
+            colab_url=colab_url_eff,
+            colab_token=colab_tok_eff,
             lead_pad=0.03 if clean_cinema_mode else 0.05,
             tail_pad=0.09 if clean_cinema_mode else 0.22,
+            voice_override=str(raw_turn.get("voice") or ""),
         )
+        slot_dur = float(tts_meta["duration"])
+        v_engine_used = str(tts_meta["voice_engine_used"])
 
         shot_abs_path, shot_relpath, asset_source = _resolve_turn_visual(
             speaker_key=spk_key,
@@ -1750,6 +1819,7 @@ def render_novela_episode(cfg: Dict[str, Any]) -> Dict[str, Any]:
                 shot_relpath=shot_relpath,
                 shot_abs_path=shot_abs_path,
                 asset_source=asset_source,
+                voice_engine_used=v_engine_used,
             )
         )
         cursor_t += slot_dur
@@ -1884,6 +1954,8 @@ def render_novela_episode(cfg: Dict[str, Any]) -> Dict[str, Any]:
         "turns": len(compiled_turns),
         "speakers": sorted({t.speaker_label for t in compiled_turns}),
         "shot_framings": [t.shot_framing for t in compiled_turns],
+        "accent_engine": str(cfg.get("accent_engine") or cfg.get("accent_preset") or "nordestino_raiz"),
+        "voice_engines_used": sorted({t.voice_engine_used for t in compiled_turns}),
         "asset_sources": sorted({t.asset_source for t in compiled_turns}),
         "elapsed_sec": round(time.time() - t_start_wall, 2),
     }

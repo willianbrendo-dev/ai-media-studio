@@ -695,7 +695,7 @@ _STUDIO_CAPABILITIES_CATALOG: dict[str, dict[str, str]] = {
         "name": "Novela Studio · Cinema Clean, Flow Veo 3.1 & Colab GPU",
         "kind": "Motor Nativo v2.5 (0 MB RAM ociosa · Trilha 6)",
         "best_for": "Criar micro-séries multi-personagem estilo plano/contraplano 100% limpo (`clean_cinema_mode=True`) via 3 motores: (1) Pack Google Flow Veo 3.1 (Ingredients 1080x1920 + Prompts Bilíngues + Costurador de Takes), (2) Colab GPU Lip-Sync (EchoMimicV3/LatentSync) ou (3) Preview Rápido VPS.",
-        "execution_api": "POST /api/quick/novela/flow-pack + /stitch-takes + /api/quick/novela + /api/colab/status · MCP: studio_generate_flow_pack / studio_stitch_novela_takes / studio_run_novela",
+        "execution_api": "POST /api/quick/novela/flow-pack + /stitch-takes (redub_with_regional_tts) + /preview-voice + /api/quick/novela + /api/colab/status · MCP: studio_preview_regional_voice / studio_generate_flow_pack / studio_stitch_novela_takes / studio_run_novela",
         "execution_ui": "Aba Estúdio Rápido -> Modo Guiado (Trilha 6) ou Modo Hard -> Novela Studio",
     },
 }
@@ -1571,12 +1571,13 @@ def studio_run_novela(
     subtitles_mode: str = "none",
     render_mode: str = "vps_preview",
     colab_engine: str = "echomimic_v3",
+    accent_engine: str = "nordestino_raiz",
     quality: str = "standard",
     output_filename: str = "",
     wait: bool = True,
     poll_timeout_s: float = 600.0,
 ) -> str:
-    """Produce a multi-character vertical mini-novela / regional comedy episode (Clean Cinema Shot-Reverse-Shot, Flow Pack, or Colab GPU Lip-Sync).
+    """Produce a multi-character vertical mini-novela / regional comedy episode (Clean Cinema Shot-Reverse-Shot, Flow Pack, or Colab GPU Lip-Sync) with authentic Brazilian Northeast accent.
 
     Args:
         title: Episode title.
@@ -1585,12 +1586,13 @@ def studio_run_novela(
         theme: Storyline/theme if dialogue_json is omitted.
         expressions_csv: Comma-separated regional expressions to feature.
         tone: Comedy/drama tone.
-        dialogue_json: Optional JSON array of turns.
+        dialogue_json: Optional JSON array of turns (supports optional 'guide_audio_path' per line).
         dictionary_json: Optional JSON array of dictionary items.
         clean_cinema_mode: True (default) for 100% clean full-bleed cinema without cluttering dialogue boxes/badges.
         subtitles_mode: 'none' (default clean screen) or 'minimal' (thin white outline line).
         render_mode: 'vps_preview' (default), 'flow_pack' (Veo 3.1 Prompts + Ingredients), or 'colab_gpu' (EchoMimicV3/LatentSync).
         colab_engine: When render_mode='colab_gpu': 'echomimic_v3' or 'latentsync'.
+        accent_engine: Regional voice engine: 'nordestino_raiz' (Gemini Native TTS + SoXR 48kHz default), 'f5_tts_clone' (Colab F5-TTS-PT-BR), or 'seed_vc_guide' (Colab Seed-VC).
         quality: 'draft' or 'standard' (default).
         output_filename: Optional filename under /opt/ai-media-studio/exports/novela/.
         wait: Poll until completion (True default).
@@ -1614,6 +1616,7 @@ def studio_run_novela(
         "subtitles_mode": subtitles_mode if subtitles_mode in ("none", "minimal") else "none",
         "render_mode": render_mode if render_mode in ("vps_preview", "flow_pack", "colab_gpu") else "vps_preview",
         "colab_engine": colab_engine if colab_engine in ("echomimic_v3", "latentsync") else "echomimic_v3",
+        "accent_engine": accent_engine if accent_engine in ("nordestino_raiz", "f5_tts_clone", "seed_vc_guide") else "nordestino_raiz",
         "quality": quality if quality in ("draft", "looks", "delivery", "standard", "high") else "standard",
         "output_filename": output_filename,
         "wait": False,
@@ -1669,9 +1672,13 @@ def studio_stitch_novela_takes(
     platform_preset: str = "tiktok_reels",
     subtitles_mode: str = "none",
     trim_silence: bool = True,
+    redub_with_regional_tts: bool = False,
+    accent_engine: str = "nordestino_raiz",
+    dialogue_json: str = "",
 ) -> str:
-    """Stitch ordered Google Flow / Colab MP4 takes into one seamless 1080x1920 @ 30fps episode, trimming silent lead/tail via faster-whisper INT8 and normalizing audio to 48kHz Stereo SoXR."""
+    """Stitch ordered Google Flow / Colab MP4 takes into one seamless 1080x1920 @ 30fps episode, optionally redubbing takes with regional Northeast TTS (Gemini Native / F5-TTS-PT-BR / Seed-VC), trimming silent lead/tail via faster-whisper INT8 and normalizing audio to 48kHz Stereo SoXR."""
     _, base_url, headers, auth = _resolve_target_conn("vps")
+    parsed_dlg: list[dict[str, Any]] = json.loads(dialogue_json) if dialogue_json and dialogue_json.strip() else []
     body = {
         "title": title,
         "batch_id": batch_id,
@@ -1680,6 +1687,9 @@ def studio_stitch_novela_takes(
         "platform_preset": platform_preset,
         "subtitles_mode": subtitles_mode if subtitles_mode in ("none", "minimal") else "none",
         "trim_silence": bool(trim_silence),
+        "redub_with_regional_tts": bool(redub_with_regional_tts),
+        "accent_engine": accent_engine if accent_engine in ("nordestino_raiz", "f5_tts_clone", "seed_vc_guide") else "nordestino_raiz",
+        "dialogue": parsed_dlg,
         "wait": False,
     }
     try:
@@ -1691,6 +1701,32 @@ def studio_stitch_novela_takes(
             if data.get("task_id"):
                 data = _poll_quick_task(client, f"{base_url}/api/quick/novela/stitch-takes/task/{data['task_id']}", timeout_s=240.0)
             return json.dumps(data, ensure_ascii=False, indent=2)
+    except Exception as exc:
+        return json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False)
+
+
+@mcp.tool()
+def studio_preview_regional_voice(
+    accent_engine: str = "nordestino_raiz",
+    speaker: str = "",
+    text: str = "",
+    emotion: str = "warm",
+    dialogue_json: str = "",
+) -> str:
+    """Synthesize a quick 48kHz Stereo SoXR preview MP3 of regional Northeast voices (Dona Socorro, Seu Bastião, Enzo) via Gemini Native TTS, F5-TTS-PT-BR, or Seed-VC."""
+    _, base_url, headers, auth = _resolve_target_conn("vps")
+    parsed_dlg: list[dict[str, Any]] = json.loads(dialogue_json) if dialogue_json and dialogue_json.strip() else []
+    body = {
+        "accent_engine": accent_engine if accent_engine in ("nordestino_raiz", "f5_tts_clone", "seed_vc_guide") else "nordestino_raiz",
+        "speaker": speaker,
+        "text": text,
+        "emotion": emotion,
+        "dialogue": parsed_dlg,
+    }
+    try:
+        with httpx.Client(timeout=120.0, headers=headers, auth=auth) as client:
+            resp = client.post(f"{base_url}/api/quick/novela/preview-voice", json=body)
+            return json.dumps(resp.json(), ensure_ascii=False, indent=2)
     except Exception as exc:
         return json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False)
 
