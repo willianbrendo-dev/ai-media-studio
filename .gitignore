@@ -1,0 +1,104 @@
+# ================================
+# AI Media Studio - Global Ignore
+# Zero secrets, zero runtime media/caches, zero deps
+# ================================
+
+# --- Secrets & Environment ---
+.env
+.env.*
+!.env.example
+!.env.*.example
+*vault.json
+*.htpasswd*
+*.pem
+*.key
+*.crt
+*.p12
+MoneyPrinterTurbo/config.toml
+MoneyPrinterTurbo/config.toml.bak
+youtube-automation-agent/config/credentials.json
+youtube-automation-agent/config/tokens.json
+.dev.vars
+
+# --- Virtualenvs, Package Caches & Builds ---
+.venv/
+venv/
+node_modules/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.next/
+.turbo/
+.output/
+.nuxt/
+.pnpm-store/
+.tanstack/
+.wrangler/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+
+# --- Runtime Logs, Temp & Caches ---
+*.log
+logs/
+tmp/
+temp/
+.cache/
+.playwright-mcp/
+playwright-report/
+test-results/
+.DS_Store
+
+# --- Runtime Outputs, Uploads & Storage ---
+exports/
+Videos/
+.openfilm/
+MoneyPrinterTurbo/storage/
+VoiceStudio/output/
+open-higgsfield/outputs/
+open-higgsfield/data/uploads/
+supoclip/clips/
+youtube-automation-agent/data/
+youtube-automation-agent/uploads/
+
+# --- Heavy Binary Media, Fonts, Models & Native Binaries ---
+*.mp4
+*.mkv
+*.webm
+*.avi
+*.mov
+*.mp3
+*.wav
+*.m4a
+*.ogg
+*.flac
+*.aac
+*.ttc
+*.ttf
+*.woff
+*.woff2
+*.pt
+*.pth
+*.bin
+*.gguf
+*.safetensors
+*.onnx
+*.i8
+*.wasm
+*.node
+*.so
+*.dylib
+*.dll
+
+# --- Databases ---
+*.db
+*.db-shm
+*.db-wal
+*.db-journal
+*.sqlite
+*.sqlite3
