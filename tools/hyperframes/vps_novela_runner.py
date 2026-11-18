@@ -640,6 +640,17 @@ def _synthesize_turn_audio(
     return _probe_duration(clean_wav)
 
 
+def _get_qt():
+    hf_dir = str(Path(__file__).resolve().parent)
+    if hf_dir not in sys.path:
+        sys.path.insert(0, hf_dir)
+    try:
+        from quota_telemetry import get_tracker
+        return get_tracker()
+    except Exception:
+        return None
+
+
 def _call_nvidia_flux_image(
     prompt: str,
     api_key: str,
@@ -649,6 +660,7 @@ def _call_nvidia_flux_image(
     """Generate a clean vertical 9:16 portrait/scene image via NVIDIA NIM Flux API."""
     if not api_key:
         return False, "no_nvidia_key"
+    qt = _get_qt()
     url = f"https://ai.api.nvidia.com/v1/genai/{model}"
     payload = {
         "prompt": prompt,
@@ -671,13 +683,19 @@ def _call_nvidia_flux_image(
             data = json.loads(resp.read().decode("utf-8"))
         arts = data.get("artifacts") or []
         if not arts:
+            if qt is not None:
+                qt.record_call(model, ok=False, status_code=500, specialty="image", error="empty_artifacts")
             return False, "empty_artifacts"
         art = arts[0]
         finish = str(art.get("finishReason") or "SUCCESS").upper()
         if finish == "CONTENT_FILTERED":
+            if qt is not None:
+                qt.record_call(model, ok=False, status_code=400, specialty="image", error="content_filtered")
             return False, "content_filtered"
         raw = base64.b64decode(art.get("base64") or "")
         if len(raw) < 20000:
+            if qt is not None:
+                qt.record_call(model, ok=False, status_code=500, specialty="image", error=f"tiny_{len(raw)}")
             return False, f"tiny_image_{len(raw)}"
         tmp_raw = out_jpg.with_suffix(".raw.jpg")
         tmp_raw.write_bytes(raw)
@@ -688,10 +706,16 @@ def _call_nvidia_flux_image(
             str(out_jpg),
         ], timeout=30)
         tmp_raw.unlink(missing_ok=True)
+        if qt is not None:
+            qt.record_call(model, ok=True, status_code=200, specialty="image")
         return True, model
     except urllib.error.HTTPError as e:
+        if qt is not None:
+            qt.record_call(model, ok=False, status_code=e.code, specialty="image", error=f"http_{e.code}")
         return False, f"http_{e.code}"
     except Exception as exc:
+        if qt is not None:
+            qt.record_call(model, ok=False, status_code=500, specialty="image", error=type(exc).__name__)
         return False, f"err_{type(exc).__name__}"
 
 
@@ -1089,6 +1113,9 @@ def generate_flow_veo_pack(cfg: Dict[str, Any]) -> Dict[str, Any]:
     manifest_json = json.dumps(manifest, ensure_ascii=False, indent=2)
     (pack_dir / "manifest.json").write_text(manifest_json, encoding="utf-8")
     (pack_dir / "flow_production_pack.json").write_text(manifest_json, encoding="utf-8")
+    qt = _get_qt()
+    if qt is not None:
+        qt.record_call("google-flow-veo31", ok=True, status_code=200, specialty="video")
     return manifest
 
 
@@ -1623,6 +1650,7 @@ def stitch_novela_takes(cfg: Dict[str, Any]) -> Dict[str, Any]:
     colab_url = str(cfg.get("colab_url") or env_map.get("COLAB_GPU_URL") or "").strip()
     colab_token = str(cfg.get("colab_token") or env_map.get("COLAB_GPU_TOKEN") or "").strip()
     redub_engines_used: List[str] = []
+    redub_lipsync_engines: List[str] = []
 
     job_id = uuid.uuid4().hex[:8]
     work_dir = Path(f"/tmp/hf_stitch_{job_id}")
@@ -1693,40 +1721,103 @@ def stitch_novela_takes(cfg: Dict[str, Any]) -> Dict[str, Any]:
                     "-c:a", "pcm_s16le", "-ar", "48000", "-ac", "2",
                     str(fitted_wav),
                 ], timeout=60)
-                cmd = [
+                raw_seg = work_dir / f"seg_raw_{idx:02d}.mp4"
+                _run_checked([
                     FFMPEG_BIN, "-y",
                     "-ss", f"{cut_s:.3f}", "-t", f"{seg_dur:.3f}", "-i", str(src_clip),
-                    "-i", str(fitted_wav),
-                    "-vf", v_filter,
-                    "-map", "0:v:0", "-map", "1:a:0",
+                    "-an", "-vf", v_filter,
                     "-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
-                    "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2",
-                    "-shortest",
-                    str(norm_clip),
-                ]
-            elif info["has_audio"]:
-                cmd = [
-                    FFMPEG_BIN, "-y",
-                    "-ss", f"{cut_s:.3f}", "-t", f"{seg_dur:.3f}", "-i", str(src_clip),
-                    "-vf", v_filter,
-                    "-af", "aresample=48000:resampler=soxr,aformat=sample_fmts=fltp:channel_layouts=stereo",
-                    "-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
-                    "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2",
-                    str(norm_clip),
-                ]
+                    str(raw_seg),
+                ], timeout=120)
+
+                lipsync_done = False
+                # Tier 1C-Colab: /lipsync_video via T4 LatentSync 1.5 / MuseTalk 1.5
+                if colab_url:
+                    try:
+                        hdrs = {"Accept": "application/json"}
+                        if colab_token:
+                            hdrs["X-Colab-Token"] = colab_token
+                        hreq = urllib.request.Request(f"{colab_url.rstrip('/')}/health", headers=hdrs, method="GET")
+                        with urllib.request.urlopen(hreq, timeout=2.5) as hr:
+                            if hr.status == 200:
+                                ls_req = urllib.request.Request(
+                                    f"{colab_url.rstrip('/')}/lipsync_video",
+                                    data=json.dumps({
+                                        "video_b64": base64.b64encode(raw_seg.read_bytes()).decode("ascii"),
+                                        "audio_b64": base64.b64encode(fitted_wav.read_bytes()).decode("ascii"),
+                                        "engine": "latentsync_1.5",
+                                        "width": 1080,
+                                        "height": 1920,
+                                    }).encode("utf-8"),
+                                    headers={**hdrs, "Content-Type": "application/json"},
+                                    method="POST",
+                                )
+                                with urllib.request.urlopen(ls_req, timeout=240) as lsr:
+                                    ls_data = json.loads(lsr.read().decode("utf-8"))
+                                if ls_data.get("ok") and ls_data.get("video_b64"):
+                                    tmp_cb = work_dir / f"colab_ls_{idx:02d}.mp4"
+                                    tmp_cb.write_bytes(base64.b64decode(ls_data["video_b64"]))
+                                    _run_checked([
+                                        FFMPEG_BIN, "-y", "-i", str(tmp_cb), "-i", str(fitted_wav),
+                                        "-map", "0:v:0", "-map", "1:a:0",
+                                        "-vf", v_filter,
+                                        "-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
+                                        "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2", "-shortest",
+                                        str(norm_clip),
+                                    ], timeout=120)
+                                    tmp_cb.unlink(missing_ok=True)
+                                    lipsync_done = True
+                                    redub_lipsync_engines.append(f"colab:{ls_data.get('engine') or 'latentsync_1.5'}")
+                                    qt = _get_qt()
+                                    if qt is not None:
+                                        qt.record_call("colab-t4-gpu", ok=True, status_code=200, specialty="video")
+                    except Exception as cb_exc:
+                        print(f"[STITCH WARN] Colab /lipsync_video take {idx+1} indisponível: {cb_exc}", flush=True)
+
+                # Tier 1C-ZeroGPU: fffiloni/LatentSync cloud neural re-lipsync
+                if not lipsync_done:
+                    zg_ls = nla.zerogpu_lipsync_video(raw_seg, fitted_wav, norm_clip, env_map=env_map, width=1080, height=1920)
+                    if zg_ls is not None and norm_clip.is_file():
+                        lipsync_done = True
+                        redub_lipsync_engines.append(str(zg_ls.get("engine") or "zerogpu:fffiloni/LatentSync"))
+
+                if not lipsync_done:
+                    print(f"[STITCH WARN] Re-lipsync GPU indisponível no take {idx+1}; aplicando apenas áudio PT-BR no clipe Flow Veo 3.1.", flush=True)
+                    _run_checked([
+                        FFMPEG_BIN, "-y",
+                        "-i", str(raw_seg),
+                        "-i", str(fitted_wav),
+                        "-map", "0:v:0", "-map", "1:a:0",
+                        "-c:v", "copy",
+                        "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2",
+                        "-shortest",
+                        str(norm_clip),
+                    ], timeout=120)
+                    redub_lipsync_engines.append("audio_replace_only")
             else:
-                cmd = [
-                    FFMPEG_BIN, "-y",
-                    "-ss", f"{cut_s:.3f}", "-t", f"{seg_dur:.3f}", "-i", str(src_clip),
-                    "-f", "lavfi", "-t", f"{seg_dur:.3f}", "-i", "anullsrc=channel_layout=stereo:sample_rate=48000",
-                    "-vf", v_filter,
-                    "-map", "0:v:0", "-map", "1:a:0",
-                    "-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
-                    "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2",
-                    "-shortest",
-                    str(norm_clip),
-                ]
-            _run_checked(cmd, timeout=180)
+                if info["has_audio"]:
+                    cmd = [
+                        FFMPEG_BIN, "-y",
+                        "-ss", f"{cut_s:.3f}", "-t", f"{seg_dur:.3f}", "-i", str(src_clip),
+                        "-vf", v_filter,
+                        "-af", "aresample=48000:resampler=soxr,aformat=sample_fmts=fltp:channel_layouts=stereo",
+                        "-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
+                        "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2",
+                        str(norm_clip),
+                    ]
+                else:
+                    cmd = [
+                        FFMPEG_BIN, "-y",
+                        "-ss", f"{cut_s:.3f}", "-t", f"{seg_dur:.3f}", "-i", str(src_clip),
+                        "-f", "lavfi", "-t", f"{seg_dur:.3f}", "-i", "anullsrc=channel_layout=stereo:sample_rate=48000",
+                        "-vf", v_filter,
+                        "-map", "0:v:0", "-map", "1:a:0",
+                        "-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
+                        "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2",
+                        "-shortest",
+                        str(norm_clip),
+                    ]
+                _run_checked(cmd, timeout=180)
             actual_seg_dur = _probe_duration(norm_clip)
             trimmed_clips.append(norm_clip)
 
@@ -1825,6 +1916,7 @@ def stitch_novela_takes(cfg: Dict[str, Any]) -> Dict[str, Any]:
             "trimmed_seconds": round(max(0.0, raw_total_dur - final_dur), 2),
             "redubbed_with_regional_tts": redub_regional,
             "voice_engines_used": sorted(set(redub_engines_used)),
+            "redub_lipsync_engines": sorted(set(redub_lipsync_engines)),
             "takes_metrics": takes_metrics,
             "elapsed_sec": round(time.time() - t_start, 2),
         }
@@ -2068,7 +2160,7 @@ def render_novela_episode(cfg: Dict[str, Any]) -> Dict[str, Any]:
         if not colab_url:
             raise RuntimeError("COLAB_GPU_URL não configurada! Informe a URL do túnel Cloudflare do Google Colab.")
         colab_token = str(cfg.get("colab_token") or env_map.get("COLAB_GPU_TOKEN") or "").strip()
-        colab_engine = str(cfg.get("colab_engine") or "echomimic_v3").strip().lower()
+        colab_engine = str(cfg.get("colab_engine") or "liveportrait_latentsync").strip().lower()
 
         colab_clips: List[Path] = []
         for t in compiled_turns:
@@ -2127,7 +2219,7 @@ def render_novela_episode(cfg: Dict[str, Any]) -> Dict[str, Any]:
     if enable_lipsync:
         colab_url = str(cfg.get("colab_url") or env_map.get("COLAB_GPU_URL") or "").strip()
         colab_token = str(cfg.get("colab_token") or env_map.get("COLAB_GPU_TOKEN") or "").strip()
-        colab_engine = str(cfg.get("colab_engine") or "echomimic_v3").strip().lower()
+        colab_engine = str(cfg.get("colab_engine") or "liveportrait_latentsync").strip().lower()
         animated_clips: List[Path] = []
         lipsync_turns: List[Dict[str, Any]] = []
         ass_events: List[Tuple[float, float, str]] = []

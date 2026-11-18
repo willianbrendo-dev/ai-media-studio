@@ -1,22 +1,23 @@
 #!/usr/bin/env python3
-"""True 2.5D Lip-Sync & Facial Motion Cascade Engine (v2.8).
+"""True GPU Generative Video & Lip-Sync Cascade Engine (v2.9).
 
-Zero-Idle-RAM animation module converting any closed-mouth portrait (Flux 1080x1920 or
-custom portrait) + 48kHz dialogue WAV into an expressive 30fps talking or reacting take:
+Zero-Idle-RAM animation cascade converting any character portrait (Flux 1080x1920 or
+custom portrait) + 48kHz dialogue WAV into real 30fps generative GPU video:
 
-  Tier 1 (Cloud / Colab GPU T4 fp16):
+  Tier 1B (Google Colab GPU T4 fp16):
     Routes through active Cloudflare Colab tunnel (`COLAB_GPU_URL`):
-      - POST /animate_turn (LivePortrait Stage 1 + LatentSync 1.5 / MuseTalk 1.5 Stage 2)
-      - POST /animate-take (v2.6/v2.7 backward-compatible route)
-  Tier 2 (Local CPU MediaPipe + 2.5D Phonetic Viseme Puppets Engine):
-    Runs MediaPipe FaceLandmarker (478 landmarks) with OpenCV Haar & anatomical
-    fallbacks, classifies frame-by-frame phonetic visemes from RMS + spectral centroid +
-    zero-crossing rate (`SILENCE/M-B-P`, `ROUND O/U`, `OPEN A/E`, `FRICATIVE S/Z/F/V/I`),
-    and drives vectorized 2D displacement warping via `cv2.remap`:
-      - Genuine horizontal lip pucker/stretch + vertical jaw/lip articulation
-      - Pure `cv2.remap` glasses-safe upper-eyelid blinks (ZERO opaque painted ellipse!)
-      - `lead_in_pause` (0.45s breath/eye-close before comeback speech)
-      - `is_silent_reaction` (Cut 4 sealed trembling mouth + furrowed brows + shoulder slump)
+      - POST /animate_turn (LivePortrait + LatentSync 1.5 / MuseTalk 1.5 fp16)
+      - POST /lipsync_video (LatentSync 1.5 / MuseTalk 1.5 for Flow Veo 3.1 clips)
+  Tier 1A (Hugging Face ZeroGPU A10G Cloud via gradio_client):
+    Works with optional `HF_TOKEN` configured in Vault or anonymous free tier:
+      - Spoken turns (`is_silent_reaction=False`): multimodalart/MoDA-fast-talking-head,
+        victor/LongCat-Video-Avatar-1.6, meituan-longcat/LongCat-Video-Avatar-1.5-Demo,
+        fffiloni/EchoMimic, or I2V -> fffiloni/LatentSync combo
+      - Cut 4 Silent Reaction (`is_silent_reaction=True`): zerogpu-aoti/wan2-2-fp8da-aoti-faster,
+        Lightricks/ltx-video-distilled, multimodalart/wan2-1-fast
+  Ban v2.9:
+    2D local CPU `cv2.remap` rubber warping & painted `cv2.ellipse` mouth patches are
+    permanently banned from the production cascade.
 """
 
 from __future__ import annotations
@@ -27,8 +28,10 @@ import math
 import os
 import shutil
 import subprocess
+import sys
 import time
 import urllib.request
+import uuid
 import wave
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -494,6 +497,28 @@ def _animate_local_viseme_take(
     height: int = 1920,
     fps: int = 30,
 ) -> Dict[str, Any]:
+    """Permanently banned in v2.9: 2D CPU cv2.remap / mouth ellipse distortion is disabled."""
+    raise RuntimeError(
+        "Distorção 2D local (cv2.remap / elipse na boca) foi banida na v2.9! "
+        "Utilize GPU real via ZeroGPU A10G (configurar HF_TOKEN no Cofre Central para maior cota) "
+        "ou conecte o Google Colab GPU T4 (COLAB_GPU_URL)."
+    )
+
+
+def _unused_legacy_local_viseme_removed(
+    *,
+    image_path: Path,
+    audio_wav: Path,
+    out_mp4: Path,
+    emotion: str = "warm",
+    emotion_preset: str = "warm",
+    camera_action: str = "zoom_in",
+    lead_in_pause: float = 0.0,
+    is_silent_reaction: bool = False,
+    width: int = 1080,
+    height: int = 1920,
+    fps: int = 30,
+) -> Dict[str, Any]:
     """Render genuine 30fps 2.5D phonetic lip-sync + glasses-safe blink + head/reaction acting locally on CPU."""
     base_img = _load_bgr_portrait(image_path, width=width, height=height)
     rig = detect_face_rig(base_img)
@@ -795,20 +820,13 @@ def _try_tier1_colab_animate(
         raw_mp4 = out_mp4.with_suffix(".colab_raw.mp4")
         raw_mp4.write_bytes(base64.b64decode(data["video_b64"]))
         try:
-            subprocess.run(
-                [
-                    FFMPEG_BIN, "-y", "-i", str(raw_mp4), "-i", str(audio_wav),
-                    "-map", "0:v:0", "-map", "1:a:0",
-                    "-vf", f"scale={width}:{height}:force_original_aspect_ratio=increase:flags=lanczos,crop={width}:{height},fps=30,format=yuv420p",
-                    "-c:v", "libx264", "-preset", "fast", "-crf", "19",
-                    "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2",
-                    "-shortest", str(out_mp4),
-                ],
-                check=True,
-                timeout=90,
-            )
+            _normalize_gpu_clip(raw_mp4, audio_wav, out_mp4, width=width, height=height)
         finally:
             raw_mp4.unlink(missing_ok=True)
+
+        qt = _get_qt()
+        if qt is not None:
+            qt.record_call("colab-t4-gpu", ok=True, status_code=200, specialty="video")
 
         return {
             "ok": True,
@@ -818,8 +836,452 @@ def _try_tier1_colab_animate(
             "is_silent_reaction": bool(is_silent_reaction),
             "output_mp4": str(out_mp4),
         }
+    except Exception as exc:
+        qt = _get_qt()
+        if qt is not None:
+            qt.record_call("colab-t4-gpu", ok=False, status_code=500, specialty="video", error=str(exc)[:160])
+        return None
+
+
+def _get_qt():
+    hf_dir = str(Path(__file__).resolve().parent)
+    if hf_dir not in sys.path:
+        sys.path.insert(0, hf_dir)
+    try:
+        from quota_telemetry import get_tracker
+        return get_tracker()
     except Exception:
         return None
+
+
+def _resolve_hf_token(env_map: Optional[Dict[str, str]] = None) -> Optional[str]:
+    if env_map and str(env_map.get("HF_TOKEN") or "").strip():
+        return str(env_map["HF_TOKEN"]).strip()
+    if str(os.environ.get("HF_TOKEN") or "").strip():
+        return str(os.environ["HF_TOKEN"]).strip()
+    studio_base = Path(os.environ.get("STUDIO_BASE_DIR", "/opt/ai-media-studio"))
+    for vf in (
+        studio_base / "media-control-panel/vault.json",
+        studio_base / "media-control-panel/data/vault.json",
+    ):
+        if vf.is_file():
+            try:
+                tok = str(json.loads(vf.read_text(encoding="utf-8")).get("HF_TOKEN") or "").strip()
+                if tok:
+                    return tok
+            except Exception:
+                pass
+    for ef in (studio_base / "media-control-panel/.env", studio_base / ".env"):
+        if ef.is_file():
+            for line in ef.read_text(encoding="utf-8", errors="ignore").splitlines():
+                if line.strip().startswith("HF_TOKEN="):
+                    val = line.split("=", 1)[1].strip().strip("\"'")
+                    if val:
+                        return val
+    return None
+
+
+def _normalize_gpu_clip(
+    raw_mp4: Path,
+    audio_wav: Path,
+    out_mp4: Path,
+    *,
+    width: int = 1080,
+    height: int = 1920,
+    fps: int = 30,
+) -> None:
+    """Scale/crop generative GPU MP4 to 1080x1920 30fps yuv420p and mux full dialogue WAV cleanly."""
+    out_mp4.parent.mkdir(parents=True, exist_ok=True)
+    vid_dur = _probe_duration(raw_mp4)
+    aud_dur = _probe_duration(audio_wav)
+    pad_tail = max(0.0, aud_dur - vid_dur + 0.12)
+    vf = (
+        f"scale={width}:{height}:force_original_aspect_ratio=increase:flags=lanczos,"
+        f"crop={width}:{height},setsar=1,fps={fps}"
+    )
+    if pad_tail > 0.04:
+        vf += f",tpad=stop_mode=clone:stop_duration={pad_tail:.3f}"
+    vf += ",format=yuv420p"
+
+    subprocess.run(
+        [
+            FFMPEG_BIN, "-y", "-v", "error",
+            "-i", str(raw_mp4),
+            "-i", str(audio_wav),
+            "-map", "0:v:0", "-map", "1:a:0",
+            "-vf", vf,
+            "-t", f"{aud_dur:.3f}",
+            "-c:v", "libx264", "-preset", "fast", "-crf", "19",
+            "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2",
+            "-movflags", "+faststart",
+            str(out_mp4),
+        ],
+        check=True,
+        timeout=120,
+    )
+
+
+def _extract_video_path_from_gradio(res: Any, work_dir: Path) -> Optional[Path]:
+    cand: Any = res
+    if isinstance(cand, (list, tuple)) and cand:
+        cand = cand[0]
+    if isinstance(cand, dict):
+        cand = cand.get("video") or cand.get("path") or cand.get("url")
+    if isinstance(cand, dict):
+        cand = cand.get("path") or cand.get("url")
+    if not isinstance(cand, str) or not cand.strip():
+        return None
+    val = cand.strip()
+    p = Path(val)
+    if p.is_file() and p.stat().st_size > 8000:
+        return p
+    if val.startswith("http"):
+        dl = work_dir / f"hf_dl_{uuid.uuid4().hex[:6]}.mp4"
+        urllib.request.urlretrieve(val, str(dl))
+        if dl.is_file() and dl.stat().st_size > 8000:
+            return dl
+    return None
+
+
+def _prepare_raster_image(image_path: Path, work_dir: Path, width: int = 1080, height: int = 1920) -> Path:
+    if image_path.suffix.lower() in (".jpg", ".jpeg", ".png", ".webp"):
+        return image_path
+    out_jpg = work_dir / f"{image_path.stem}_in.jpg"
+    img_arr = _load_bgr_portrait(image_path, width=width, height=height)
+    cv2.imwrite(str(out_jpg), img_arr, [int(cv2.IMWRITE_JPEG_QUALITY), 95])
+    return out_jpg
+
+
+def _map_moda_emotion(emotion: str, cut_role: str) -> str:
+    txt = f"{emotion} {cut_role}".lower()
+    if any(k in txt for k in ("angry", "attack", "furious", "indign")):
+        return "Anger"
+    if any(k in txt for k in ("shock", "surprise", "reveal", "twist")):
+        return "Surprise"
+    if any(k in txt for k in ("sad", "shame", "regret", "guilt")):
+        return "Sadness"
+    if any(k in txt for k in ("happy", "laugh", "warm", "comedy", "ironic")):
+        return "Happiness"
+    return "Neutral"
+
+
+def _run_zerogpu_i2v(
+    *,
+    src_img: Path,
+    prompt: str,
+    duration_s: float,
+    work_dir: Path,
+    hf_token: Optional[str],
+    errors_out: List[str],
+) -> Optional[Tuple[Path, str]]:
+    from gradio_client import Client, handle_file
+
+    clamped_wan = min(3.5, max(1.8, round(duration_s, 1)))
+    clamped_ltx = min(3.0, max(1.5, round(duration_s, 1)))
+    eff_prompt = (
+        prompt.strip()
+        or "The character moves naturally with subtle breathing, realistic blinking, expressive facial acting and handheld cinema camera motion."
+    )
+    i2v_specs = [
+        (
+            "zerogpu-aoti/wan2-2-fp8da-aoti-faster",
+            "/generate_video",
+            dict(
+                input_image=handle_file(str(src_img)),
+                prompt=eff_prompt,
+                steps=6,
+                duration_seconds=clamped_wan,
+                guidance_scale=1.0,
+                guidance_scale_2=1.0,
+                randomize_seed=True,
+            ),
+        ),
+        (
+            "Lightricks/ltx-video-distilled",
+            "/image_to_video",
+            dict(
+                prompt=eff_prompt,
+                negative_prompt="worst quality, inconsistent motion, blurry, jittery, distorted, frozen face",
+                input_image_filepath=handle_file(str(src_img)),
+                height_ui=768,
+                width_ui=448,
+                mode="image-to-video",
+                duration_ui=clamped_ltx,
+                randomize_seed=True,
+            ),
+        ),
+        (
+            "multimodalart/wan2-1-fast",
+            "/generate_video",
+            dict(
+                input_image=handle_file(str(src_img)),
+                prompt=eff_prompt,
+                height=896,
+                width=512,
+                duration_seconds=min(3.0, clamped_wan),
+                guidance_scale=1.0,
+                steps=4,
+                randomize_seed=True,
+            ),
+        ),
+    ]
+    for sid, ep, kw in i2v_specs:
+        try:
+            client = Client(sid, token=hf_token, verbose=False)
+            res = client.predict(**kw, api_name=ep)
+            vid = _extract_video_path_from_gradio(res, work_dir)
+            if vid is not None:
+                return vid, sid
+        except Exception as exc:
+            errors_out.append(f"{sid}: {str(exc)[:180]}")
+    return None
+
+
+def zerogpu_lipsync_video(
+    video_mp4: Path,
+    audio_wav: Path,
+    out_mp4: Path,
+    *,
+    env_map: Optional[Dict[str, str]] = None,
+    width: int = 1080,
+    height: int = 1920,
+    errors_out: Optional[List[str]] = None,
+) -> Optional[Dict[str, Any]]:
+    """Run neural video-to-video LatentSync lip-sync via ZeroGPU (`fffiloni/LatentSync`)."""
+    from gradio_client import Client, handle_file
+
+    hf_token = _resolve_hf_token(env_map)
+    qt = _get_qt()
+    work_dir = Path(f"/tmp/hf_ls_v29_{uuid.uuid4().hex[:6]}")
+    work_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        drv_wav = work_dir / "drv_24k.wav"
+        subprocess.run(
+            [
+                FFMPEG_BIN, "-y", "-v", "error",
+                "-i", str(audio_wav), "-ar", "24000", "-ac", "1", "-c:a", "pcm_s16le",
+                str(drv_wav),
+            ],
+            check=True,
+            timeout=30,
+        )
+        client = Client("fffiloni/LatentSync", token=hf_token, verbose=False)
+        res = client.predict(
+            input_video_path=handle_file(str(video_mp4)),
+            input_audio_path=handle_file(str(drv_wav)),
+            api_name="/generate_lip_sync_video",
+        )
+        vid = _extract_video_path_from_gradio(res, work_dir)
+        if vid is None:
+            raise RuntimeError("fffiloni/LatentSync retornou saída vazia")
+        _normalize_gpu_clip(vid, audio_wav, out_mp4, width=width, height=height)
+        if qt is not None:
+            qt.record_call("zerogpu-a10g-video", ok=True, status_code=200, specialty="video")
+        return {
+            "ok": True,
+            "engine": "zerogpu:fffiloni/LatentSync",
+            "duration": round(_probe_duration(out_mp4), 2),
+            "output_mp4": str(out_mp4),
+        }
+    except Exception as exc:
+        if errors_out is not None:
+            errors_out.append(f"fffiloni/LatentSync: {str(exc)[:180]}")
+        if qt is not None:
+            qt.record_call("zerogpu-a10g-video", ok=False, status_code=429 if "quota" in str(exc).lower() else 500, specialty="video", error=str(exc)[:160])
+        return None
+    finally:
+        shutil.rmtree(work_dir, ignore_errors=True)
+
+
+def _try_zerogpu_cloud_animate(
+    *,
+    image_path: Path,
+    audio_wav: Path,
+    out_mp4: Path,
+    prompt: str = "",
+    emotion: str = "warm",
+    emotion_preset: str = "warm",
+    is_silent_reaction: bool = False,
+    env_map: Optional[Dict[str, str]] = None,
+    width: int = 1080,
+    height: int = 1920,
+    errors_out: Optional[List[str]] = None,
+) -> Optional[Dict[str, Any]]:
+    """Tier 1A Real GPU Generative Video via Hugging Face ZeroGPU A10G Spaces."""
+    hf_token = _resolve_hf_token(env_map)
+    qt = _get_qt()
+    work_dir = Path(f"/tmp/hf_zg_v29_{uuid.uuid4().hex[:6]}")
+    work_dir.mkdir(parents=True, exist_ok=True)
+    errs: List[str] = errors_out if errors_out is not None else []
+    try:
+        src_img = _prepare_raster_image(image_path, work_dir, width=width, height=height)
+        aud_dur = _probe_duration(audio_wav)
+
+        # Silent reaction take (Cut 4): pure GPU Image-to-Video acting (NO speech distortion)
+        if is_silent_reaction:
+            react_prompt = (
+                prompt.strip()
+                or "The character swallows hard in shock and embarrassment, eyes widening slightly, blinking nervously with subtle shoulder and head motion, handheld cinema camera."
+            )
+            i2v_res = _run_zerogpu_i2v(
+                src_img=src_img,
+                prompt=react_prompt,
+                duration_s=aud_dur,
+                work_dir=work_dir,
+                hf_token=hf_token,
+                errors_out=errs,
+            )
+            if i2v_res is not None:
+                raw_vid, sid = i2v_res
+                _normalize_gpu_clip(raw_vid, audio_wav, out_mp4, width=width, height=height)
+                if qt is not None:
+                    qt.record_call("zerogpu-a10g-video", ok=True, status_code=200, specialty="video")
+                return {
+                    "ok": True,
+                    "animation_engine_used": f"tier1a_zerogpu_i2v:{sid}",
+                    "detector": "huggingface_zerogpu_a10g",
+                    "duration": round(_probe_duration(out_mp4), 2),
+                    "is_silent_reaction": True,
+                    "output_mp4": str(out_mp4),
+                }
+            if qt is not None:
+                qt.record_call("zerogpu-a10g-video", ok=False, status_code=429, specialty="video", error="; ".join(errs)[:160])
+            return None
+
+        # Spoken take: Talking Avatar Spaces -> fallback Combo I2V + LatentSync
+        from gradio_client import Client, handle_file
+
+        drv_wav = work_dir / "drv_24k.wav"
+        subprocess.run(
+            [
+                FFMPEG_BIN, "-y", "-v", "error",
+                "-i", str(audio_wav), "-ar", "24000", "-ac", "1", "-c:a", "pcm_s16le",
+                str(drv_wav),
+            ],
+            check=True,
+            timeout=30,
+        )
+
+        talk_prompt = (
+            prompt.strip()
+            or "An expressive Brazilian character speaking energetically to camera with natural head movement, blinking eyes and realistic mouth motion."
+        )
+        moda_emo = _map_moda_emotion(emotion, emotion_preset)
+        avatar_specs: List[Tuple[str, str, Dict[str, Any]]] = [
+            (
+                "multimodalart/MoDA-fast-talking-head",
+                "/generate_motion",
+                dict(
+                    source_image_path=handle_file(str(src_img)),
+                    driving_audio_path=handle_file(str(drv_wav)),
+                    emotion_name=moda_emo,
+                    cfg_scale=1.5,
+                ),
+            ),
+            (
+                "victor/LongCat-Video-Avatar-1.6",
+                "/generate",
+                dict(
+                    image_path=handle_file(str(src_img)),
+                    audio_path=handle_file(str(drv_wav)),
+                    prompt=talk_prompt,
+                    resolution="480p",
+                    seed=42,
+                    vocal_mode="Clean speech (fast)",
+                    acceleration="DBCache faster",
+                ),
+            ),
+            (
+                "meituan-longcat/LongCat-Video-Avatar-1.5-Demo",
+                "/generate_avatar",
+                dict(
+                    image_file=handle_file(str(src_img)),
+                    audio_file=handle_file(str(drv_wav)),
+                    prompt=talk_prompt,
+                    resolution="480p",
+                    seed=42,
+                    vocal_mode="Clean speech (fast)",
+                    acceleration="DBCache faster",
+                ),
+            ),
+            (
+                "victor/LongCat-Video-Avatar-1.5",
+                "/generate",
+                dict(
+                    image_path=handle_file(str(src_img)),
+                    audio_path=handle_file(str(drv_wav)),
+                    prompt=talk_prompt,
+                    resolution="480p",
+                    seed=42,
+                    vocal_mode="Clean speech (fast)",
+                    acceleration="DBCache faster",
+                ),
+            ),
+            (
+                "fffiloni/EchoMimic",
+                "/generate_video",
+                dict(
+                    uploaded_img=handle_file(str(src_img)),
+                    uploaded_audio=handle_file(str(drv_wav)),
+                ),
+            ),
+        ]
+
+        for sid, ep, kw in avatar_specs:
+            try:
+                client = Client(sid, token=hf_token, verbose=False)
+                res = client.predict(**kw, api_name=ep)
+                vid = _extract_video_path_from_gradio(res, work_dir)
+                if vid is not None:
+                    _normalize_gpu_clip(vid, audio_wav, out_mp4, width=width, height=height)
+                    if qt is not None:
+                        qt.record_call("zerogpu-a10g-video", ok=True, status_code=200, specialty="video")
+                    return {
+                        "ok": True,
+                        "animation_engine_used": f"tier1a_zerogpu_avatar:{sid}",
+                        "detector": "huggingface_zerogpu_a10g",
+                        "duration": round(_probe_duration(out_mp4), 2),
+                        "is_silent_reaction": False,
+                        "output_mp4": str(out_mp4),
+                    }
+            except Exception as exc:
+                errs.append(f"{sid}: {str(exc)[:180]}")
+
+        # Combo Step 1 (I2V) -> Step 2 (LatentSync)
+        i2v_base = _run_zerogpu_i2v(
+            src_img=src_img,
+            prompt=talk_prompt,
+            duration_s=aud_dur,
+            work_dir=work_dir,
+            hf_token=hf_token,
+            errors_out=errs,
+        )
+        if i2v_base is not None:
+            base_vid, i2v_sid = i2v_base
+            ls_res = zerogpu_lipsync_video(
+                base_vid,
+                audio_wav,
+                out_mp4,
+                env_map=env_map,
+                width=width,
+                height=height,
+                errors_out=errs,
+            )
+            if ls_res is not None:
+                return {
+                    "ok": True,
+                    "animation_engine_used": f"tier1a_zerogpu_combo:{i2v_sid}+LatentSync",
+                    "detector": "huggingface_zerogpu_a10g",
+                    "duration": round(_probe_duration(out_mp4), 2),
+                    "is_silent_reaction": False,
+                    "output_mp4": str(out_mp4),
+                }
+
+        if qt is not None:
+            qt.record_call("zerogpu-a10g-video", ok=False, status_code=429, specialty="video", error="; ".join(errs)[:160])
+        return None
+    finally:
+        shutil.rmtree(work_dir, ignore_errors=True)
 
 
 def animate_character_talking_take(
@@ -841,7 +1303,7 @@ def animate_character_talking_take(
     height: int = 1920,
     fps: int = 30,
 ) -> Dict[str, Any]:
-    """Cascade Lip-Sync animator: Tier 1 Colab GPU v2.8 if reachable, else Tier 2 Local 2.5D Visemes."""
+    """Strict Real GPU Generative Video Cascade (v2.9): Colab T4 -> ZeroGPU A10G. No 2D fake distortion."""
     eff_url = (colab_url or (env_map or {}).get("COLAB_GPU_URL") or "").strip()
     eff_tok = (colab_token or (env_map or {}).get("COLAB_GPU_TOKEN") or "").strip()
     if eff_url:
@@ -862,16 +1324,26 @@ def animate_character_talking_take(
         if t1 is not None:
             return t1
 
-    return _animate_local_viseme_take(
+    zg_errors: List[str] = []
+    t1a = _try_zerogpu_cloud_animate(
         image_path=image_path,
         audio_wav=audio_wav,
         out_mp4=out_mp4,
+        prompt=prompt,
         emotion=emotion,
         emotion_preset=emotion_preset,
-        camera_action=camera_action,
-        lead_in_pause=lead_in_pause,
         is_silent_reaction=is_silent_reaction,
+        env_map=env_map,
         width=width,
         height=height,
-        fps=fps,
+        errors_out=zg_errors,
+    )
+    if t1a is not None:
+        return t1a
+
+    detail = " | ".join(zg_errors[-3:]) if zg_errors else "nenhum worker GPU ativo"
+    raise RuntimeError(
+        "Falha na geração de vídeo neural GPU (ZeroGPU A10G / Colab T4) e fallback 2D (cv2.remap) banido na v2.9. "
+        "Configure HF_TOKEN no Cofre Central para ampliar cota ZeroGPU ou conecte o Google Colab GPU T4. "
+        f"Detalhe: {detail}"
     )

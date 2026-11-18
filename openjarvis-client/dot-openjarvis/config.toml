@@ -1,8 +1,8 @@
 # OpenJarvis configuration — Hybrid Cascade Gateway + CPU-Only PT-BR Voice & MCP
 
 [intelligence]
-default_model = "gemini-2.5-flash"
-fallback_model = "nvidia/nemotron-3.5-lightning-30b-a3b"
+default_model = "nvidia/nemotron-3.5-lightning-30b-a3b"
+fallback_model = "nvidia/nemotron-3-ultra-550b-a55b"
 preferred_engine = "vllm"
 provider = "openai"
 quantization = "none"
@@ -97,4 +97,4 @@ db_path = "~/.openjarvis/traces.db"
 host = "127.0.0.1"
 port = 8090
 agent = "orchestrator"
-model = "gemini-2.5-flash"
+model = "nvidia/nemotron-3.5-lightning-30b-a3b"

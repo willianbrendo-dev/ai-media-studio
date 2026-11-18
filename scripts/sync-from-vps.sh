@@ -50,6 +50,7 @@ RSYNC_EXCLUDES=(
   --exclude='.env.*'
   --exclude='.dev.vars'
   --exclude='*vault.json'
+  --exclude='quota_telemetry.json'
   --exclude='*.htpasswd*'
   --exclude='*.pem'
   --exclude='*.key'

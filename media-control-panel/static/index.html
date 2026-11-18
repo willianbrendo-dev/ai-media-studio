@@ -469,20 +469,28 @@
             </div>
           </div>
 
-          <!-- KPI 3: Cascata IA -->
-          <div class="saas-card rounded-2xl p-3.5 sm:p-5 flex flex-col justify-between gap-2.5 sm:gap-3 min-w-0">
+          <!-- KPI 3: Cascata IA & Cotas Tempo Real (v2.9) -->
+          <div id="card-kpi-cascade" class="saas-card rounded-2xl p-3.5 sm:p-5 flex flex-col justify-between gap-2 sm:gap-2.5 min-w-0">
             <div class="flex items-start justify-between gap-2 sm:gap-3">
               <div class="min-w-0">
                 <div class="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-slate-400 truncate">Cascata IA (:9000)</div>
-                <div class="text-lg sm:text-2xl font-extrabold text-white mt-1 sm:mt-1.5 truncate tracking-tight whitespace-nowrap" id="kpi-cascade-tier">Gemini 2.5</div>
+                <div class="text-sm sm:text-base font-extrabold text-white mt-1 truncate tracking-tight" id="kpi-cascade-tier">Texto: 🟢 NIM · Voz: 🎙️ Live</div>
               </div>
               <div class="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center shrink-0">
                 <i data-lucide="crown" class="w-4 h-4 sm:w-5 sm:h-5 text-amber-400"></i>
               </div>
             </div>
+            <div id="kpi-cascade-pills" class="flex flex-wrap items-center gap-1 text-[9px] sm:text-[10px] font-mono">
+              <span class="px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/25">🟢 NIM</span>
+              <span class="px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/25">🟢 Live (∞)</span>
+              <span class="px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-300 border border-cyan-500/25">🚀 GPU</span>
+            </div>
             <div class="flex items-center justify-between text-[10px] sm:text-[11px] pt-2 border-t border-white/[0.05] gap-1.5">
-              <span class="text-emerald-400 font-medium truncate min-w-0" id="kpi-cascade-sub">Gemini → NIM → OR</span>
-              <button onclick="switchTab('vault')" class="text-cyan-300 hover:text-cyan-200 font-semibold shrink-0 cursor-pointer whitespace-nowrap">Configurar</button>
+              <span class="text-emerald-400 font-medium truncate min-w-0" id="kpi-cascade-sub">NIM → OR → Live Audio</span>
+              <div class="flex items-center gap-2 shrink-0 whitespace-nowrap">
+                <button id="btn-open-quota-modal" type="button" onclick="openQuotaModal()" class="text-amber-300 hover:text-amber-200 font-semibold cursor-pointer">Cotas</button>
+                <button type="button" onclick="switchTab('vault')" class="text-cyan-300 hover:text-cyan-200 font-semibold cursor-pointer">Configurar</button>
+              </div>
             </div>
           </div>
 
@@ -2312,6 +2320,22 @@
                     </div>
                   </div>
                 </div>
+
+                <div id="vault-hf-token-box" class="p-4 rounded-2xl bg-amber-500/[0.04] border border-amber-500/25 space-y-2">
+                  <div class="flex items-center justify-between gap-2 text-xs">
+                    <label class="font-bold text-amber-300 flex items-center gap-1.5"><i data-lucide="cpu" class="w-3.5 h-3.5 text-amber-400"></i> Hugging Face Token (HF_TOKEN — ZeroGPU A10G)</label>
+                    <span id="badge-HF_TOKEN" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-white/[0.05] text-slate-400">Verificando...</span>
+                  </div>
+                  <div class="relative">
+                    <input type="password" id="input-HF_TOKEN" placeholder="hf_..."
+                      class="w-full bg-[#070a08] border border-white/10 focus:border-amber-400 rounded-xl px-3.5 py-2 pr-20 text-xs font-mono text-white placeholder-slate-600 outline-none transition" />
+                    <div class="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                      <button type="button" onclick="toggleInputVisibility('HF_TOKEN')" class="p-1.5 text-slate-400 hover:text-white cursor-pointer"><i data-lucide="eye" class="w-3.5 h-3.5"></i></button>
+                      <button type="button" onclick="clearKeyField('HF_TOKEN')" class="p-1.5 text-slate-400 hover:text-rose-400 cursor-pointer"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+                    </div>
+                  </div>
+                  <p class="text-[11px] text-slate-400">Autentica inferência ZeroGPU A10G (MoDA Talking Head, Wan 2.2, LTX-Video e LatentSync) sem limite anônimo.</p>
+                </div>
               </div>
 
               <div class="pt-4 border-t border-white/[0.06] flex flex-wrap items-center justify-between gap-3">
@@ -2349,11 +2373,16 @@
                 O Gateway Central (<code class="text-emerald-300 font-mono">http://localhost:9000/v1</code>) desvia silenciosamente qualquer erro 429 ou oscilação entre as camadas abaixo:
               </p>
               <div id="cascade-visualizer-cards" class="space-y-2.5">
-                <!-- Populated from /api/ai/cascade-status -->
+                <!-- Populated from /api/ai/cascade-status & /api/ai/quota-telemetry -->
               </div>
-              <button onclick="runGlobalDiagnostics()" class="w-full py-2.5 px-4 rounded-2xl text-xs font-semibold bg-white/[0.04] hover:bg-white/[0.08] text-slate-200 border border-white/10 transition cursor-pointer flex items-center justify-center gap-2">
-                <i data-lucide="activity" class="w-3.5 h-3.5 text-emerald-400"></i> Testar Latência Real (Ping HTTP)
-              </button>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <button type="button" onclick="openQuotaModal()" class="w-full py-2.5 px-3 rounded-2xl text-xs font-semibold bg-amber-500/15 hover:bg-amber-500/25 text-amber-200 border border-amber-500/30 transition cursor-pointer flex items-center justify-center gap-1.5">
+                  <i data-lucide="gauge" class="w-3.5 h-3.5 text-amber-400"></i> Tabela de Cotas RPM/RPD
+                </button>
+                <button type="button" onclick="runGlobalDiagnostics()" class="w-full py-2.5 px-3 rounded-2xl text-xs font-semibold bg-white/[0.04] hover:bg-white/[0.08] text-slate-200 border border-white/10 transition cursor-pointer flex items-center justify-center gap-1.5">
+                  <i data-lucide="activity" class="w-3.5 h-3.5 text-emerald-400"></i> Testar Latência HTTP
+                </button>
+              </div>
             </div>
           </div>
 
@@ -2429,6 +2458,29 @@
     </div>
   </div>
 
+  <!-- FLOATING QUOTA TELEMETRY MODAL (v2.9) -->
+  <div id="quota-modal" onclick="if(event.target===this) closeQuotaModal()" class="fixed inset-0 z-50 hidden bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-5">
+    <div class="saas-card rounded-3xl max-w-5xl w-full max-h-[88vh] flex flex-col overflow-hidden border border-amber-500/30 shadow-2xl">
+      <div class="p-4 sm:px-6 border-b border-white/[0.08] flex items-center justify-between gap-2 bg-[#121815]">
+        <div class="flex items-center gap-2.5 min-w-0">
+          <i data-lucide="gauge" class="w-4 h-4 text-amber-400 shrink-0"></i>
+          <h3 class="text-sm font-bold text-white truncate">Telemetria Ao Vivo de Cotas (RPM / RPD / Cache / Cooldowns)</h3>
+        </div>
+        <div class="flex items-center gap-2 shrink-0">
+          <button type="button" onclick="fetchQuotaTelemetry()" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-white/[0.05] hover:bg-white/[0.1] text-slate-200 border border-white/10 transition cursor-pointer">
+            <i data-lucide="refresh-cw" class="w-3 h-3 text-emerald-400"></i> Atualizar
+          </button>
+          <button type="button" onclick="closeQuotaModal()" class="text-slate-400 hover:text-white p-1.5 rounded-xl hover:bg-white/5 cursor-pointer" title="Fechar">
+            <i data-lucide="x" class="w-4 h-4"></i>
+          </button>
+        </div>
+      </div>
+      <div id="quota-modal-body" class="p-4 sm:p-6 overflow-y-auto flex-1 space-y-4 bg-[#080c0a]">
+        <div class="text-xs text-slate-400">Carregando métricas de cota em tempo real...</div>
+      </div>
+    </div>
+  </div>
+
   <script>
     let projectsData = [];
     let skillsData = [];
@@ -2436,6 +2488,7 @@
     let modoDevState = { active: false, state: 'repouso', vault_total: 27, linked_gemini: 0 };
     let openJarvisData = null;
     let cascadeStatusData = null;
+    let quotaTelemetryData = null;
     let diagnosticsCache = {};
     let jarvisLastReply = null;
     let jarvisBusy = false;
@@ -3423,28 +3476,180 @@
       }
     }
 
+    function _formatQuotaLimit(used, lim) {
+      if (lim === 'Ilimitado' || lim === null || lim === undefined) return `${used ?? 0}/∞`;
+      return `${used ?? 0}/${lim}`;
+    }
+
+    function _renderQuotaBadgesHtml(qData) {
+      if (!qData || !Array.isArray(qData.models)) return '';
+      const byId = Object.fromEntries(qData.models.map(m => [m.id, m]));
+      const nim = byId['nvidia/nemotron-3.5-lightning-30b-a3b'] || {};
+      const orRow = byId['openrouter/nemotron-free'] || {};
+      const liveRow = byId['gemini-2.5-flash-native-audio-latest'] || {};
+      const g25 = byId['gemini-2.5-flash'] || {};
+      const zg = byId['zerogpu-a10g-video'] || {};
+      const pool = qData.tts_rest_pool || { rpm_used: 0, rpm_limit: 15 };
+
+      const pill = (dot, label, tone) =>
+        `<span class="px-1.5 py-0.5 rounded border whitespace-nowrap ${tone}">${dot} ${label}</span>`;
+      const green = 'bg-emerald-500/15 text-emerald-300 border-emerald-500/25';
+      const amber = 'bg-amber-500/15 text-amber-300 border-amber-500/25';
+      const rose = 'bg-rose-500/15 text-rose-300 border-rose-500/25';
+      const cyan = 'bg-cyan-500/15 text-cyan-300 border-cyan-500/25';
+
+      const nimTone = nim.status === 'ok' ? green : amber;
+      const orTone = orRow.status === 'ok' ? green : amber;
+      const ttsTone = (pool.rpm_used || 0) >= 10 ? amber : green;
+      const g25Tone = g25.status === 'exhausted_daily' ? rose : (g25.status === 'cooldown' ? amber : green);
+      const g25Dot = g25.status === 'exhausted_daily' ? '🔴' : (g25.status === 'cooldown' ? '🟡' : '🟢');
+
+      return [
+        pill(nim.status === 'ok' ? '🟢' : '🟡', `NIM ${nim.rpm_used || 0}/${nim.rpm_limit || 40}`, nimTone),
+        pill(orRow.status === 'ok' ? '🟢' : '🟡', 'OR', orTone),
+        pill('🟢', 'Live (∞)', green),
+        pill((pool.rpm_used || 0) >= 10 ? '🟡' : '🟢', `TTS ${pool.rpm_used || 0}/${pool.rpm_limit || 15}`, ttsTone),
+        pill(g25Dot, `2.5F ${g25.rpd_used || 0}/${g25.rpd_limit || 20}`, g25Tone),
+        pill('🚀', `GPU ${zg.total_calls || 0}`, cyan),
+      ].join('');
+    }
+
+    function renderQuotaModal() {
+      const body = document.getElementById('quota-modal-body');
+      if (!body) return;
+      const q = quotaTelemetryData;
+      if (!q || !Array.isArray(q.models)) {
+        body.innerHTML = '<div class="text-xs text-slate-400">Sem telemetria disponível no momento.</div>';
+        return;
+      }
+      const sav = q.savings_summary || {};
+      const pool = q.tts_rest_pool || {};
+      const active = q.active_by_specialty || {};
+
+      const statusBadge = (row) => {
+        if (row.status === 'exhausted_daily') {
+          return '<span class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-500/15 text-rose-300 border border-rose-500/30">ESGOTADO RPD</span>';
+        }
+        if (row.status === 'cooldown') {
+          return `<span class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30">COOLDOWN ${row.cooldown_remaining_s || 0}s</span>`;
+        }
+        return '<span class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">🟢 PRONTO</span>';
+      };
+
+      const rowsHtml = q.models.map(m => `
+        <tr class="border-t border-white/[0.06] hover:bg-white/[0.02]">
+          <td class="py-2.5 px-3">
+            <div class="font-mono text-xs text-white font-semibold break-all">${escapeHtml(m.id)}</div>
+            <div class="text-[11px] text-slate-400">${escapeHtml(m.role || '')}</div>
+          </td>
+          <td class="py-2.5 px-3 text-[11px] font-mono text-cyan-300 whitespace-nowrap">${escapeHtml(m.provider)}</td>
+          <td class="py-2.5 px-3 text-xs font-mono text-slate-200 num-tabular whitespace-nowrap">${_formatQuotaLimit(m.rpm_used, m.rpm_limit)}</td>
+          <td class="py-2.5 px-3 text-xs font-mono text-slate-200 num-tabular whitespace-nowrap">${_formatQuotaLimit(m.rpd_used, m.rpd_limit)}</td>
+          <td class="py-2.5 px-3 text-xs font-mono text-emerald-300 num-tabular whitespace-nowrap">${m.cache_hits || 0}</td>
+          <td class="py-2.5 px-3 whitespace-nowrap">${statusBadge(m)}</td>
+        </tr>
+      `).join('');
+
+      body.innerHTML = `
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div class="saas-well rounded-2xl p-3">
+            <div class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Roteiro Gemini Economizado</div>
+            <div class="text-lg font-extrabold text-emerald-300 num-tabular mt-0.5">${sav.saved_gemini_text_calls || 0} chamadas</div>
+          </div>
+          <div class="saas-well rounded-2xl p-3">
+            <div class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Voice Cache Hits (0ms)</div>
+            <div class="text-lg font-extrabold text-cyan-300 num-tabular mt-0.5">${sav.saved_gemini_voice_cache_hits || 0} hits</div>
+          </div>
+          <div class="saas-well rounded-2xl p-3">
+            <div class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Live Audio WebSocket (∞)</div>
+            <div class="text-lg font-extrabold text-amber-300 num-tabular mt-0.5">${sav.saved_gemini_live_audio_calls || 0} falas</div>
+          </div>
+          <div class="saas-well rounded-2xl p-3">
+            <div class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Pool TTS REST (5x3 RPM)</div>
+            <div class="text-lg font-extrabold text-white num-tabular mt-0.5">${pool.rpm_used || 0}/${pool.rpm_limit || 15} RPM</div>
+          </div>
+        </div>
+        <div class="text-[11px] font-mono text-slate-300 p-3 rounded-xl bg-[#0e1411] border border-white/[0.06] flex flex-wrap gap-x-4 gap-y-1">
+          <span>Texto ativo: <strong class="text-emerald-300">${escapeHtml(active.text || 'nim')}</strong></span>
+          <span>Voz ativa: <strong class="text-amber-300">${escapeHtml(active.voice || 'live')}</strong></span>
+          <span>Visão ativa: <strong class="text-cyan-300">${escapeHtml(active.vision || 'flash-lite')}</strong></span>
+          <span>Vídeo GPU: <strong class="text-cyan-300">${escapeHtml(active.video || 'zerogpu-a10g')}</strong></span>
+        </div>
+        <div class="overflow-x-auto rounded-2xl border border-white/[0.07]">
+          <table class="w-full text-left border-collapse">
+            <thead class="bg-[#0e1411] text-[10px] uppercase tracking-wider text-slate-400">
+              <tr>
+                <th class="py-2.5 px-3">Modelo &amp; Especialidade</th>
+                <th class="py-2.5 px-3">Provedor</th>
+                <th class="py-2.5 px-3">RPM (1m)</th>
+                <th class="py-2.5 px-3">RPD (Hoje)</th>
+                <th class="py-2.5 px-3">Cache Hits</th>
+                <th class="py-2.5 px-3">Status</th>
+              </tr>
+            </thead>
+            <tbody>${rowsHtml}</tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    function openQuotaModal() {
+      const modal = document.getElementById('quota-modal');
+      if (!modal) return;
+      modal.classList.remove('hidden');
+      fetchQuotaTelemetry();
+    }
+
+    function closeQuotaModal() {
+      const modal = document.getElementById('quota-modal');
+      if (modal) modal.classList.add('hidden');
+    }
+
+    async function fetchQuotaTelemetry() {
+      try {
+        const res = await fetch('/api/ai/quota-telemetry');
+        if (!res.ok) return;
+        quotaTelemetryData = await res.json();
+        const active = quotaTelemetryData.active_by_specialty || {};
+        const kpiTier = document.getElementById('kpi-cascade-tier');
+        const kpiSub = document.getElementById('kpi-cascade-sub');
+        const pillsEl = document.getElementById('kpi-cascade-pills');
+
+        const txtShort = String(active.text || '').includes('nemotron') ? '🟢 NIM Nemotron'
+          : (String(active.text || '').includes('openrouter') ? '🟡 OpenRouter' : '🟢 Gemini');
+        const voxShort = String(active.voice || '').includes('native-audio') ? '🎙️ Gemini Live' : '🎙️ TTS Pool';
+        const vidShort = String(active.video || '').includes('colab') ? '🚀 Colab T4' : '🚀 ZeroGPU';
+
+        if (kpiTier) kpiTier.textContent = `Texto: ${txtShort} | Voz: ${voxShort} | Vídeo: ${vidShort}`;
+        if (kpiSub) {
+          const sav = quotaTelemetryData.savings_summary || {};
+          kpiSub.textContent = `Economizados: ${sav.total_saved_calls || 0} · Cache voz: ${sav.saved_gemini_voice_cache_hits || 0}`;
+        }
+        if (pillsEl) pillsEl.innerHTML = _renderQuotaBadgesHtml(quotaTelemetryData);
+
+        const qModal = document.getElementById('quota-modal');
+        if (qModal && !qModal.classList.contains('hidden')) {
+          renderQuotaModal();
+        }
+      } catch (e) {
+        console.error('Quota telemetry error:', e);
+      }
+    }
+
     async function fetchCascadeStatus() {
       try {
         const res = await fetch('/api/ai/cascade-status');
         if (!res.ok) return;
         cascadeStatusData = await res.json();
-        const aConf = cascadeStatusData.tier1_anthropic?.configured;
-        const kpiTier = document.getElementById('kpi-cascade-tier');
-        const kpiSub = document.getElementById('kpi-cascade-sub');
-        if (kpiTier) kpiTier.textContent = aConf ? 'Claude Sonnet' : 'Gemini 2.5';
-        if (kpiSub) {
-          kpiSub.textContent = aConf
-            ? 'Claude → Gemini → NIM → OR'
-            : 'Gemini → NIM → OR';
-        }
+        fetchQuotaTelemetry();
 
         const box = document.getElementById('cascade-visualizer-cards');
         if (box) {
           const tiers = [
-            cascadeStatusData.tier1_anthropic,
-            cascadeStatusData.tier1_gemini,
-            cascadeStatusData.tier2_nvidia,
-            cascadeStatusData.tier3_openrouter,
+            cascadeStatusData.tier1_nvidia,
+            cascadeStatusData.tier2_openrouter,
+            cascadeStatusData.tier3_gemini || cascadeStatusData.tier1_gemini,
+            cascadeStatusData.tier4_anthropic || cascadeStatusData.tier1_anthropic,
           ].filter(Boolean);
 
           box.innerHTML = tiers.map((t, idx) => {
@@ -3522,6 +3727,7 @@
         PEXELS_API_KEY: document.getElementById('input-PEXELS_API_KEY')?.value || '',
         GROQ_API_KEY: document.getElementById('input-GROQ_API_KEY')?.value || '',
         OPENAI_API_KEY: document.getElementById('input-OPENAI_API_KEY')?.value || '',
+        HF_TOKEN: document.getElementById('input-HF_TOKEN')?.value || '',
       };
       try {
         const res = await fetch('/api/keys', {
@@ -6005,6 +6211,7 @@
         fetchSkills(),
         loadKeys(),
         fetchCascadeStatus(),
+        fetchQuotaTelemetry(),
         fetchOutputs(),
         fetchCampaigns(),
         fetchPipelineTemplates()
@@ -6044,6 +6251,7 @@
       safeCreateIcons();
       refreshAll();
       setInterval(fetchTelemetry, 4000);
+      setInterval(fetchQuotaTelemetry, 6000);
       pollProjectsLoop();
     });
   </script>

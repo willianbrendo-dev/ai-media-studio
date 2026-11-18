@@ -52,7 +52,22 @@ OPENJARVIS_LAUNCHER = OPENJARVIS_DIR / "iniciar-jarvis.sh"
 OPENJARVIS_PORT = 8090
 OPENFILM_DATA_DIR = Path(os.environ.get("OPENFILM_DATA_DIR", str(STUDIO_HOME_DIR / ".openfilm")))
 OPENFILM_VIDEOS_DIR = Path(os.environ.get("OPENFILM_VIDEOS_DIR", str(STUDIO_HOME_DIR / "Videos/OpenFilm")))
+import sys
+for _qt_cand in (
+    Path(os.environ.get("STUDIO_BASE_DIR", "/opt/ai-media-studio")) / "tools/hyperframes",
+    Path(__file__).resolve().parent.parent / "tools/hyperframes",
+):
+    if _qt_cand.is_dir() and str(_qt_cand) not in sys.path:
+        sys.path.insert(0, str(_qt_cand))
+
+import quota_telemetry as _qt  # noqa: E402
+
 STUDIO_MODE = os.environ.get("STUDIO_MODE", "vps" if str(STUDIO_BASE_DIR) != "/home/wbrendo" else "local").strip().lower()
+QUOTA_TELEMETRY_FILE = BASE_DIR / "quota_telemetry.json"
+
+
+def _get_quota_tracker() -> _qt.QuotaTelemetryTracker:
+    return _qt.QuotaTelemetryTracker(state_file=QUOTA_TELEMETRY_FILE)
 
 app = FastAPI(
     title="AI Media Studio Control Panel",
@@ -264,6 +279,7 @@ MANAGED_KEYS = [
     "NVIDIA_BASE_URL",
     "OPENROUTER_API_KEY",
     "OPENROUTER_BASE_URL",
+    "HF_TOKEN",
     "GROQ_API_KEY",
     "OPENAI_API_KEY",
     "PEXELS_API_KEY",
@@ -384,6 +400,10 @@ def load_vault() -> Dict[str, str]:
         read_env_value(BASE_DIR / ".env", "ANTHROPIC_BASE_URL")
         or DEFAULT_URLS["ANTHROPIC_BASE_URL"]
     )
+    hf_token = (
+        read_env_value(BASE_DIR / ".env", "HF_TOKEN")
+        or read_env_value(STUDIO_HOME_DIR / ".env", "HF_TOKEN")
+    )
     vault = {
         "ANTHROPIC_API_KEY": anthropic,
         "ANTHROPIC_BASE_URL": anthropic_base,
@@ -392,6 +412,7 @@ def load_vault() -> Dict[str, str]:
         "NVIDIA_BASE_URL": nvidia_base,
         "OPENROUTER_API_KEY": openrouter,
         "OPENROUTER_BASE_URL": openrouter_base,
+        "HF_TOKEN": hf_token,
         "GROQ_API_KEY": groq,
         "OPENAI_API_KEY": openai,
         "PEXELS_API_KEY": pexels,
@@ -422,6 +443,8 @@ def mask_key(value: str, key_name: str = "") -> str:
 
 def update_env_file(file_path: Path, updates: Dict[str, str]) -> bool:
     """Updates or appends key=value pairs in a .env file while preserving comments and structure."""
+    if not file_path.parent.exists():
+        return False
     if not file_path.exists():
         lines = [f"{k}={v}" for k, v in updates.items()]
         file_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -557,6 +580,7 @@ def sync_all_project_configs(vault: Dict[str, str]) -> List[Dict[str, Any]]:
     groq = vault.get("GROQ_API_KEY", "")
     openai = vault.get("OPENAI_API_KEY", "")
     pexels = vault.get("PEXELS_API_KEY", "")
+    hf_token = vault.get("HF_TOKEN", "")
 
     cascade_dict = {
         "ANTHROPIC_API_KEY": anthropic,
@@ -567,6 +591,7 @@ def sync_all_project_configs(vault: Dict[str, str]) -> List[Dict[str, Any]]:
         "NVIDIA_BASE_URL": nvidia_base,
         "OPENROUTER_API_KEY": openrouter,
         "OPENROUTER_BASE_URL": openrouter_base,
+        "HF_TOKEN": hf_token,
     }
 
     results = []
@@ -4793,6 +4818,7 @@ class SaveKeysRequest(BaseModel):
     NVIDIA_BASE_URL: Optional[str] = None
     OPENROUTER_API_KEY: Optional[str] = None
     OPENROUTER_BASE_URL: Optional[str] = None
+    HF_TOKEN: Optional[str] = None
     GROQ_API_KEY: Optional[str] = None
     OPENAI_API_KEY: Optional[str] = None
     PEXELS_API_KEY: Optional[str] = None
@@ -5154,8 +5180,328 @@ def _openai_to_anthropic_payload(
     return payload
 
 
+def _request_has_vision_payload(messages: List[ChatCompletionMessage]) -> bool:
+    """Detect whether any OpenAI-compatible message includes image_url or inline image blocks."""
+    for m in messages:
+        if isinstance(m.content, list):
+            for item in m.content:
+                if not isinstance(item, dict):
+                    continue
+                itype = str(item.get("type") or "").lower()
+                if itype in ("image_url", "image", "input_image") or "image_url" in item or "inlineData" in item:
+                    return True
+    return False
+
+
+async def _cascade_try_nvidia(
+    req: ChatCompletionRequest,
+    nvidia_key: str,
+    nvidia_base: str,
+    effective_temp: float,
+    effective_max_tokens: int,
+    tracker: _qt.QuotaTelemetryTracker,
+    errors: List[str],
+    *,
+    tier_num: int = 1,
+) -> Optional[Dict[str, Any]]:
+    if not nvidia_key:
+        errors.append(f"Tier {tier_num} (NVIDIA NIM) skipped: NVIDIA_API_KEY vazia")
+        return None
+    headers = {"Authorization": f"Bearer {nvidia_key}", "Content-Type": "application/json"}
+    nvidia_candidates = [
+        "nvidia/nemotron-3.5-lightning-30b-a3b",
+        "nvidia/nemotron-3-ultra-550b-a55b",
+        "moonshotai/kimi-k3.1-pro",
+    ]
+    if req.model and any(tok in req.model.lower() for tok in ("moonshot", "kimi", "nvidia/nemotron")):
+        if ":free" not in req.model.lower():
+            nvidia_candidates = [req.model] + [m for m in nvidia_candidates if m != req.model]
+
+    now = time.monotonic()
+    active_nim = [m for m in nvidia_candidates if _MODEL_COOLDOWN_UNTIL.get(m, 0.0) <= now and tracker.is_available(m)] or nvidia_candidates
+
+    for target_model in active_nim:
+        for attempt in range(2):
+            try:
+                url = f"{nvidia_base}/chat/completions"
+                nvidia_payload: Dict[str, Any] = {
+                    "model": target_model,
+                    "messages": [_openai_msg_to_dict(m) for m in req.messages],
+                    "temperature": effective_temp,
+                    "max_tokens": effective_max_tokens,
+                }
+                if attempt == 0 and "nemotron" in target_model.lower():
+                    nvidia_payload["chat_template_kwargs"] = {"enable_thinking": False}
+                if req.tools:
+                    nvidia_payload["tools"] = req.tools
+                    if req.tool_choice is not None:
+                        nvidia_payload["tool_choice"] = req.tool_choice
+                async with httpx.AsyncClient(timeout=32.0) as client:
+                    res = await client.post(url, headers=headers, json=nvidia_payload)
+                if res.status_code == 200:
+                    data = res.json()
+                    tracker.record_call(target_model, ok=True, status_code=200, specialty="text", saved_gemini=True)
+                    data["cascade_tier"] = tier_num
+                    data["cascade_provider"] = "nvidia-nim"
+                    data["cascade_model"] = target_model
+                    return data
+                tracker.record_call(
+                    target_model,
+                    ok=False,
+                    status_code=res.status_code,
+                    specialty="text",
+                    cooldown_s=65.0 if res.status_code in (429, 503) else 0.0,
+                    error=res.text[:140],
+                )
+                if res.status_code in (429, 503):
+                    _MODEL_COOLDOWN_UNTIL[target_model] = time.monotonic() + 90.0
+                    break
+                if res.status_code in (400, 422, 500, 502, 504) and attempt == 0:
+                    await asyncio.sleep(0.25)
+                    continue
+                errors.append(f"Tier {tier_num} (NVIDIA NIM/{target_model}) HTTP {res.status_code}: {res.text[:120]}")
+                break
+            except Exception as e:
+                tracker.record_call(target_model, ok=False, status_code=0, specialty="text", error=str(e))
+                if attempt == 0:
+                    await asyncio.sleep(0.25)
+                    continue
+                errors.append(f"Tier {tier_num} (NVIDIA NIM/{target_model}) exception: {str(e)}")
+    return None
+
+
+async def _cascade_try_openrouter(
+    req: ChatCompletionRequest,
+    openrouter_key: str,
+    openrouter_base: str,
+    effective_temp: float,
+    effective_max_tokens: int,
+    tracker: _qt.QuotaTelemetryTracker,
+    errors: List[str],
+    *,
+    tier_num: int = 2,
+) -> Optional[Dict[str, Any]]:
+    if not openrouter_key:
+        errors.append(f"Tier {tier_num} (OpenRouter) skipped: OPENROUTER_API_KEY vazia")
+        return None
+    headers = {
+        "Authorization": f"Bearer {openrouter_key}",
+        "Content-Type": "application/json",
+        "HTTP-Referer": "http://localhost:9000",
+        "X-Title": "AI Media Studio Gateway",
+    }
+    or_candidates = [
+        "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "nvidia/nemotron-3.5-lightning:free",
+        "moonshotai/kimi-k3.1-pro",
+    ]
+    if req.model and ":free" in req.model.lower():
+        or_candidates = [req.model] + [m for m in or_candidates if m != req.model]
+
+    now = time.monotonic()
+    active_or = [m for m in or_candidates if _MODEL_COOLDOWN_UNTIL.get(m, 0.0) <= now] or or_candidates
+
+    for target_model in active_or:
+        for attempt in range(2):
+            try:
+                url = f"{openrouter_base}/chat/completions"
+                openrouter_payload: Dict[str, Any] = {
+                    "model": target_model,
+                    "messages": [_openai_msg_to_dict(m) for m in req.messages],
+                    "temperature": effective_temp,
+                    "max_tokens": effective_max_tokens,
+                }
+                if req.tools:
+                    openrouter_payload["tools"] = req.tools
+                    if req.tool_choice is not None:
+                        openrouter_payload["tool_choice"] = req.tool_choice
+                async with httpx.AsyncClient(timeout=32.0) as client:
+                    res = await client.post(url, headers=headers, json=openrouter_payload)
+                if res.status_code == 200:
+                    data = res.json()
+                    tracker.record_call(target_model, ok=True, status_code=200, specialty="text", saved_gemini=True)
+                    data["cascade_tier"] = tier_num
+                    data["cascade_provider"] = "openrouter"
+                    data["cascade_model"] = target_model
+                    return data
+                tracker.record_call(
+                    target_model,
+                    ok=False,
+                    status_code=res.status_code,
+                    specialty="text",
+                    cooldown_s=90.0 if res.status_code in (429, 503) else 0.0,
+                    error=res.text[:140],
+                )
+                if res.status_code in (429, 503):
+                    _MODEL_COOLDOWN_UNTIL[target_model] = time.monotonic() + 90.0
+                    break
+                if res.status_code in (500, 502, 504) and attempt == 0:
+                    await asyncio.sleep(0.3)
+                    continue
+                errors.append(f"Tier {tier_num} (OpenRouter/{target_model}) HTTP {res.status_code}: {res.text[:120]}")
+                break
+            except Exception as e:
+                tracker.record_call(target_model, ok=False, status_code=0, specialty="text", error=str(e))
+                if attempt == 0:
+                    await asyncio.sleep(0.3)
+                    continue
+                errors.append(f"Tier {tier_num} (OpenRouter/{target_model}) exception: {str(e)}")
+    return None
+
+
+async def _cascade_try_gemini(
+    req: ChatCompletionRequest,
+    gemini_key: str,
+    effective_temp: float,
+    effective_max_tokens: int,
+    tracker: _qt.QuotaTelemetryTracker,
+    errors: List[str],
+    *,
+    is_vision: bool = False,
+    tier_num: int = 3,
+) -> Optional[Dict[str, Any]]:
+    if not gemini_key:
+        errors.append(f"Tier {tier_num} (Gemini) skipped: GEMINI_API_KEY vazia")
+        return None
+    specialty = "vision" if is_vision else "text"
+    try:
+        system_instruction, contents = _openai_messages_to_gemini(req.messages)
+        if is_vision:
+            raw_candidates = [
+                "gemini-3.5-flash-lite",
+                "gemini-3.1-flash-lite",
+                "gemini-2.5-flash-lite",
+                "gemini-3.8-flash",
+            ]
+        else:
+            raw_candidates = (
+                [
+                    "gemini-3.5-flash-lite",
+                    "gemini-3.1-flash-lite",
+                    "gemini-2.5-flash-lite",
+                    "gemini-3.8-flash",
+                    "gemini-2.5-flash",
+                ]
+                if req.tools
+                else [
+                    "gemma-4-31b-it",
+                    "gemini-3.5-flash-lite",
+                    "gemini-3.1-flash-lite",
+                    "gemini-2.5-flash-lite",
+                    "gemini-3.8-flash",
+                    "gemini-2.5-flash",
+                ]
+            )
+
+        now = time.monotonic()
+        candidate_models = [
+            mc for mc in raw_candidates if _MODEL_COOLDOWN_UNTIL.get(mc, 0.0) <= now and tracker.is_available(mc)
+        ] or [mc for mc in raw_candidates if _MODEL_COOLDOWN_UNTIL.get(mc, 0.0) <= now] or raw_candidates
+
+        gem_tools = _convert_openai_tools_to_gemini(req.tools) if req.tools else []
+
+        for m_candidate in candidate_models:
+            gem_payload: Dict[str, Any] = {
+                "contents": [dict(c) for c in contents],
+                "generationConfig": {
+                    "temperature": effective_temp,
+                    "maxOutputTokens": effective_max_tokens,
+                },
+            }
+            if system_instruction:
+                if "gemma" in m_candidate.lower() and gem_payload["contents"]:
+                    sys_txt = " ".join(p.get("text", "") for p in system_instruction.get("parts", [])).strip()
+                    if sys_txt:
+                        first_parts = [{"text": f"[Instruções de Sistema]\n{sys_txt}\n\n"}] + list((gem_payload["contents"][0] or {}).get("parts") or [])
+                        gem_payload["contents"][0] = {"role": "user", "parts": first_parts}
+                else:
+                    gem_payload["systemInstruction"] = system_instruction
+            if gem_tools and "gemma" not in m_candidate.lower():
+                gem_payload["tools"] = gem_tools
+                if isinstance(req.tool_choice, str):
+                    mode = {"auto": "AUTO", "none": "NONE", "required": "ANY"}.get(req.tool_choice.lower())
+                    if mode:
+                        gem_payload["toolConfig"] = {"functionCallingConfig": {"mode": mode}}
+
+            try:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{m_candidate}:generateContent?key={gemini_key}"
+                async with httpx.AsyncClient(timeout=28.0) as client:
+                    res = await client.post(url, json=gem_payload)
+                if res.status_code == 200:
+                    data = res.json()
+                    cands = data.get("candidates", [])
+                    if cands and "content" in cands[0]:
+                        parts = cands[0]["content"].get("parts", [])
+                        text_chunks: List[str] = []
+                        tool_calls: List[Dict[str, Any]] = []
+                        for p in parts:
+                            if "text" in p and p["text"] is not None:
+                                text_chunks.append(p["text"])
+                            elif "functionCall" in p:
+                                fc = p["functionCall"]
+                                tool_calls.append(
+                                    {
+                                        "id": f"call_{uuid.uuid4().hex[:12]}",
+                                        "type": "function",
+                                        "function": {
+                                            "name": fc.get("name", ""),
+                                            "arguments": json.dumps(fc.get("args", {}), ensure_ascii=False),
+                                        },
+                                    }
+                                )
+                        text = "".join(text_chunks)
+                        usage_meta = data.get("usageMetadata", {})
+                        msg_out: Dict[str, Any] = {
+                            "role": "assistant",
+                            "content": text if text else (None if tool_calls else ""),
+                        }
+                        if tool_calls:
+                            msg_out["tool_calls"] = tool_calls
+                        tracker.record_call(m_candidate, ok=True, status_code=200, specialty=specialty)
+                        return {
+                            "id": f"chatcmpl-gemini-{int(time.time()*1000)}",
+                            "object": "chat.completion",
+                            "created": int(time.time()),
+                            "model": f"google/{m_candidate}",
+                            "choices": [
+                                {
+                                    "index": 0,
+                                    "message": msg_out,
+                                    "finish_reason": "tool_calls" if tool_calls else "stop",
+                                }
+                            ],
+                            "usage": {
+                                "prompt_tokens": usage_meta.get("promptTokenCount", 0),
+                                "completion_tokens": usage_meta.get("candidatesTokenCount", 0),
+                                "total_tokens": usage_meta.get("totalTokenCount", 0),
+                            },
+                            "cascade_tier": tier_num,
+                            "cascade_provider": "google-gemini",
+                            "cascade_model": m_candidate,
+                        }
+                tracker.record_call(
+                    m_candidate,
+                    ok=False,
+                    status_code=res.status_code,
+                    specialty=specialty,
+                    cooldown_s=180.0 if res.status_code in (429, 503) else 0.0,
+                    error=res.text[:160],
+                )
+                if res.status_code in (429, 503):
+                    _MODEL_COOLDOWN_UNTIL[m_candidate] = time.monotonic() + 180.0
+                errors.append(f"Tier {tier_num} (Gemini/{m_candidate}) HTTP {res.status_code}: {res.text[:160]}")
+            except Exception as inner_e:
+                tracker.record_call(m_candidate, ok=False, status_code=0, specialty=specialty, error=str(inner_e))
+                errors.append(f"Tier {tier_num} (Gemini/{m_candidate}) exception: {str(inner_e)}")
+    except Exception as e:
+        errors.append(f"Tier {tier_num} (Gemini) exception: {str(e)}")
+    return None
+
+
 async def call_ai_cascade(req: ChatCompletionRequest) -> Dict[str, Any]:
+    """Smart Specialty-Aware Quota Router (v2.9): NIM/OpenRouter for Text, High-Quota Gemini Pool for Vision."""
     vault = load_vault()
+    tracker = _get_quota_tracker()
     anthropic_key = vault.get("ANTHROPIC_API_KEY", "").strip()
     anthropic_base = sanitize_base_url(vault.get("ANTHROPIC_BASE_URL", ""), "https://api.anthropic.com/v1")
     gemini_key = vault.get("GEMINI_API_KEY", "").strip()
@@ -5166,11 +5512,29 @@ async def call_ai_cascade(req: ChatCompletionRequest) -> Dict[str, Any]:
 
     effective_max_tokens = req.max_tokens or req.max_completion_tokens or 2048
     effective_temp = 0.7 if req.temperature is None else req.temperature
+    is_vision = _request_has_vision_payload(req.messages)
     errors: List[str] = []
 
-    # -------------------------------------------------------------
-    # TIER 1 (Quando Ativa): Anthropic Claude (claude-3-5-sonnet / sonnet-4)
-    # -------------------------------------------------------------
+    if is_vision:
+        res_vis = await _cascade_try_gemini(
+            req, gemini_key, effective_temp, effective_max_tokens, tracker, errors, is_vision=True, tier_num=1
+        )
+        if res_vis is not None:
+            return res_vis
+
+    if not is_vision:
+        res_nim = await _cascade_try_nvidia(
+            req, nvidia_key, nvidia_base, effective_temp, effective_max_tokens, tracker, errors, tier_num=1
+        )
+        if res_nim is not None:
+            return res_nim
+
+        res_or = await _cascade_try_openrouter(
+            req, openrouter_key, openrouter_base, effective_temp, effective_max_tokens, tracker, errors, tier_num=2
+        )
+        if res_or is not None:
+            return res_or
+
     if anthropic_key:
         claude_candidates = [
             "claude-3-5-sonnet-latest",
@@ -5178,55 +5542,37 @@ async def call_ai_cascade(req: ChatCompletionRequest) -> Dict[str, Any]:
             "claude-sonnet-4-20250514",
             "claude-3-5-haiku-latest",
         ]
-        if req.model and "claude" in req.model.lower():
-            req_c = req.model.split("/")[-1]
-            claude_candidates = [req_c] + [m for m in claude_candidates if m != req_c]
-
         now = time.monotonic()
-        active_claude = [
-            mc for mc in claude_candidates if _MODEL_COOLDOWN_UNTIL.get(mc, 0.0) <= now
-        ] or claude_candidates
-
+        active_claude = [mc for mc in claude_candidates if _MODEL_COOLDOWN_UNTIL.get(mc, 0.0) <= now] or claude_candidates
         headers = {
             "x-api-key": anthropic_key,
             "anthropic-version": "2023-06-01",
             "Content-Type": "application/json",
         }
-
         for c_model in active_claude:
             try:
                 anth_payload = _openai_to_anthropic_payload(req, c_model, effective_temp, effective_max_tokens)
-                url = f"{anthropic_base}/messages"
                 async with httpx.AsyncClient(timeout=30.0) as client:
-                    res = await client.post(url, headers=headers, json=anth_payload)
+                    res = await client.post(f"{anthropic_base}/messages", headers=headers, json=anth_payload)
                 if res.status_code == 200:
                     data = res.json()
                     content_blocks = data.get("content", [])
-                    text_parts: List[str] = []
-                    tool_calls: List[Dict[str, Any]] = []
-                    for blk in content_blocks:
-                        btype = blk.get("type")
-                        if btype == "text" and blk.get("text"):
-                            text_parts.append(blk["text"])
-                        elif btype == "tool_use":
-                            tool_calls.append(
-                                {
-                                    "id": blk.get("id") or f"call_{uuid.uuid4().hex[:12]}",
-                                    "type": "function",
-                                    "function": {
-                                        "name": blk.get("name", ""),
-                                        "arguments": json.dumps(blk.get("input", {}), ensure_ascii=False),
-                                    },
-                                }
-                            )
+                    text_parts = [b["text"] for b in content_blocks if b.get("type") == "text" and b.get("text")]
+                    tool_calls = [
+                        {
+                            "id": b.get("id") or f"call_{uuid.uuid4().hex[:12]}",
+                            "type": "function",
+                            "function": {
+                                "name": b.get("name", ""),
+                                "arguments": json.dumps(b.get("input", {}), ensure_ascii=False),
+                            },
+                        }
+                        for b in content_blocks if b.get("type") == "tool_use"
+                    ]
                     text_out = "".join(text_parts)
                     usage = data.get("usage", {})
-                    in_tok = usage.get("input_tokens", 0)
-                    out_tok = usage.get("output_tokens", 0)
-                    msg_out: Dict[str, Any] = {
-                        "role": "assistant",
-                        "content": text_out if text_out else (None if tool_calls else ""),
-                    }
+                    in_tok, out_tok = usage.get("input_tokens", 0), usage.get("output_tokens", 0)
+                    msg_out: Dict[str, Any] = {"role": "assistant", "content": text_out if text_out else (None if tool_calls else "")}
                     if tool_calls:
                         msg_out["tool_calls"] = tool_calls
                     return {
@@ -5234,230 +5580,24 @@ async def call_ai_cascade(req: ChatCompletionRequest) -> Dict[str, Any]:
                         "object": "chat.completion",
                         "created": int(time.time()),
                         "model": f"anthropic/{c_model}",
-                        "choices": [
-                            {
-                                "index": 0,
-                                "message": msg_out,
-                                "finish_reason": "tool_calls" if tool_calls else "stop",
-                            }
-                        ],
-                        "usage": {
-                            "prompt_tokens": in_tok,
-                            "completion_tokens": out_tok,
-                            "total_tokens": in_tok + out_tok,
-                        },
-                        "cascade_tier": 1,
+                        "choices": [{"index": 0, "message": msg_out, "finish_reason": "tool_calls" if tool_calls else "stop"}],
+                        "usage": {"prompt_tokens": in_tok, "completion_tokens": out_tok, "total_tokens": in_tok + out_tok},
+                        "cascade_tier": 3,
                         "cascade_provider": "anthropic-claude",
                         "cascade_model": c_model,
                     }
                 if res.status_code in (429, 503, 529):
                     _MODEL_COOLDOWN_UNTIL[c_model] = time.monotonic() + 180.0
-                errors.append(f"Tier 1 (Claude/{c_model}) HTTP {res.status_code}: {res.text[:140]}")
+                errors.append(f"Claude/{c_model} HTTP {res.status_code}: {res.text[:140]}")
             except Exception as exc:
-                errors.append(f"Tier 1 (Claude/{c_model}) exception: {exc}")
+                errors.append(f"Claude/{c_model} exception: {exc}")
 
-    # -------------------------------------------------------------
-    # TIER 1 / 2: Google Gemini (gemini-2.5-flash -> gemini-2.5-flash-lite -> gemini-2.0-flash)
-    # -------------------------------------------------------------
-    if gemini_key:
-        try:
-            system_instruction, contents = _openai_messages_to_gemini(req.messages)
-
-            model_id = req.model if (req.model and "gemini" in req.model) else "gemini-2.5-flash"
-            model_id = model_id.split("/")[-1]
-
-            raw_candidates = [model_id, "gemini-2.5-flash-lite", "gemini-2.0-flash"]
-            dedup_candidates: List[str] = []
-            for mc in raw_candidates:
-                if mc and mc not in dedup_candidates:
-                    dedup_candidates.append(mc)
-
-            now = time.monotonic()
-            candidate_models = [
-                mc for mc in dedup_candidates if _MODEL_COOLDOWN_UNTIL.get(mc, 0.0) <= now
-            ] or dedup_candidates
-
-            gem_payload: Dict[str, Any] = {
-                "contents": contents,
-                "generationConfig": {
-                    "temperature": effective_temp,
-                    "maxOutputTokens": effective_max_tokens,
-                },
-            }
-            if system_instruction:
-                gem_payload["systemInstruction"] = system_instruction
-            if req.tools:
-                gem_tools = _convert_openai_tools_to_gemini(req.tools)
-                if gem_tools:
-                    gem_payload["tools"] = gem_tools
-                    if isinstance(req.tool_choice, str):
-                        mode_map = {"auto": "AUTO", "none": "NONE", "required": "ANY"}
-                        mode = mode_map.get(req.tool_choice.lower())
-                        if mode:
-                            gem_payload["toolConfig"] = {"functionCallingConfig": {"mode": mode}}
-
-            for m_candidate in candidate_models:
-                try:
-                    url = f"https://generativelanguage.googleapis.com/v1beta/models/{m_candidate}:generateContent?key={gemini_key}"
-                    async with httpx.AsyncClient(timeout=25.0) as client:
-                        res = await client.post(url, json=gem_payload)
-                        if res.status_code == 200:
-                            data = res.json()
-                            candidates = data.get("candidates", [])
-                            if candidates and "content" in candidates[0]:
-                                parts = candidates[0]["content"].get("parts", [])
-                                text_chunks: List[str] = []
-                                tool_calls: List[Dict[str, Any]] = []
-                                for p in parts:
-                                    if "text" in p and p["text"] is not None:
-                                        text_chunks.append(p["text"])
-                                    elif "functionCall" in p:
-                                        fc = p["functionCall"]
-                                        tool_calls.append(
-                                            {
-                                                "id": f"call_{uuid.uuid4().hex[:12]}",
-                                                "type": "function",
-                                                "function": {
-                                                    "name": fc.get("name", ""),
-                                                    "arguments": json.dumps(fc.get("args", {}), ensure_ascii=False),
-                                                },
-                                            }
-                                        )
-                                text = "".join(text_chunks)
-                                usage_meta = data.get("usageMetadata", {})
-                                msg_out: Dict[str, Any] = {
-                                    "role": "assistant",
-                                    "content": text if text else (None if tool_calls else ""),
-                                }
-                                if tool_calls:
-                                    msg_out["tool_calls"] = tool_calls
-                                return {
-                                    "id": f"chatcmpl-gemini-{int(time.time()*1000)}",
-                                    "object": "chat.completion",
-                                    "created": int(time.time()),
-                                    "model": f"google/{m_candidate}",
-                                    "choices": [
-                                        {
-                                            "index": 0,
-                                            "message": msg_out,
-                                            "finish_reason": "tool_calls" if tool_calls else "stop",
-                                        }
-                                    ],
-                                    "usage": {
-                                        "prompt_tokens": usage_meta.get("promptTokenCount", 0),
-                                        "completion_tokens": usage_meta.get("candidatesTokenCount", 0),
-                                        "total_tokens": usage_meta.get("totalTokenCount", 0),
-                                    },
-                                    "cascade_tier": 1,
-                                    "cascade_provider": "google-gemini",
-                                    "cascade_model": m_candidate,
-                                }
-                        if res.status_code in (429, 503):
-                            _MODEL_COOLDOWN_UNTIL[m_candidate] = time.monotonic() + 180.0
-                        errors.append(f"Tier 1 (Gemini/{m_candidate}) HTTP {res.status_code}: {res.text[:160]}")
-                except Exception as inner_e:
-                    errors.append(f"Tier 1 (Gemini/{m_candidate}) exception: {str(inner_e)}")
-        except Exception as e:
-            errors.append(f"Tier 1 (Gemini) exception: {str(e)}")
-    else:
-        errors.append("Tier 1 (Gemini) skipped: GEMINI_API_KEY vazia")
-
-    # -------------------------------------------------------------
-    # TIER 2: NVIDIA NIM (Nemotron 3.5 Lightning / Ultra 550B / Kimi K3.1 Pro)
-    # -------------------------------------------------------------
-    if nvidia_key:
-        headers = {
-            "Authorization": f"Bearer {nvidia_key}",
-            "Content-Type": "application/json",
-        }
-        nvidia_candidates = ["nvidia/nemotron-3.5-lightning-30b-a3b", "nvidia/nemotron-3-ultra-550b-a55b", "moonshotai/kimi-k3.1-pro"]
-        if req.model and ("moonshot" in req.model or "kimi" in req.model or "nvidia" in req.model):
-            nvidia_candidates = [req.model] + [m for m in nvidia_candidates if m != req.model]
-
-        for target_model in nvidia_candidates:
-            for attempt in range(2):
-                try:
-                    url = f"{nvidia_base}/chat/completions"
-                    nvidia_payload: Dict[str, Any] = {
-                        "model": target_model,
-                        "messages": [_openai_msg_to_dict(m) for m in req.messages],
-                        "temperature": effective_temp,
-                        "max_tokens": effective_max_tokens,
-                        "chat_template_kwargs": {"enable_thinking": False},
-                    }
-                    if req.tools:
-                        nvidia_payload["tools"] = req.tools
-                        if req.tool_choice is not None:
-                            nvidia_payload["tool_choice"] = req.tool_choice
-                    async with httpx.AsyncClient(timeout=30.0) as client:
-                        res = await client.post(url, headers=headers, json=nvidia_payload)
-                        if res.status_code == 200:
-                            data = res.json()
-                            data["cascade_tier"] = 2
-                            data["cascade_provider"] = "nvidia-nim"
-                            data["cascade_model"] = target_model
-                            return data
-                        if res.status_code in (500, 502, 503, 504) and attempt == 0:
-                            await asyncio.sleep(0.35)
-                            continue
-                        errors.append(f"Tier 2 (NVIDIA NIM/{target_model}) HTTP {res.status_code}: {res.text[:120]}")
-                        break
-                except Exception as e:
-                    if attempt == 0:
-                        await asyncio.sleep(0.35)
-                        continue
-                    errors.append(f"Tier 2 (NVIDIA NIM/{target_model}) exception: {str(e)}")
-    else:
-        errors.append("Tier 2 (NVIDIA NIM) skipped: NVIDIA_API_KEY vazia")
-
-    # -------------------------------------------------------------
-    # TIER 3: OpenRouter (Nemotron 550B Free / Lightning Free)
-    # -------------------------------------------------------------
-    if openrouter_key:
-        headers = {
-            "Authorization": f"Bearer {openrouter_key}",
-            "Content-Type": "application/json",
-            "HTTP-Referer": "http://localhost:9000",
-            "X-Title": "AI Media Studio Gateway",
-        }
-        or_candidates = ["nvidia/nemotron-3-ultra-550b-a55b:free", "nvidia/nemotron-3.5-lightning:free", "moonshotai/kimi-k3.1-pro"]
-        if req.model and ("nemotron" in req.model or "openrouter" in req.model or "/" in req.model):
-            or_candidates = [req.model] + [m for m in or_candidates if m != req.model]
-
-        for target_model in or_candidates:
-            for attempt in range(2):
-                try:
-                    url = f"{openrouter_base}/chat/completions"
-                    openrouter_payload: Dict[str, Any] = {
-                        "model": target_model,
-                        "messages": [_openai_msg_to_dict(m) for m in req.messages],
-                        "temperature": effective_temp,
-                        "max_tokens": effective_max_tokens,
-                    }
-                    if req.tools:
-                        openrouter_payload["tools"] = req.tools
-                        if req.tool_choice is not None:
-                            openrouter_payload["tool_choice"] = req.tool_choice
-                    async with httpx.AsyncClient(timeout=30.0) as client:
-                        res = await client.post(url, headers=headers, json=openrouter_payload)
-                        if res.status_code == 200:
-                            data = res.json()
-                            data["cascade_tier"] = 3
-                            data["cascade_provider"] = "openrouter"
-                            data["cascade_model"] = target_model
-                            return data
-                        if res.status_code in (500, 502, 503, 504) and attempt == 0:
-                            await asyncio.sleep(0.35)
-                            continue
-                        errors.append(f"Tier 3 (OpenRouter/{target_model}) HTTP {res.status_code}: {res.text[:120]}")
-                        break
-                except Exception as e:
-                    if attempt == 0:
-                        await asyncio.sleep(0.35)
-                        continue
-                    errors.append(f"Tier 3 (OpenRouter/{target_model}) exception: {str(e)}")
-    else:
-        errors.append("Tier 3 (OpenRouter) skipped: OPENROUTER_API_KEY vazia")
+    if not is_vision:
+        res_gem = await _cascade_try_gemini(
+            req, gemini_key, effective_temp, effective_max_tokens, tracker, errors, is_vision=False, tier_num=3
+        )
+        if res_gem is not None:
+            return res_gem
 
     raise HTTPException(
         status_code=503,
@@ -5521,6 +5661,20 @@ async def api_v1_models():
     }
 
 
+@app.get("/api/ai/quota-telemetry")
+async def api_ai_quota_telemetry():
+    vault = load_vault()
+    snap = _get_quota_tracker().snapshot()
+    snap["providers_configured"] = {
+        "nvidia_nim": bool(vault.get("NVIDIA_API_KEY", "").strip()),
+        "openrouter": bool(vault.get("OPENROUTER_API_KEY", "").strip()),
+        "gemini": bool(vault.get("GEMINI_API_KEY", "").strip()),
+        "anthropic": bool(vault.get("ANTHROPIC_API_KEY", "").strip()),
+        "hf_token": bool(vault.get("HF_TOKEN", "").strip()),
+    }
+    return snap
+
+
 @app.get("/api/ai/cascade-status")
 async def api_ai_cascade_status():
     vault = load_vault()
@@ -5528,10 +5682,38 @@ async def api_ai_cascade_status():
     g_key = vault.get("GEMINI_API_KEY", "")
     n_key = vault.get("NVIDIA_API_KEY", "")
     o_key = vault.get("OPENROUTER_API_KEY", "")
+    telemetry = _get_quota_tracker().snapshot()
+    active_text = telemetry.get("active_by_specialty", {}).get("text") or "nvidia/nemotron-3.5-lightning-30b-a3b"
 
     return {
-        "tier1_anthropic": {
+        "router_mode": "smart_specialty_v29",
+        "active_text_model": active_text,
+        "tier1_nvidia": {
             "tier": 1,
+            "provider": "NVIDIA NIM",
+            "model": "nvidia/nemotron-3.5-lightning-30b-a3b · nemotron-3-ultra · kimi-k3.1-pro",
+            "base_url": vault.get("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1"),
+            "configured": bool(n_key),
+            "masked": mask_key(n_key, "NVIDIA_API_KEY"),
+            "active_as_primary": bool(n_key),
+        },
+        "tier2_openrouter": {
+            "tier": 2,
+            "provider": "OpenRouter",
+            "model": "nvidia/nemotron-3-ultra-550b-a55b:free · nemotron-3.5-lightning:free",
+            "base_url": vault.get("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"),
+            "configured": bool(o_key),
+            "masked": mask_key(o_key, "OPENROUTER_API_KEY"),
+        },
+        "tier3_gemini": {
+            "tier": 3,
+            "provider": "Google Gemini (Alta Cota + Vision + Live Audio)",
+            "model": "gemma-4-31b-it · gemini-3.5-flash-lite · native-audio-live (∞)",
+            "configured": bool(g_key),
+            "masked": mask_key(g_key, "GEMINI_API_KEY"),
+        },
+        "tier1_anthropic": {
+            "tier": 4,
             "provider": "Anthropic Claude",
             "model": "claude-3-5-sonnet-latest",
             "base_url": vault.get("ANTHROPIC_BASE_URL", "https://api.anthropic.com/v1"),
@@ -5540,46 +5722,48 @@ async def api_ai_cascade_status():
             "active_as_primary": bool(a_key),
         },
         "tier1_gemini": {
-            "tier": 2 if a_key else 1,
-            "provider": "Google Gemini",
-            "model": "gemini-2.5-flash · gemini-2.5-flash-lite",
+            "tier": 3,
+            "provider": "Google Gemini (Alta Cota + Live Audio)",
+            "model": "gemini-3.5-flash-lite · gemini-2.5-flash-native-audio-latest",
             "configured": bool(g_key),
             "masked": mask_key(g_key, "GEMINI_API_KEY"),
         },
         "tier2_nvidia": {
-            "tier": 3 if a_key else 2,
+            "tier": 1,
             "provider": "NVIDIA NIM",
-            "model": "moonshotai/kimi-k3.1-pro · nemotron-3.5-lightning",
+            "model": "nvidia/nemotron-3.5-lightning-30b-a3b · moonshotai/kimi-k3.1-pro",
             "base_url": vault.get("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1"),
             "configured": bool(n_key),
             "masked": mask_key(n_key, "NVIDIA_API_KEY"),
         },
         "tier3_openrouter": {
-            "tier": 4 if a_key else 3,
+            "tier": 2,
             "provider": "OpenRouter",
             "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
             "base_url": vault.get("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"),
             "configured": bool(o_key),
             "masked": mask_key(o_key, "OPENROUTER_API_KEY"),
         },
+        "quota_telemetry": telemetry,
         "gateway_endpoint": "http://localhost:9000/v1/chat/completions",
     }
 
 
 # ==============================================================================
-# Diagnostics & Deep Health Check (3-Tier AI Cascade Verification)
+# Diagnostics & Deep Health Check (Smart Quota Router + Zero-Token Gemini Check)
 # ==============================================================================
 
 async def check_gemini_api(vault: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
+    """Zero-Token / Zero-RPD Metadata Ping against Google Gemini /v1beta/models."""
     if vault is None:
         vault = load_vault()
     api_key = vault.get("GEMINI_API_KEY", "").strip()
     if not api_key:
         return {
-            "tier": 1,
+            "tier": 3,
             "provider": "Google Gemini",
-            "model": "gemini-2.5-flash",
-            "name": "Tier 1 (Principal): Google Gemini API (gemini-2.5-flash)",
+            "model": "gemini-2.5-flash-native-audio-latest · gemma-4-31b-it",
+            "name": "Pool Voz/Visão/Reserva: Google Gemini API (Zero-Token Check)",
             "status": "warn",
             "http_code": 0,
             "latency_ms": 0,
@@ -5587,61 +5771,63 @@ async def check_gemini_api(vault: Optional[Dict[str, str]] = None) -> Dict[str, 
             "error": "GEMINI_API_KEY ausente",
         }
 
-    payload = {
-        "contents": [{"parts": [{"text": "Respond only with OK"}]}],
-        "generationConfig": {"maxOutputTokens": 5},
-    }
-    now = time.monotonic()
-    candidates = [
-        m for m in ("gemini-2.5-flash", "gemini-2.5-flash-lite")
-        if _MODEL_COOLDOWN_UNTIL.get(m, 0.0) <= now
-    ] or ["gemini-2.5-flash-lite", "gemini-2.5-flash"]
-
-    last_code = 0
-    last_err = ""
+    snap = _get_quota_tracker().snapshot()
+    live_info = snap.get("tts_rest_pool", {})
+    url = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}&pageSize=5"
     t0 = time.monotonic()
-    for m_id in candidates:
-        t_req = time.monotonic()
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{m_id}:generateContent?key={api_key}"
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            resp = await client.get(url)
+        latency_ms = int((time.monotonic() - t0) * 1000)
+        if resp.status_code == 200:
+            data = resp.json()
+            m_count = len(data.get("models") or [])
+            return {
+                "tier": 3,
+                "provider": "Google Gemini",
+                "model": "live-audio (∞) · gemini-3.5-flash-lite · gemma-4-31b-it",
+                "name": "Pool Voz/Visão/Reserva: Google Gemini API (Zero-Token Metadata Ping)",
+                "status": "ok",
+                "http_code": 200,
+                "latency_ms": latency_ms,
+                "detail": (
+                    f"HTTP 200 OK · Latência: {latency_ms} ms · Zero-Token Metadata Ping "
+                    f"(0 RPD consumidos, {m_count} modelos listados) · Pool TTS REST: "
+                    f"{live_info.get('rpm_used', 0)}/{live_info.get('rpm_limit', 15)} RPM."
+                ),
+                "error": None,
+                "zero_token_check": True,
+            }
         try:
-            async with httpx.AsyncClient(timeout=8.0) as client:
-                resp = await client.post(url, json=payload)
-            latency_ms = int((time.monotonic() - t_req) * 1000)
-            last_code = resp.status_code
-            if resp.status_code == 200:
-                suffix = "Motor principal validado e ativo." if m_id == "gemini-2.5-flash" else "Operacional via flash-lite (sub-cascata Gemini ativa)."
-                return {
-                    "tier": 1,
-                    "provider": "Google Gemini",
-                    "model": m_id,
-                    "name": f"Tier 1 (Principal): Google Gemini API ({m_id})",
-                    "status": "ok",
-                    "http_code": 200,
-                    "latency_ms": latency_ms,
-                    "detail": f"HTTP 200 OK · Latência: {latency_ms} ms · {suffix}",
-                    "error": None,
-                }
-            if resp.status_code in (429, 503):
-                _MODEL_COOLDOWN_UNTIL[m_id] = time.monotonic() + 180.0
-            try:
-                last_err = resp.json().get("error", {}).get("message", resp.text[:140])
-            except Exception:
-                last_err = resp.text[:140]
-        except Exception as e:
-            last_err = str(e) or type(e).__name__
-
-    total_ms = int((time.monotonic() - t0) * 1000)
-    return {
-        "tier": 1,
-        "provider": "Google Gemini",
-        "model": "gemini-2.5-flash",
-        "name": "Tier 1 (Principal): Google Gemini API (gemini-2.5-flash)",
-        "status": "warn" if last_code in (429, 503) else "error",
-        "http_code": last_code,
-        "latency_ms": total_ms,
-        "detail": f"HTTP {last_code} ({total_ms} ms): {last_err}",
-        "error": last_err,
-    }
+            err_msg = resp.json().get("error", {}).get("message", resp.text[:140])
+        except Exception:
+            err_msg = resp.text[:140]
+        return {
+            "tier": 3,
+            "provider": "Google Gemini",
+            "model": "gemini-3.5-flash-lite",
+            "name": "Pool Voz/Visão/Reserva: Google Gemini API (Zero-Token Metadata Ping)",
+            "status": "error",
+            "http_code": resp.status_code,
+            "latency_ms": latency_ms,
+            "detail": f"HTTP {resp.status_code} ({latency_ms} ms): {err_msg}",
+            "error": str(err_msg),
+            "zero_token_check": True,
+        }
+    except Exception as e:
+        total_ms = int((time.monotonic() - t0) * 1000)
+        return {
+            "tier": 3,
+            "provider": "Google Gemini",
+            "model": "gemini-3.5-flash-lite",
+            "name": "Pool Voz/Visão/Reserva: Google Gemini API (Zero-Token Metadata Ping)",
+            "status": "error",
+            "http_code": 0,
+            "latency_ms": total_ms,
+            "detail": f"Erro de conexão com Google Gemini ({total_ms} ms): {e}",
+            "error": str(e),
+            "zero_token_check": True,
+        }
 
 
 async def check_nvidia_api(vault: Optional[Dict[str, str]] = None) -> Dict[str, Any]:

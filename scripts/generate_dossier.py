@@ -226,9 +226,10 @@ def build_dossier() -> str:
     key_modules = [
         ("media-control-panel/main.py", "Servidor FastAPI central (porta 9000 VPS), Vault, orquestração Docker RAM-safe e rotas de estúdio"),
         ("media-control-panel/guided_pipelines.py", "Orquestrador assíncrono das 6 Trilhas Guiadas (RAM Relay, Checkpoints JSON, Safe-Zones, Roteirista IA)"),
-        ("tools/hyperframes/vps_novela_runner.py", "Motor Clean Cinema Multi-Personagem, Dual-Style Live-Action/3D, 4 Cortes Virais, Flow Veo 3.1 Pack e Take Stitcher"),
-        ("tools/hyperframes/regional_voice_engine.py", "Motor de Voz Nordestina: Gemini Multi-Modelo/Multi-Speaker (3.1/2.5/3.8), anti-429 backoff, cadência 1.16x SoXR 48kHz, F5-TTS & Seed-VC"),
-        ("tools/hyperframes/novela_lipsync_animator.py", "Cascata Lip-Sync Real (Tier 1 Colab GPU LivePortrait/LatentSync/MuseTalk; Tier 2 Local CPU MediaPipe 478pts + Visemas 2.5D cv2.remap)"),
+        ("tools/hyperframes/quota_telemetry.py", "Rastreador persistente RPM/RPD/cooldowns/cache hits por processo (fcntl.flock + quota_telemetry.json)"),
+        ("tools/hyperframes/vps_novela_runner.py", "Motor Clean Cinema Multi-Personagem, Dual-Style Live-Action/3D, 4 Cortes Virais, Flow Veo 3.1 Pack e Take Stitcher c/ Re-LipSync GPU"),
+        ("tools/hyperframes/regional_voice_engine.py", "Motor de Voz Nordestina v2.9: Cache SHA-256 (<5ms), Gemini Live Audio (BidiGenerateContent), Pool Round-Robin 5 TTS REST, F5-TTS & Seed-VC"),
+        ("tools/hyperframes/novela_lipsync_animator.py", "Cascata GPU Generativa Real v2.9 (Colab GPU T4 -> ZeroGPU A10G com HF_TOKEN: MoDA/LongCat/EchoMimic/Wan2.2/LTX/LatentSync; Distorção 2D banida)"),
         ("tools/hyperframes/verify_lipsync_motion.py", "Auditor Computer Vision frame a frame (estabilização por âncora nasal, mouth ROI speech vs silence, piscar sem oclusão e Reaction Shot)"),
         ("tools/hyperframes/vps_ad_runner.py", "Motor HyperFrames POV Cinema Multi-Imagem Shopee 20:9 Anti-Crop & L'Oréal Gold Luxury"),
         ("tools/hyperframes/viral_reference_analyzer.py", "Extrator de DNA Viral (cut_cadence, WPM, energia de áudio e recomendações roteirizadas)"),
@@ -384,15 +385,15 @@ def build_dossier() -> str:
     add("")
     engines_arch = [
         (
-            "1. Novelinhas Multi-Personagem (Live-Action 8K & 3D Pixar · Estrutura Viral 4 Cortes)",
+            "1. Novelinhas Multi-Personagem (Live-Action 8K & 3D Pixar · Estrutura Viral 4 Cortes · 100% GPU Real v2.9)",
             [
-                "Fluxo: Roteiro JSON (generate_novela_script / build_fallback_novela_script) ->",
+                "Fluxo: Roteiro JSON roteado para NVIDIA NIM nemotron via Smart Quota Router (0 gasto RPD Gemini) ->",
                 "  Saneamento Cultural Nordestino (sanitize_northeast_slang bloqueando 'trem/uai/sô/mano/meo/daora/guri/bah/tchê') ->",
-                "  Vozes 48kHz Estéreo SoXR (regional_voice_engine.py) ->",
-                "  Retratos Keyframes 1080x1920 com boca FECHADA/neutra e mãos relaxadas (NVIDIA NIM flux.1-dev ou SVG fallback) ->",
-                "  Animação Lip-Sync 30fps (Tier 1: Colab GPU LivePortrait+LatentSync 1.5/MuseTalk 1.5/EchoMimicV3; Tier 2: CPU MediaPipe FaceLandmarker 478pts + Visemas 2.5D cv2.remap) ->",
+                "  Vozes 48kHz Estéreo SoXR via Gemini Live Audio WebSocket (BidiGenerateContent ilimitado) + Cache SHA-256 + Pool Round-Robin 5 REST TTS ->",
+                "  Retratos Keyframes 1080x1920 com boca FECHADA/neutra e mãos relaxadas (NVIDIA NIM flux.1-dev) ->",
+                "  Vídeo Generativo GPU Real 30fps (Colab GPU T4 LivePortrait+LatentSync 1.5/MuseTalk 1.5 -> ZeroGPU A10G com HF_TOKEN: MoDA-fast-talking-head, LongCat, EchoMimic, Wan 2.2/LTX para Corte 4; distorção 2D cv2.remap banida!) ->",
                 "  Concatenação Clean Cinema 1080x1920 @ 30fps + 48kHz AAC loudnorm I=-16.",
-                "Estrutura Dramática 4 Cortes ('viral_4_cuts'): Corte 1 Ataque -> Corte 2 Pausa 0.45s (respirar/piscar) + Invertida -> Corte 3 Choque ('O quê?!') -> Corte 4 Reaction Shot Mudo 1.8s-2.2s de vergonha.",
+                "Estrutura Dramática 4 Cortes ('viral_4_cuts'): Corte 1 Ataque -> Corte 2 Pausa 0.45s (respirar/piscar) + Invertida -> Corte 3 Choque ('O quê?!') -> Corte 4 Reaction Shot Mudo 1.8s-2.2s de vergonha em GPU I2V.",
             ],
         ),
         (
@@ -425,11 +426,12 @@ def build_dossier() -> str:
             add(f"    - {b}")
     add("")
 
-    add("3.1 Cascatas de Fallback de IA:")
-    add("  - LLM Roteiro/Texto (main.py -> call_ai_cascade): Groq -> OpenRouter -> Gemini -> OpenAI -> Anthropic -> Fallback Determinístico")
-    add("  - Voz Nordestina (regional_voice_engine.py): Colab Seed-VC/F5-TTS (se selecionado+online) -> Gemini 3.1 Flash TTS Preview -> Gemini 2.5 Flash Preview TTS -> Gemini 3.8 Flash TTS (texto puro) -> Gemini 3.8 Flash Lite TTS -> Edge-TTS fonético (offline only)")
+    add("3.1 Cascatas de Fallback & Smart Quota Router por Especialidade (v2.9):")
+    add("  - LLM Texto/Roteiro (main.py -> call_ai_cascade): NVIDIA NIM (nemotron-3.5-lightning-30b-a3b -> nemotron-3-ultra-550b-a55b -> kimi-k3.1-pro) -> OpenRouter :free -> Gemma 4 31B -> Gemini Flash-Lite -> Groq/OpenAI/Anthropic (gemini-2.5-flash último recurso; check_gemini_api 0 tokens via GET /v1beta/models)")
+    add("  - LLM Visão Multimodal: Gemini 3.5 Flash-Lite -> Gemini 3.1 Flash-Lite -> Gemini 2.5 Flash-Lite -> OpenRouter")
+    add("  - Voz Nordestina (regional_voice_engine.py): Cache Disco SHA-256 (<5ms) -> Gemini Live Audio WebSocket (BidiGenerateContent ilimitado) -> Round-Robin Pool 5 TTS REST (3.8-flash-tts, 3.8-flash-lite-tts, 2.5-flash-preview-tts, 3.1-flash-tts-preview, 2.5-pro-preview-tts) -> Edge-TTS fonético (offline only)")
     add("  - Imagem/Ingrediente (vps_novela_runner.py): NVIDIA NIM black-forest-labs/flux.1-dev (768x1344 -> scale/crop Lanczos 1080x1920) -> SVG vetorial rsvg-convert Clean Cinema")
-    add("  - Animação/Lip-Sync (novela_lipsync_animator.py): Tier 1 Colab GPU T4 (LivePortrait + LatentSync 1.5 / MuseTalk 1.5 / EchoMimicV3) -> Tier 2 Local CPU MediaPipe FaceLandmarker 478pts + Visemas 2.5D cv2.remap 30fps")
+    add("  - Animação/Vídeo GPU Real (novela_lipsync_animator.py): Colab GPU T4 fp16 (LivePortrait + LatentSync 1.5 / MuseTalk 1.5 c/ checkpoints via snapshot_download) -> ZeroGPU A10G Cloud com HF_TOKEN (MoDA-fast-talking-head, LongCat-Video-Avatar, EchoMimic, Wan 2.2/LTX I2V + LatentSync) — Distorção 2D cv2.remap permanentemente banida!")
     add("")
 
     add("3.2 Variáveis de Ambiente e Chaves no Cofre da VPS (apenas nome e status SET=True/False):")

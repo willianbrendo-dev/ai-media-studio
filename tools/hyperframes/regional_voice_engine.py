@@ -33,8 +33,13 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 
+import asyncio
+import hashlib
+import sys
+
 STUDIO_BASE = Path(os.environ.get("STUDIO_BASE_DIR", "/opt/ai-media-studio"))
 VOICES_REGIONAL_DIR = STUDIO_BASE / "voices/regional"
+VOICES_CACHE_DIR = STUDIO_BASE / "voices/cache"
 PROFILES_META_PATH = VOICES_REGIONAL_DIR / "profiles.json"
 EDGE_TTS_BIN = os.environ.get(
     "EDGE_TTS_BIN",
@@ -42,13 +47,62 @@ EDGE_TTS_BIN = os.environ.get(
 )
 FFMPEG_BIN = shutil.which("ffmpeg") or "ffmpeg"
 FFPROBE_BIN = shutil.which("ffprobe") or "ffprobe"
-GEMINI_TTS_MODEL = "gemini-3.1-flash-tts-preview"
+GEMINI_TTS_MODEL = "gemini-3.8-flash-tts"
 GEMINI_TTS_MODELS: Tuple[str, ...] = (
-    "gemini-3.1-flash-tts-preview",
-    "gemini-2.5-flash-preview-tts",
     "gemini-3.8-flash-tts",
     "gemini-3.8-flash-lite-tts",
+    "gemini-2.5-flash-preview-tts",
+    "gemini-3.1-flash-tts-preview",
+    "gemini-2.5-pro-preview-tts",
 )
+GEMINI_LIVE_AUDIO_MODELS: Tuple[str, ...] = (
+    "models/gemini-3.1-flash-live-preview",
+    "models/gemini-2.5-flash-native-audio-latest",
+    "models/gemini-3.8-live",
+)
+_LIVE_SAFE_VOICES = frozenset({"Kore", "Aoede", "Charon", "Fenrir", "Puck", "Zephyr", "Orus", "Leda"})
+_LIVE_VOICE_FALLBACK_MAP = {
+    "Kore": "Kore",
+    "Aoede": "Aoede",
+    "Charon": "Charon",
+    "Fenrir": "Fenrir",
+    "Puck": "Puck",
+    "Zephyr": "Zephyr",
+    "Orus": "Orus",
+    "Leda": "Leda",
+    "Sulafat": "Kore",
+    "Despina": "Aoede",
+    "Laomedeia": "Leda",
+    "Achernar": "Fenrir",
+    "Algenib": "Charon",
+    "Enceladus": "Orus",
+    "Umbriel": "Orus",
+    "Gacrux": "Kore",
+    "Iapetus": "Charon",
+    "Rasalgethi": "Fenrir",
+    "Schedar": "Orus",
+}
+
+
+def _get_qt():
+    hf_dir = str(Path(__file__).resolve().parent)
+    if hf_dir not in sys.path:
+        sys.path.insert(0, hf_dir)
+    try:
+        from quota_telemetry import get_tracker
+        return get_tracker()
+    except Exception:
+        return None
+
+
+def _run_async(coro):
+    try:
+        asyncio.get_running_loop()
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            return pool.submit(asyncio.run, coro).result()
+    except RuntimeError:
+        return asyncio.run(coro)
 
 NORDESTE_FAST_DIRECTOR_PROMPT = (
     "Atue em português brasileiro com sotaque nordestino autêntico do interior (Piauí/Ceará), "
@@ -655,51 +709,243 @@ def _call_gemini_native_tts(
     return _post_gemini_tts_payload(payload=payload, api_key=api_key, model=model)
 
 
+def _cache_key_for_turn(
+    cid: str,
+    gem_voice: str,
+    emotion: str,
+    eff_engine: str,
+    processed_text: str,
+) -> str:
+    raw = f"v29|{cid}|{gem_voice}|{emotion}|{eff_engine}|{processed_text}"
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _read_wav_duration_fast(wav_path: Path) -> float:
+    import wave
+
+    try:
+        with wave.open(str(wav_path), "rb") as wf:
+            fr = wf.getframerate() or 48000
+            return wf.getnframes() / float(fr)
+    except Exception:
+        return _probe_duration(wav_path)
+
+
+def _save_voice_cache(cache_key: str, src_wav: Path) -> None:
+    if not cache_key or not src_wav.is_file():
+        return
+    try:
+        VOICES_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        dst = VOICES_CACHE_DIR / f"{cache_key}.wav"
+        tmp = VOICES_CACHE_DIR / f".{cache_key}.{uuid.uuid4().hex[:6]}.wav.tmp"
+        shutil.copyfile(src_wav, tmp)
+        tmp.replace(dst)
+    except Exception:
+        pass
+
+
+async def _live_audio_ws_exchange(
+    *,
+    api_key: str,
+    model: str,
+    live_voice: str,
+    system_prompt: str,
+    user_prompt: str,
+) -> bytes:
+    import websockets
+
+    ws_url = (
+        "wss://generativelanguage.googleapis.com/ws/"
+        f"google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key={api_key}"
+    )
+    async with websockets.connect(ws_url, open_timeout=8, close_timeout=4, max_size=16 * 1024 * 1024) as ws:
+        setup_msg = {
+            "setup": {
+                "model": model,
+                "generationConfig": {
+                    "responseModalities": ["AUDIO"],
+                    "speechConfig": {
+                        "voiceConfig": {
+                            "prebuiltVoiceConfig": {
+                                "voiceName": live_voice,
+                            }
+                        }
+                    },
+                    "temperature": 0.2,
+                },
+                "systemInstruction": {
+                    "parts": [{"text": system_prompt}],
+                },
+            }
+        }
+        await ws.send(json.dumps(setup_msg))
+        await asyncio.wait_for(ws.recv(), timeout=10)
+
+        turn_msg = {
+            "clientContent": {
+                "turns": [
+                    {
+                        "role": "user",
+                        "parts": [{"text": user_prompt}],
+                    }
+                ],
+                "turnComplete": True,
+            }
+        }
+        await ws.send(json.dumps(turn_msg))
+
+        pcm = bytearray()
+        deadline = time.monotonic() + 20.0
+        while time.monotonic() < deadline:
+            rem = max(0.5, deadline - time.monotonic())
+            raw = await asyncio.wait_for(ws.recv(), timeout=min(12.0, rem))
+            msg = json.loads(raw) if isinstance(raw, str) else json.loads(raw.decode("utf-8", errors="ignore"))
+            sc = msg.get("serverContent") or {}
+            mt = sc.get("modelTurn") or {}
+            for part in mt.get("parts") or []:
+                inline = part.get("inlineData") or {}
+                b64 = inline.get("data")
+                if b64:
+                    pcm.extend(base64.b64decode(b64))
+            if sc.get("turnComplete"):
+                break
+        return bytes(pcm)
+
+
+def _call_gemini_live_audio_tts(
+    *,
+    env_map: Dict[str, str],
+    text: str,
+    style_inst: str,
+    emo_cue: str,
+    voice_name: str,
+    models: Tuple[str, ...] = GEMINI_LIVE_AUDIO_MODELS,
+) -> Tuple[bytes, int, str, int, str, str]:
+    """Primary unlimited-RPM Gemini Live Audio TTS over BidiGenerateContent WebSocket."""
+    keys = _collect_gemini_keys(env_map)
+    if not keys:
+        raise RuntimeError("Nenhuma GEMINI_API_KEY configurada")
+    live_voice = _LIVE_VOICE_FALLBACK_MAP.get((voice_name or "Kore").strip(), "Kore")
+    qt = _get_qt()
+
+    system_prompt = (
+        f"{style_inst} {emo_cue} "
+        "Você é um sintetizador de voz (TTS) estritamente literal para dublagem nordestina brasileira. "
+        "Leia em voz alta com sotaque cearense autêntico, ritmo ágil e atuação expressiva EXATAMENTE "
+        "o texto entre aspas enviado pelo usuário. "
+        "PROIBIDO responder, cumprimentar, confirmar ('claro', 'entendido'), explicar ou adicionar palavras."
+    )
+    user_prompt = f"\"{text}\""
+    word_count = max(1, len(re.findall(r"\w+", text)))
+    max_sane_sec = max(7.5, word_count * 1.15 + 3.0)
+
+    last_err: Optional[Exception] = None
+    for model in models:
+        for key in keys:
+            try:
+                pcm = _run_async(
+                    _live_audio_ws_exchange(
+                        api_key=key,
+                        model=model,
+                        live_voice=live_voice,
+                        system_prompt=system_prompt,
+                        user_prompt=user_prompt,
+                    )
+                )
+                raw_dur = len(pcm) / 48000.0
+                if raw_dur < 0.35:
+                    raise RuntimeError(f"{model} retornou áudio curto demais ({raw_dur:.2f}s)")
+                if raw_dur > max_sane_sec:
+                    raise RuntimeError(
+                        f"{model} excedeu duração esperada ({raw_dur:.2f}s > {max_sane_sec:.2f}s para {word_count} palavras)"
+                    )
+                if qt is not None:
+                    qt.record_call(model, ok=True, status_code=200, specialty="voice", live_audio_unlimited=True)
+                return pcm, 24000, "s16le", 1, f"{model}|{live_voice}", live_voice
+            except Exception as exc:
+                last_err = exc
+                if qt is not None:
+                    qt.record_call(
+                        model,
+                        ok=False,
+                        status_code=500,
+                        specialty="voice",
+                        cooldown_s=15.0,
+                        error=str(exc)[:160],
+                    )
+    raise RuntimeError(f"Gemini Live Audio falhou: {last_err}")
+
+
 def _call_gemini_resilient(
     *,
     env_map: Dict[str, str],
     build_payload_fn: Any,
     models: Tuple[str, ...] = GEMINI_TTS_MODELS,
 ) -> Tuple[bytes, int, str, int, str]:
-    """Invoke Gemini TTS across rotated keys & models with anti-429 exponential backoff (2s -> 4s -> 8s)."""
+    """Invoke Gemini REST TTS across Round-Robin pool & rotated keys with QuotaTelemetryTracker."""
     keys = _collect_gemini_keys(env_map)
     if not keys:
         raise RuntimeError("Nenhuma GEMINI_API_KEY configurada")
 
+    qt = _get_qt()
+    ordered_models = qt.pick_round_robin_tts(list(models)) if qt is not None else list(models)
     last_err: Optional[Exception] = None
-    for model in models:
-        for key in keys:
-            pair = (key[-6:], model)
-            if pair in _EXHAUSTED_RPD_KEYS:
+
+    # Pass 1: zero-wait round-robin over models with RPM/cooldown headroom
+    # Pass 2: short wait retry across non-RPD-exhausted models if Pass 1 hit transient limits
+    for pass_idx in (0, 1):
+        for model in ordered_models:
+            if pass_idx == 0 and qt is not None and not qt.is_available(model):
                 continue
-            for wait_s in (2.0, 4.0, 8.0):
-                try:
-                    payload = build_payload_fn(model)
-                    pcm, sr, codec, ch = _post_gemini_tts_payload(payload=payload, api_key=key, model=model)
-                    return pcm, sr, codec, ch, model
-                except urllib.error.HTTPError as exc:
-                    err_body = ""
+            for key in keys:
+                pair = (key[-6:], model)
+                if pair in _EXHAUSTED_RPD_KEYS:
+                    continue
+                waits = (0.0,) if pass_idx == 0 else (2.5, 5.0)
+                for wait_s in waits:
+                    if wait_s > 0:
+                        time.sleep(wait_s)
                     try:
-                        err_body = exc.read().decode("utf-8", errors="ignore")
-                    except Exception:
-                        pass
-                    last_err = RuntimeError(f"{model} HTTP {exc.code}: {err_body[:240]}")
-                    low_err = err_body.lower()
-                    # Daily quota exhausted or invalid multi-speaker schema on this model -> switch immediately
-                    if exc.code == 429 and ("perday" in low_err or "requests per day" in low_err):
-                        _EXHAUSTED_RPD_KEYS.add(pair)
-                        break
-                    if exc.code == 400:
-                        break
-                    if exc.code in (429, 500, 502, 503, 504):
+                        payload = build_payload_fn(model)
+                        pcm, sr, codec, ch = _post_gemini_tts_payload(payload=payload, api_key=key, model=model)
+                        if qt is not None:
+                            qt.record_call(model, ok=True, status_code=200, specialty="voice")
+                        return pcm, sr, codec, ch, model
+                    except urllib.error.HTTPError as exc:
+                        err_body = ""
+                        try:
+                            err_body = exc.read().decode("utf-8", errors="ignore")
+                        except Exception:
+                            pass
+                        last_err = RuntimeError(f"{model} HTTP {exc.code}: {err_body[:240]}")
+                        low_err = err_body.lower()
+                        is_rpd = exc.code == 429 and ("perday" in low_err or "requests per day" in low_err)
                         delay_m = re.search(r'"retryDelay"\s*:\s*"(\d+)s"', err_body)
-                        sleep_for = min(12.0, float(delay_m.group(1))) if delay_m else wait_s
-                        time.sleep(sleep_for)
-                        continue
-                    break
-                except Exception as exc:
-                    last_err = exc
-                    time.sleep(wait_s)
+                        cd_sec = 3600.0 if is_rpd else (float(delay_m.group(1)) + 2.0 if delay_m else (65.0 if exc.code == 429 else 0.0))
+                        if qt is not None:
+                            qt.record_call(
+                                model,
+                                ok=False,
+                                status_code=exc.code,
+                                specialty="voice",
+                                cooldown_s=cd_sec,
+                                error=err_body[:160],
+                            )
+                        if is_rpd:
+                            _EXHAUSTED_RPD_KEYS.add(pair)
+                            break
+                        if exc.code == 400:
+                            break
+                        if pass_idx == 0 and exc.code in (429, 500, 502, 503, 504):
+                            # Switch immediately to the next Round-Robin TTS model!
+                            break
+                        if exc.code in (429, 500, 502, 503, 504):
+                            continue
+                        break
+                    except Exception as exc:
+                        last_err = exc
+                        if qt is not None:
+                            qt.record_call(model, ok=False, status_code=500, specialty="voice", error=str(exc)[:160])
     raise RuntimeError(f"Todos os modelos/chaves Gemini TTS falharam: {last_err}")
 
 
@@ -880,6 +1126,33 @@ def synthesize_regional_turn(
     eff_colab_url = (colab_url or env_map.get("COLAB_GPU_URL") or "").strip()
     eff_colab_tok = (colab_token or env_map.get("COLAB_GPU_TOKEN") or "").strip()
     processed_text = apply_nordestino_prosody(tts_text, character=cid, emotion=emotion, mode="gemini")
+    gem_voice = (voice_override or prof.get("gemini_voice") or "Kore").strip()
+
+    # 0) Persistent SHA-256 Voice Cache (<5ms instant hit, ZERO API calls)
+    cache_eligible = not (eff_engine == "seed_vc_guide" and guide_audio_path) and not (
+        eff_engine == "f5_tts_clone" and eff_colab_url
+    )
+    cache_key = _cache_key_for_turn(cid, gem_voice, emotion, eff_engine, processed_text)
+    cache_wav = VOICES_CACHE_DIR / f"{cache_key}.wav"
+    if cache_eligible and cache_wav.is_file() and cache_wav.stat().st_size > 8000:
+        dur_cached = _read_wav_duration_fast(cache_wav)
+        if dur_cached > 0.35:
+            shutil.copyfile(cache_wav, out_wav)
+            qt = _get_qt()
+            if qt is not None:
+                qt.record_cache_hit("gemini-2.5-flash-native-audio-latest", specialty="voice")
+            return {
+                "ok": True,
+                "character_id": cid,
+                "accent_engine_requested": eff_engine,
+                "voice_engine_used": f"gemini_tts:{gem_voice}:cached",
+                "gemini_model": "cache_sha256",
+                "cache_hit": True,
+                "cache_key": cache_key,
+                "processed_text": processed_text,
+                "duration": round(dur_cached, 3),
+                "wav_path": str(out_wav),
+            }
 
     # 1) Direct / Seed-VC Speech-to-Speech when user recorded a guide clip for this line
     if eff_engine == "seed_vc_guide" and guide_audio_path and Path(guide_audio_path).is_file():
@@ -954,18 +1227,49 @@ def synthesize_regional_turn(
             except Exception:
                 pass
 
-    # 3) Primary Engine: 100% Gemini Native Audio TTS with Multi-Model + Key Rotation + Backoff
+    # 3) Primary Engine (v2.9): Gemini Live Audio (Unlimited RPM) -> Round-Robin REST Pool (5x3 RPM)
     gem_keys = _collect_gemini_keys(env_map)
-    gem_voice = (voice_override or prof.get("gemini_voice") or "Kore").strip()
     if gem_keys:
         emo_cue = EMOTION_ACTING_CUES_PT.get(emotion, EMOTION_ACTING_CUES_PT["warm"])
         style_inst = prof.get("style_instruction") or NORDESTE_FAST_DIRECTOR_PROMPT
-        director_prompt = (
-            f"{style_inst} {emo_cue} "
-            f"Leia exatamente a fala abaixo com cadência rápida, viva e naturalidade nordestina, sem arrastar palavras e sem comentários: "
-            f"\"{processed_text}\""
-        )
 
+        # 3A) Primary: Gemini Live Audio WebSocket (BidiGenerateContent, zero RPD/3-RPM bottleneck)
+        try:
+            pcm_bytes, srate, codec, src_ch, live_model_info, live_voice = _call_gemini_live_audio_tts(
+                env_map=env_map,
+                text=processed_text,
+                style_inst=style_inst,
+                emo_cue=emo_cue,
+                voice_name=gem_voice,
+                models=GEMINI_LIVE_AUDIO_MODELS,
+            )
+            dur = _pcm_to_48k_stereo_wav(
+                pcm_bytes,
+                srate,
+                out_wav,
+                lead_pad=lead_pad,
+                tail_pad=tail_pad,
+                codec=codec,
+                src_channels=src_ch,
+                comedy_fast=True,
+            )
+            _save_voice_cache(cache_key, out_wav)
+            return {
+                "ok": True,
+                "character_id": cid,
+                "accent_engine_requested": eff_engine,
+                "voice_engine_used": f"gemini_live:{live_voice}",
+                "gemini_model": live_model_info.split("|")[0],
+                "cache_hit": False,
+                "cache_key": cache_key,
+                "processed_text": processed_text,
+                "duration": round(dur, 3),
+                "wav_path": str(out_wav),
+            }
+        except Exception as live_exc:
+            print(f"[RVE LIVE INFO] Gemini Live indisponível para {cid}, acionando Pool REST: {live_exc}", flush=True)
+
+        # 3B) Secondary: Round-Robin REST Pool across 5 Gemini TTS models
         def _build_turn_payload(model_name: str) -> Dict[str, Any]:
             # Prompt-capable 2.5/3.1 models take short acting direction; 3.8 raw TTS models take pure text ONLY!
             if "3.8" in (model_name or ""):
@@ -1006,12 +1310,15 @@ def synthesize_regional_turn(
                 src_channels=src_ch,
                 comedy_fast=True,
             )
+            _save_voice_cache(cache_key, out_wav)
             return {
                 "ok": True,
                 "character_id": cid,
                 "accent_engine_requested": eff_engine,
                 "voice_engine_used": f"gemini_tts:{gem_voice}",
                 "gemini_model": used_model,
+                "cache_hit": False,
+                "cache_key": cache_key,
                 "processed_text": processed_text,
                 "duration": round(dur, 3),
                 "wav_path": str(out_wav),

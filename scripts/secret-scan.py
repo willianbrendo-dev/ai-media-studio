@@ -29,13 +29,14 @@ TEXT_SECRET_PATTERNS = [
     ("nvidia_nim_key", re.compile(r"\bnvapi-[A-Za-z0-9_-]{20,}")),
     ("github_pat", re.compile(r"\bgh[pousr]_[A-Za-z0-9]{20,}")),
     ("groq_key", re.compile(r"\bgsk_[A-Za-z0-9_-]{20,}")),
+    ("huggingface_token", re.compile(r"\bhf_[A-Za-z0-9]{20,}")),
     ("private_key_pem", re.compile(r"-----BEGIN (?:RSA |OPENSSH |EC |DSA )?PRIVATE KEY-----")),
     ("basic_auth_header", re.compile(r"Authorization[\"':\s]+Basic\s+[A-Za-z0-9+/=]{12,}")),
 ]
 
 # Known synthetic placeholders / upstream unit-test fixtures (verified harmless)
 SYNTHETIC_TEST_RX = re.compile(
-    r"^(?:sk-(?:ant-api03-should-not-be-used|ant-oat01-subscription\w*|LEAK\w+|supersecret\w+|abcdef\w+|proj-ABCDEF\w+|proj-abcdef\w+|test[_-]\w+|or-v1-test\w+)|gsk_test_\w+|st_<REPLACE_WITH_VPS_PANEL_TOKEN>)$"
+    r"^(?:sk-(?:ant-api03-should-not-be-used|ant-oat01-subscription\w*|LEAK\w+|supersecret\w+|abcdef\w+|proj-ABCDEF\w+|proj-abcdef\w+|test[_-]\w+|or-v1-test\w+)|gsk_test_\w+|st_<REPLACE_WITH_VPS_PANEL_TOKEN>|hf_(?:abcdefghijklmnopqrstuvwxyz\w+|QWERTYUIOP\w+|(?:appapp|envenv|clicli)0+\w+|subsub\w+|syntheticmirrorprobe\w+))$"
 )
 
 

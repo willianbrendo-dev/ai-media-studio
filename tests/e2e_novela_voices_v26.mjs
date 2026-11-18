@@ -173,8 +173,13 @@ async function runDesktop(browser) {
   const pvJson = await pvRes.json();
   assert(pvJson.ok && pvJson.audio_url, `Resposta inválida preview-voice: ${JSON.stringify(pvJson)}`);
   assert(
-    Array.isArray(pvJson.engines_used) && pvJson.engines_used.length > 0 && pvJson.engines_used.every((e) => String(e).startsWith('gemini_tts:')),
-    `Esperado 100% gemini_tts no preview-voice, veio: ${JSON.stringify(pvJson.engines_used)}`
+    Array.isArray(pvJson.engines_used) &&
+      pvJson.engines_used.length > 0 &&
+      pvJson.engines_used.every((e) => {
+        const s = String(e);
+        return s.startsWith('gemini_live:') || s.startsWith('gemini_tts:');
+      }),
+    `Esperado 100% gemini_live/gemini_tts no preview-voice, veio: ${JSON.stringify(pvJson.engines_used)}`
   );
   await page.waitForSelector('#nov-voice-preview-player:not(.hidden)', { state: 'visible', timeout: 15000 });
   const playerSrc = await page.locator('#nov-voice-preview-player').getAttribute('src');
@@ -246,6 +251,30 @@ async function runDesktop(browser) {
   console.log(`[PASS] Modo Hard Áudio-Guia 48kHz (${guideJson.duration}s) + auto-switch Seed-VC`);
 
   await checkLayout(page, 'Desktop Modo Hard v2.6');
+
+  // 4) v2.9 Telemetria de Cotas em Tempo Real (Card CASCATA IA + Modal + HF_TOKEN no Cofre)
+  await page.locator('#tab-stacks').click();
+  await page.waitForSelector('#kpi-cascade-tier', { state: 'visible', timeout: 15000 });
+  await page.waitForSelector('#kpi-cascade-pills', { state: 'visible', timeout: 15000 });
+  const kpiTierTxt = await page.locator('#kpi-cascade-tier').innerText();
+  const kpiPillsTxt = await page.locator('#kpi-cascade-pills').innerText();
+  assert(kpiTierTxt.includes('Texto:') && kpiTierTxt.includes('Voz:'), `KPI Cascata v2.9 inesperado: ${kpiTierTxt}`);
+  assert(kpiPillsTxt.includes('NIM') && kpiPillsTxt.includes('Live'), `Pills Cascata v2.9 inesperadas: ${kpiPillsTxt}`);
+
+  await page.locator('#btn-open-quota-modal').click();
+  await page.waitForSelector('#quota-modal:not(.hidden)', { state: 'visible', timeout: 10000 });
+  await page.waitForSelector('#quota-modal-body table tbody tr', { state: 'visible', timeout: 10000 });
+  const modalRowCount = await page.locator('#quota-modal-body table tbody tr').count();
+  assert(modalRowCount >= 15, `Esperado >= 15 modelos no modal de cotas, veio ${modalRowCount}`);
+  await page.locator('#quota-modal button[title="Fechar"]').click();
+  await page.waitForSelector('#quota-modal.hidden', { state: 'attached', timeout: 5000 });
+
+  await page.locator('#tab-vault').click();
+  await page.waitForSelector('#input-HF_TOKEN', { state: 'visible', timeout: 10000 });
+  const hfBadge = await page.locator('#badge-HF_TOKEN').innerText();
+  assert(hfBadge.includes('Ativa'), `Esperado badge HF_TOKEN ativo no Cofre, veio: ${hfBadge}`);
+  console.log(`[PASS] v2.9 Cascata Cotas (${modalRowCount} modelos) + HF_TOKEN Cofre (${hfBadge})`);
+
   assert(errs.length === 0, `Erros Desktop:\n - ${errs.join('\n - ')}`);
   await ctx.close();
 }
@@ -278,6 +307,15 @@ async function runMobile(browser) {
   await page.waitForSelector('#btn-qnv-line-play-0', { state: 'visible' });
   await page.waitForSelector('#btn-qnv-line-guide-0', { state: 'visible' });
   await checkLayout(page, 'Mobile Modo Hard Novela v2.6');
+
+  // Validar Card Cascata IA + Modal de Cotas responsivo em Mobile 390x844
+  await page.locator('#mnav-stacks').click();
+  await page.waitForSelector('#kpi-cascade-pills', { state: 'visible', timeout: 10000 });
+  await checkLayout(page, 'Mobile Card Cascata Cotas v2.9');
+  await page.locator('#btn-open-quota-modal').click();
+  await page.waitForSelector('#quota-modal:not(.hidden)', { state: 'visible', timeout: 10000 });
+  await checkLayout(page, 'Mobile Modal Cotas v2.9');
+  await page.locator('#quota-modal button[title="Fechar"]').click();
 
   assert(errs.length === 0, `Erros Mobile:\n - ${errs.join('\n - ')}`);
   await ctx.close();
