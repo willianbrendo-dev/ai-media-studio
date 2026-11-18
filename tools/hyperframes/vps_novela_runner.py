@@ -1,21 +1,20 @@
 #!/usr/bin/env python3
-"""VPS Novela Studio Runner — Zero-Idle-RAM Multi-Character Micro-Series Engine.
+"""VPS Novela Studio Runner — Cinema Clean Engine v2.5.
 
-Produces 9:16 vertical Brazilian Northeast ("Nordestino") comedy micro-series & mini-novelas
-in two selectable visual styles:
-  - ``3d_cartoon``: Stylized 3D animated CG character art
-  - ``cinematic_tv``: 35mm realistic live-action Brazilian television telenovela cinematography
-
-Engine components:
-  - Cast registry with per-character neural edge-tts voice, pitch, rate, signature badge colors,
-    and Character Lock prompts for visual consistency across shots.
-  - Dual phonetic dialogue layer (`tts_text` for expressive Northeast cadence -> TTS audio;
-    `subtitle_text` for crisp, clean screen typography).
-  - Live Image Generation cascade (NVIDIA NIM black-forest-labs/flux.1-dev + Gemini Image API)
-    with CONTENT_FILTERED / integrity validation and bespoke SVG artistic fallback.
-  - Platform-aware Safe-Zones (`tiktok_reels`, `yt_shorts`, `shopee_20_9`).
-  - Native FFmpeg SFX synthesis (turn pops, comedic sting, 3.5s cliffhanger freeze-frame chord)
-    mixed with 48kHz Stereo SoXR loudnorm speech audio + HyperFrames GSAP HTML/Chromium render.
+Zero-Idle-RAM Multi-Character Micro-Series Engine supporting:
+  1. Clean Cinema Storyboard Preview (`clean_cinema_mode=True` default):
+     Full-bleed 1080x1920 Shot-Reverse-Shot / Over-the-Shoulder cinematography with fast
+     dry cuts and zero cluttering overlay boxes (`subtitles_mode`: 'none' | 'minimal').
+  2. Google Flow Veo 3.1 Production Pack (`generate_flow_veo_pack`):
+     Generates clean 1080x1920 Shot-Reverse-Shot reference Ingredients + bilingual technical
+     Veo 3.1 prompts (English camera direction + Brazilian Portuguese dialogue) + Flow Pro credit math.
+  3. Automatic Take Stitcher (`stitch_novela_takes`):
+     Uses faster-whisper INT8 word timestamps + FFmpeg silencedetect to trim only silent lead/tail
+     from uploaded Google Flow / Colab MP4 takes without swallowing syllables, normalizes to
+     1080x1920 @ 30fps + 48kHz Stereo SoXR (loudnorm I=-16), and optionally burns minimal captions.
+  4. Google Colab GPU Bridge (`render_mode='colab_gpu'`):
+     Sends each (Shot Ingredient + PT-BR WAV + Acting Prompt) to remote EchoMimicV3 / LatentSync
+     FastAPI Cloudflare tunnel (`/animate-take`) and stitches returned lip-synced MP4 clips.
 """
 
 from __future__ import annotations
@@ -34,13 +33,20 @@ import time
 import urllib.error
 import urllib.request
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 
+for _env_k, _env_v in (("OMP_NUM_THREADS", "2"), ("MKL_NUM_THREADS", "2"), ("CT2_NUM_THREADS", "2")):
+    os.environ.setdefault(_env_k, _env_v)
+
+SUPOCLIP_HF_CACHE = Path("/opt/ai-media-studio/supoclip/.cache/huggingface")
+if SUPOCLIP_HF_CACHE.exists() and not os.environ.get("HF_HOME"):
+    os.environ["HF_HOME"] = str(SUPOCLIP_HF_CACHE)
+
 # ---------------------------------------------------------------------------
-# Runtime binaries & paths (VPS defaults with graceful fallbacks)
+# Runtime binaries & paths
 # ---------------------------------------------------------------------------
 STUDIO_BASE = Path(os.environ.get("STUDIO_BASE_DIR", "/opt/ai-media-studio"))
 HYPERFRAMES_DIR = Path(os.environ.get("HYPERFRAMES_DIR", str(STUDIO_BASE / "tools/hyperframes")))
@@ -53,7 +59,9 @@ EDGE_TTS_BIN = os.environ.get(
 FFMPEG_BIN = shutil.which("ffmpeg") or "ffmpeg"
 FFPROBE_BIN = shutil.which("ffprobe") or "ffprobe"
 NOVELA_EXPORT_DIR = STUDIO_BASE / "exports/novela"
-CACHE_ROOT = STUDIO_BASE / "cache/novela_assets"
+FLOW_PACKS_DIR = NOVELA_EXPORT_DIR / "flow_packs"
+
+_WHISPER_CACHE: Dict[str, Any] = {}
 
 
 # ---------------------------------------------------------------------------
@@ -91,12 +99,12 @@ PLATFORM_SAFE_ZONES: Dict[str, Dict[str, Any]] = {
 
 
 # ---------------------------------------------------------------------------
-# Default Cast Configuration (Voices + Character Locks)
+# Cast Registry (Voices, Character Locks & Veo 3.1 Descriptions)
 # ---------------------------------------------------------------------------
 CAST_REGISTRY: Dict[str, Dict[str, str]] = {
     "dona_socorro": {
         "label": "Dona Socorro",
-        "role": "Matriarca dramatica e fofoqueira",
+        "role": "Matriarca dramática e fofoqueira",
         "voice": "pt-BR-FranciscaNeural",
         "rate": "+16%",
         "pitch": "+6Hz",
@@ -114,12 +122,16 @@ CAST_REGISTRY: Dict[str, Dict[str, str]] = {
         ),
         "lock_tv": (
             "charismatic 65-year-old Brazilian senior lady wearing a bright yellow floral apron over a teal blouse, "
-            "small pearl earrings, round tortoiseshell eyeglasses, silver hair tied in a neat bun, warm natural comedy poise"
+            "small pearl earrings, round tortoiseshell eyeglasses, silver hair tied in a neat bun, natural comedy poise"
+        ),
+        "veo_desc": (
+            "Dona Socorro, an expressive 60-year-old Northeastern Brazilian matriarch wearing a bright yellow floral cotton apron "
+            "over a teal blouse, pearl earrings, round tortoiseshell glasses, silver hair in a neat bun"
         ),
     },
     "seu_bastiao": {
-        "label": "Seu Bastiao",
-        "role": "Dono da mercearia, sabio e debochado",
+        "label": "Seu Bastião",
+        "role": "Dono da mercearia, sábio e debochado",
         "voice": "pt-BR-AntonioNeural",
         "rate": "+10%",
         "pitch": "-6Hz",
@@ -131,13 +143,17 @@ CAST_REGISTRY: Dict[str, Dict[str, str]] = {
         "hair_color": "#94a3b8",
         "prop": "straw_hat",
         "lock_3d": (
-            "jovial 68-year-old countryside shopkeeper gentleman named Sebastiao wearing a woven light straw brimmed hat, "
+            "jovial 68-year-old countryside shopkeeper gentleman wearing a woven light straw brimmed hat, "
             "open unbuttoned blue plaid shirt over a white tee, neat silver mustache, holding a small aluminum coffee cup, "
             "wisecracking half-smile"
         ),
         "lock_tv": (
             "humorous 68-year-old Brazilian countryside shopkeeper gentleman wearing a woven straw hat and open blue plaid "
             "cotton shirt over a crisp white tee, neat silver mustache, holding a metal coffee cup, amused squinting eyes"
+        ),
+        "veo_desc": (
+            "Seu Bastião, a witty 65-year-old countryside shopkeeper wearing a woven straw hat and open blue plaid shirt "
+            "over a white cotton tee, neat silver mustache, holding a small aluminum coffee cup"
         ),
     },
     "enzo": {
@@ -154,17 +170,21 @@ CAST_REGISTRY: Dict[str, Dict[str, str]] = {
         "hair_color": "#1e293b",
         "prop": "phone_sunglasses",
         "lock_3d": (
-            "dramatic goofy 22-year-old city young man named Enzo wearing a trendy oversized lavender hoodie, "
+            "dramatic goofy 22-year-old city young man wearing a trendy oversized lavender hoodie, "
             "dark sunglasses pushed up onto wavy dark hair, holding a smartphone tightly, wide comedic startled eyes"
         ),
         "lock_tv": (
             "expressive 22-year-old young Brazilian city guy wearing an oversized pastel purple sweatshirt with sunglasses "
             "pushed up onto curly dark hair, holding a modern smartphone, bewildered comical facial expression"
         ),
+        "veo_desc": (
+            "Enzo, a confused 22-year-old city nephew wearing an oversized lavender hoodie with sunglasses pushed up onto "
+            "dark curly hair, gripping his smartphone"
+        ),
     },
     "narrador": {
         "label": "Narrador",
-        "role": "Contador de causos do sertao",
+        "role": "Contador de causos do sertão",
         "voice": "pt-BR-ThalitaMultilingualNeural",
         "rate": "+6%",
         "pitch": "-2Hz",
@@ -177,11 +197,14 @@ CAST_REGISTRY: Dict[str, Dict[str, str]] = {
         "prop": "village_wide",
         "lock_3d": (
             "sunny colorful village cobblestone street corner outside a cozy wooden rustic countryside grocery shop "
-            "in Northeast Brazil with festive hanging colorful triangular flags and clay roof tiles, vibrant golden light, no text"
+            "in Northeast Brazil with festive hanging colorful triangular flags and clay roof tiles, golden light, no text"
         ),
         "lock_tv": (
             "wide 35mm golden hour exterior establishing frame of a charming rustic cobblestone sidewalk corner shop in "
-            "Northeast Brazil with warm painted walls, terracotta tiles, colorful wooden chairs on the porch, no text"
+            "Northeast Brazil with warm painted walls, terracotta tiles, wooden porch chairs, no text"
+        ),
+        "veo_desc": (
+            "A lively village observer on the sunlit Northeastern Brazilian cobblestone corner sidewalk with bystanders watching"
         ),
     },
 }
@@ -200,13 +223,75 @@ SPEAKER_ALIASES: Dict[str, str] = {
     "narradora": "narrador",
 }
 
-EMOTION_DIRECTIONS: Dict[str, Tuple[str, str]] = {
-    "shocked": ("eyes wide open, jaw dropped, hands raised in comical alarm", "shake"),
-    "confused": ("head tilted, squinting suspiciously, eyebrows knotted in puzzlement", "zoom_in"),
-    "laughing": ("bursting out laughing warmly, shoulders shaking joyfully", "whip_pan"),
-    "proud": ("chest puffed out, wise amused grin, wagging one finger playfully", "zoom_in"),
-    "dramatic": ("hand over chest in hilarious telenovela gasping dramatization", "dramatic_push"),
-    "warm": ("friendly welcoming smile, leaning forward mid-story", "zoom_in"),
+EMOTION_DIRECTIONS: Dict[str, Tuple[str, str, str]] = {
+    # (flux_desc, default_cam, veo_acting)
+    "shocked": (
+        "eyes wide open, jaw dropped, hands raised in comical disbelief",
+        "shake",
+        "widens eyes in shock, throws both hands up energetically",
+    ),
+    "confused": (
+        "head tilted, squinting suspiciously, eyebrows knotted in puzzlement",
+        "zoom_in",
+        "blinks rapidly, tilts head sideways squinting in baffled city-kid panic",
+    ),
+    "laughing": (
+        "bursting out laughing warmly, shoulders shaking joyfully",
+        "whip_pan",
+        "bursts into hearty amused laughter with a teasing wink",
+    ),
+    "proud": (
+        "chest puffed out, wise amused grin, wagging one finger playfully",
+        "zoom_in",
+        "leans forward with a proud knowing smirk wagging one finger playfully",
+    ),
+    "dramatic": (
+        "hand over chest in hilarious telenovela gasping dramatization",
+        "dramatic_push",
+        "puts hands on hips then dramatically gasps in pure soap-opera exaggeration",
+    ),
+    "warm": (
+        "friendly welcoming smile, leaning forward mid-story",
+        "zoom_in",
+        "smiles warmly nodding animatedly mid-conversation",
+    ),
+}
+
+SHOT_FRAMINGS: Dict[str, Dict[str, str]] = {
+    "over_shoulder": {
+        "label": "Plano · Over-the-Shoulder (Por cima do ombro)",
+        "lens_mm": "35mm",
+        "flux_cue": (
+            "cinematic over-the-shoulder medium close-up framing looking slightly past the blurred foreground shoulder edge "
+            "of another person on the lower-left frame, curious village onlookers softly out of focus behind"
+        ),
+        "veo_cue": (
+            "Over-the-shoulder medium close-up camera shot (35mm lens) looking past the foreground listener's shoulder, "
+            "background bystanders turning their heads subtly in reaction"
+        ),
+    },
+    "reverse_over_shoulder": {
+        "label": "Contraplano · Reverse Over-the-Shoulder",
+        "lens_mm": "35mm",
+        "flux_cue": (
+            "reverse-angle over-the-shoulder medium close-up framing facing the opposite angle, soft blurred shoulder corner "
+            "on lower-right foreground, character responding across the conversation"
+        ),
+        "veo_cue": (
+            "Reverse-angle over-the-shoulder medium close-up (35mm lens) cutting sharply from the opposite conversational perspective"
+        ),
+    },
+    "reaction_closeup": {
+        "label": "Close-Up · Reação Dramática",
+        "lens_mm": "50mm",
+        "flux_cue": (
+            "dramatic tight reaction close-up portrait framed from chest up, intense expressive face looking just off-lens, "
+            "50mm crisp shallow bokeh"
+        ),
+        "veo_cue": (
+            "Tight dramatic reaction close-up (50mm lens, shallow depth of field), sharp eye focus with natural handheld breathing"
+        ),
+    },
 }
 
 
@@ -223,12 +308,15 @@ class TurnCompiled:
     subtitle_text: str
     emotion: str
     camera_action: str
+    shot_framing: str
+    physical_action_en: str
     highlight_phrase: str
     audio_wav: Path
     speech_dur: float
     slot_start: float
     slot_dur: float
     shot_relpath: str
+    shot_abs_path: Path
     asset_source: str
 
 
@@ -244,8 +332,7 @@ def _normalize_speaker_key(raw: str) -> str:
         return "enzo"
     if "narr" in clean:
         return "narrador"
-    slug = re.sub(r"[^a-z0-9]+", "_", clean).strip("_") or "narrador"
-    return slug
+    return re.sub(r"[^a-z0-9]+", "_", clean).strip("_") or "narrador"
 
 
 def _get_character_spec(speaker_raw: str) -> Tuple[str, Dict[str, str]]:
@@ -255,13 +342,12 @@ def _get_character_spec(speaker_raw: str) -> Tuple[str, Dict[str, str]]:
         if key == "seu_bastiao":
             spec["label"] = "Seu Bastião"
         return key, spec
-    # Dynamic fallback cast member
     palette = [("#fb7185", "#ffffff"), ("#f97316", "#111827"), ("#22c55e", "#052e16")]
     bg, fg = palette[abs(hash(key)) % len(palette)]
     display = speaker_raw.strip() or "Personagem"
     return key, {
         "label": display,
-        "role": "Participacao especial",
+        "role": "Participação especial",
         "voice": "pt-BR-FranciscaNeural" if display.lower().endswith("a") else "pt-BR-AntonioNeural",
         "rate": "+8%",
         "pitch": "+0Hz",
@@ -272,9 +358,30 @@ def _get_character_spec(speaker_raw: str) -> Tuple[str, Dict[str, str]]:
         "skin_tone": "#d6a07a",
         "hair_color": "#1e293b",
         "prop": "none",
-        "lock_3d": f"friendly expressive Brazilian countryside resident named {display} smiling warmly on a village sidewalk",
+        "lock_3d": f"friendly expressive Brazilian countryside resident named {display} on a village sidewalk",
         "lock_tv": f"charismatic Brazilian town character named {display} outdoors in golden afternoon sunlight",
+        "veo_desc": f"{display}, a spirited Brazilian countryside character outdoors in warm natural daylight",
     }
+
+
+def _assign_shot_framing(
+    turn_idx: int,
+    raw_framing: str,
+    emotion: str,
+    prev_speaker: Optional[str],
+    cur_speaker: str,
+) -> str:
+    clean = (raw_framing or "").strip().lower()
+    if clean in SHOT_FRAMINGS:
+        return clean
+    if turn_idx == 0:
+        return "over_shoulder"
+    if emotion in ("dramatic", "shocked") and turn_idx >= 2:
+        return "reaction_closeup"
+    if prev_speaker and cur_speaker != prev_speaker:
+        return "reverse_over_shoulder" if (turn_idx % 2 == 1) else "over_shoulder"
+    cycle = ("over_shoulder", "reverse_over_shoulder", "reaction_closeup")
+    return cycle[turn_idx % len(cycle)]
 
 
 def _load_secrets_env() -> Dict[str, str]:
@@ -293,15 +400,18 @@ def _load_secrets_env() -> Dict[str, str]:
                 k = k.strip()
                 if k and k not in env_map:
                     env_map[k] = v.strip().strip("\"'")
-    vault_file = STUDIO_BASE / "media-control-panel/data/vault.json"
-    if vault_file.is_file():
-        try:
-            vault = json.loads(vault_file.read_text(encoding="utf-8"))
-            for k, val in vault.items():
-                if isinstance(val, str) and val.strip() and not env_map.get(k):
-                    env_map[k] = val.strip()
-        except Exception:
-            pass
+    for vault_file in (
+        STUDIO_BASE / "media-control-panel/vault.json",
+        STUDIO_BASE / "media-control-panel/data/vault.json",
+    ):
+        if vault_file.is_file():
+            try:
+                vault = json.loads(vault_file.read_text(encoding="utf-8"))
+                for k, val in vault.items():
+                    if isinstance(val, str) and val.strip() and not env_map.get(k):
+                        env_map[k] = val.strip()
+            except Exception:
+                pass
     return env_map
 
 
@@ -322,18 +432,34 @@ def _run_checked(cmd: List[str], cwd: Optional[Path] = None, timeout: int = 300)
     return proc.stdout
 
 
-def _probe_duration(media_path: Path) -> float:
+def _probe_media(media_path: Path) -> Dict[str, Any]:
     out = _run_checked([
         FFPROBE_BIN,
         "-v", "error",
-        "-show_entries", "format=duration",
-        "-of", "default=noprint_wrappers=1:nokey=1",
+        "-show_format",
+        "-show_streams",
+        "-of", "json",
         str(media_path),
-    ], timeout=20).strip()
-    try:
-        return max(0.4, float(out))
-    except ValueError:
-        return 2.0
+    ], timeout=25)
+    data = json.loads(out)
+    streams = data.get("streams") or []
+    v_stream = next((s for s in streams if s.get("codec_type") == "video"), None)
+    a_stream = next((s for s in streams if s.get("codec_type") == "audio"), None)
+    dur = float((data.get("format") or {}).get("duration") or 0.0)
+    if dur <= 0 and v_stream:
+        dur = float(v_stream.get("duration") or 0.0)
+    w = int(v_stream.get("width", 1080)) if v_stream else 1080
+    h = int(v_stream.get("height", 1920)) if v_stream else 1920
+    return {
+        "duration": max(0.3, dur),
+        "width": w + (w % 2),
+        "height": h + (h % 2),
+        "has_audio": a_stream is not None,
+    }
+
+
+def _probe_duration(media_path: Path) -> float:
+    return _probe_media(media_path)["duration"]
 
 
 def _synthesize_turn_audio(
@@ -343,10 +469,10 @@ def _synthesize_turn_audio(
     pitch: str,
     raw_mp3: Path,
     clean_wav: Path,
-    lead_pad: float = 0.05,
-    tail_pad: float = 0.22,
+    lead_pad: float = 0.03,
+    tail_pad: float = 0.09,
 ) -> float:
-    """Synthesize edge-tts voice clip and normalize into 48kHz stereo WAV with micro padding."""
+    """Synthesize edge-tts voice clip with rapid clean cinema padding into 48kHz stereo WAV."""
     clean_text = (tts_text or "...").strip()
     cmd = [
         EDGE_TTS_BIN,
@@ -368,8 +494,6 @@ def _synthesize_turn_audio(
     else:
         raise RuntimeError(f"edge-tts failed for '{clean_text[:40]}': {last_err}")
 
-    speech_dur = _probe_duration(raw_mp3)
-    # Trim ultra-long trailing silence softly if needed, keep crisp comedic pacing, encode 48kHz stereo PCM
     _run_checked([
         FFMPEG_BIN, "-y",
         "-f", "lavfi", "-t", f"{lead_pad:.3f}", "-i", "anullsrc=channel_layout=stereo:sample_rate=48000",
@@ -391,7 +515,7 @@ def _call_nvidia_flux_image(
     out_jpg: Path,
     model: str = "black-forest-labs/flux.1-dev",
 ) -> Tuple[bool, str]:
-    """Generate a vertical 9:16 portrait/scene image via NVIDIA NIM Flux API."""
+    """Generate a clean vertical 9:16 portrait/scene image via NVIDIA NIM Flux API."""
     if not api_key:
         return False, "no_nvidia_key"
     url = f"https://ai.api.nvidia.com/v1/genai/{model}"
@@ -412,7 +536,7 @@ def _call_nvidia_flux_image(
         method="POST",
     )
     try:
-        with urllib.request.urlopen(req, timeout=70) as resp:
+        with urllib.request.urlopen(req, timeout=75) as resp:
             data = json.loads(resp.read().decode("utf-8"))
         arts = data.get("artifacts") or []
         if not arts:
@@ -426,7 +550,6 @@ def _call_nvidia_flux_image(
             return False, f"tiny_image_{len(raw)}"
         tmp_raw = out_jpg.with_suffix(".raw.jpg")
         tmp_raw.write_bytes(raw)
-        # Upscale smoothly to exact 1080x1920 crisp portrait canvas for consistent Chromium compositing
         _run_checked([
             FFMPEG_BIN, "-y", "-i", str(tmp_raw),
             "-vf", "scale=1080:1920:force_original_aspect_ratio=increase:flags=lanczos,crop=1080:1920",
@@ -446,10 +569,11 @@ def _build_bespoke_svg_portrait(
     spec: Dict[str, str],
     visual_style: str,
     emotion: str,
-    setting: str,
+    shot_framing: str,
     out_svg: Path,
+    clean_no_text: bool = True,
 ) -> None:
-    """Bespoke multi-layered procedural vector stage artwork (guaranteed zero black-screen fallback)."""
+    """Clean procedural vector stage artwork (zero overlaid UI plaques when clean_no_text=True)."""
     is_3d = visual_style == "3d_cartoon"
     bg_top = "#0ea5e9" if is_3d else "#78350f"
     bg_mid = "#f59e0b" if is_3d else "#b45309"
@@ -457,34 +581,41 @@ def _build_bespoke_svg_portrait(
     shirt = spec.get("shirt_color", "#eab308")
     skin = spec.get("skin_tone", "#d8a47f")
     hair = spec.get("hair_color", "#94a3b8")
-    label = html.escape(spec.get("label", "Personagem"))
+
+    # Shift subject offset subtly by shot_framing to mimic Shot-Reverse-Shot angle
+    cx_shift = -48 if shot_framing == "over_shoulder" else (48 if shot_framing == "reverse_over_shoulder" else 0)
+    cx = 540 + cx_shift
 
     mouth_path = (
-        "M 480 835 Q 540 890 600 835" if emotion in ("laughing", "warm", "proud")
-        else "M 510 845 Q 540 875 570 845 Q 540 825 510 845" if emotion in ("shocked", "dramatic")
-        else "M 495 848 Q 540 830 585 852"
+        f"M {cx-60} 835 Q {cx} 890 {cx+60} 835" if emotion in ("laughing", "warm", "proud")
+        else f"M {cx-30} 845 Q {cx} 875 {cx+30} 845 Q {cx} 825 {cx-30} 845" if emotion in ("shocked", "dramatic")
+        else f"M {cx-45} 848 Q {cx} 830 {cx+45} 852"
     )
     prop_svg = ""
     if spec.get("prop") == "straw_hat":
         prop_svg = (
-            '<ellipse cx="540" cy="495" rx="260" ry="44" fill="#eab308" stroke="#92400e" stroke-width="8"/>'
-            '<path d="M 380 495 C 395 360 685 360 700 495 Z" fill="#facc15" stroke="#92400e" stroke-width="8"/>'
-            '<rect x="385" y="468" width="310" height="22" rx="8" fill="#b91c1c"/>'
+            f'<ellipse cx="{cx}" cy="495" rx="260" ry="44" fill="#eab308" stroke="#92400e" stroke-width="8"/>'
+            f'<path d="M {cx-160} 495 C {cx-145} 360 {cx+145} 360 {cx+160} 495 Z" fill="#facc15" stroke="#92400e" stroke-width="8"/>'
+            f'<rect x="{cx-155}" y="468" width="310" height="22" rx="8" fill="#b91c1c"/>'
         )
     elif spec.get("prop") == "glasses":
         prop_svg = (
-            '<circle cx="475" cy="705" r="46" fill="none" stroke="#451a03" stroke-width="10"/>'
-            '<circle cx="605" cy="705" r="46" fill="none" stroke="#451a03" stroke-width="10"/>'
-            '<line x1="521" y1="705" x2="559" y2="705" stroke="#451a03" stroke-width="10"/>'
+            f'<circle cx="{cx-65}" cy="705" r="46" fill="none" stroke="#451a03" stroke-width="10"/>'
+            f'<circle cx="{cx+65}" cy="705" r="46" fill="none" stroke="#451a03" stroke-width="10"/>'
+            f'<line x1="{cx-19}" y1="705" x2="{cx+19}" y2="705" stroke="#451a03" stroke-width="10"/>'
         )
     elif spec.get("prop") == "phone_sunglasses":
         prop_svg = (
-            '<rect x="440" y="545" width="84" height="36" rx="12" fill="#0f172a"/>'
-            '<rect x="556" y="545" width="84" height="36" rx="12" fill="#0f172a"/>'
-            '<line x1="524" y1="560" x2="556" y2="560" stroke="#0f172a" stroke-width="8"/>'
-            '<rect x="705" y="885" width="96" height="164" rx="16" fill="#0f172a" stroke="#c084fc" stroke-width="6"/>'
-            '<rect x="717" y="902" width="72" height="122" rx="8" fill="#38bdf8" opacity="0.75"/>'
+            f'<rect x="{cx-100}" y="545" width="84" height="36" rx="12" fill="#0f172a"/>'
+            f'<rect x="{cx+16}" y="545" width="84" height="36" rx="12" fill="#0f172a"/>'
+            f'<line x1="{cx-16}" y1="560" x2="{cx+16}" y2="560" stroke="#0f172a" stroke-width="8"/>'
         )
+
+    shoulder_fg = ""
+    if shot_framing == "over_shoulder":
+        shoulder_fg = '<ellipse cx="110" cy="1760" rx="290" ry="340" fill="#1e293b" opacity="0.65"/>'
+    elif shot_framing == "reverse_over_shoulder":
+        shoulder_fg = '<ellipse cx="970" cy="1760" rx="290" ry="340" fill="#334155" opacity="0.65"/>'
 
     svg = f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 1920" width="1080" height="1920">
   <defs>
@@ -500,97 +631,272 @@ def _build_bespoke_svg_portrait(
   </defs>
   <rect width="1080" height="1920" fill="url(#sky)"/>
   <circle cx="540" cy="600" r="560" fill="url(#sun)"/>
-  <!-- Bodega village architecture silhouette -->
   <rect x="40" y="390" width="320" height="900" rx="12" fill="#fed7aa" opacity="0.28"/>
   <rect x="720" y="350" width="320" height="940" rx="12" fill="#bae6fd" opacity="0.24"/>
   <path d="M 0 1240 L 1080 1240 L 1080 1920 L 0 1920 Z" fill="#292524" opacity="0.82"/>
-  <!-- Festive flags -->
-  <polygon points="100,260 155,260 128,315" fill="#ef4444"/>
-  <polygon points="210,275 265,275 238,330" fill="#fde047"/>
-  <polygon points="820,275 875,275 848,330" fill="#22c55e"/>
-  <polygon points="930,260 985,260 958,315" fill="#a855f7"/>
-  <!-- Character Shoulders -->
-  <path d="M 240 1320 C 260 1000 820 1000 840 1320 Z" fill="{shirt}" stroke="#0f172a" stroke-opacity="0.22" stroke-width="8"/>
-  <!-- Neck & Head -->
-  <rect x="485" y="885" width="110" height="140" rx="45" fill="{skin}"/>
-  <circle cx="540" cy="700" r="185" fill="{skin}" stroke="#0f172a" stroke-opacity="0.16" stroke-width="6"/>
-  <!-- Hair -->
-  <path d="M 355 660 C 370 475 710 475 725 660 C 660 580 420 580 355 660 Z" fill="{hair}"/>
-  <!-- Eyes -->
-  <circle cx="475" cy="700" r="24" fill="#ffffff"/>
-  <circle cx="605" cy="700" r="24" fill="#ffffff"/>
-  <circle cx="478" cy="702" r="12" fill="#0f172a"/>
-  <circle cx="608" cy="702" r="12" fill="#0f172a"/>
-  <!-- Eyebrows -->
-  <path d="M 432 648 Q 475 628 518 648" stroke="#1e293b" stroke-width="11" fill="none" stroke-linecap="round"/>
-  <path d="M 562 648 Q 605 628 648 648" stroke="#1e293b" stroke-width="11" fill="none" stroke-linecap="round"/>
-  <!-- Nose & Mouth -->
-  <path d="M 540 718 Q 560 760 532 778" stroke="#9a5c3c" stroke-width="8" fill="none" stroke-linecap="round"/>
+  <path d="M {cx-300} 1340 C {cx-280} 1000 {cx+280} 1000 {cx+300} 1340 Z" fill="{shirt}" stroke="#0f172a" stroke-opacity="0.22" stroke-width="8"/>
+  <rect x="{cx-55}" y="885" width="110" height="140" rx="45" fill="{skin}"/>
+  <circle cx="{cx}" cy="700" r="185" fill="{skin}" stroke="#0f172a" stroke-opacity="0.16" stroke-width="6"/>
+  <path d="M {cx-185} 660 C {cx-170} 475 {cx+170} 475 {cx+185} 660 C {cx+120} 580 {cx-120} 580 {cx-185} 660 Z" fill="{hair}"/>
+  <circle cx="{cx-65}" cy="700" r="24" fill="#ffffff"/>
+  <circle cx="{cx+65}" cy="700" r="24" fill="#ffffff"/>
+  <circle cx="{cx-62}" cy="702" r="12" fill="#0f172a"/>
+  <circle cx="{cx+68}" cy="702" r="12" fill="#0f172a"/>
+  <path d="M {cx-108} 648 Q {cx-65} 628 {cx-22} 648" stroke="#1e293b" stroke-width="11" fill="none" stroke-linecap="round"/>
+  <path d="M {cx+22} 648 Q {cx+65} 628 {cx+108} 648" stroke="#1e293b" stroke-width="11" fill="none" stroke-linecap="round"/>
+  <path d="M {cx} 718 Q {cx+20} 760 {cx-8} 778" stroke="#9a5c3c" stroke-width="8" fill="none" stroke-linecap="round"/>
   <path d="{mouth_path}" stroke="#7f1d1d" stroke-width="11" fill="#ef4444" stroke-linecap="round"/>
   {prop_svg}
-  <rect x="340" y="1350" width="400" height="58" rx="29" fill="#000000" opacity="0.45"/>
-  <text x="540" y="1390" font-family="sans-serif" font-size="28" font-weight="800" fill="#ffffff" text-anchor="middle">{label}</text>
+  {shoulder_fg}
 </svg>'''
     out_svg.write_text(svg, encoding="utf-8")
+
+
+def _svg_to_clean_jpg(svg_path: Path, jpg_path: Path) -> None:
+    _run_checked([
+        FFMPEG_BIN, "-y",
+        "-i", str(svg_path),
+        "-vf", "scale=1080:1920",
+        "-q:v", "2",
+        str(jpg_path),
+    ], timeout=25)
 
 
 def _resolve_turn_visual(
     speaker_key: str,
     spec: Dict[str, str],
     emotion: str,
+    shot_framing: str,
+    physical_action_en: str,
     visual_style: str,
     setting: str,
     assets_dir: Path,
     turn_idx: int,
     env_map: Dict[str, str],
-    shot_cache: Dict[Tuple[str, str, str], Tuple[Path, str]],
-) -> Tuple[str, str]:
-    """Return relative asset path (inside HTML composition) + provenance label.
-
-    Uses Character Lock + emotion cache per episode so recurring speakers share consistent identity
-    or show varied emotion expressions without wasteful duplicate API calls.
-    """
+    shot_cache: Dict[Tuple[str, str, str, str], Tuple[Path, str]],
+    target_filename: Optional[str] = None,
+    force_jpg: bool = False,
+) -> Tuple[Path, str, str]:
+    """Generate/resolve a clean 1080x1920 Shot-Reverse-Shot portrait image for one turn."""
     is_3d = visual_style == "3d_cartoon"
     emo_bucket = "shocked" if emotion in ("shocked", "confused", "dramatic") else "warm"
-    cache_key = (speaker_key, emo_bucket, visual_style)
+    cache_key = (speaker_key, emo_bucket, visual_style, shot_framing)
 
+    base_name = target_filename or f"shot_{turn_idx}.jpg"
     if cache_key in shot_cache:
         src_path, prov = shot_cache[cache_key]
-        dst = assets_dir / f"shot_{turn_idx}{src_path.suffix}"
-        shutil.copy2(src_path, dst)
-        return f"assets/{dst.name}", prov
+        suffix = ".jpg" if force_jpg else src_path.suffix
+        dst = assets_dir / Path(base_name).with_suffix(suffix).name
+        if src_path.suffix == ".svg" and force_jpg:
+            _svg_to_clean_jpg(src_path, dst)
+        else:
+            shutil.copy2(src_path, dst)
+        return dst, f"assets/{dst.name}", prov
 
     style_prefix = (
-        "Stylized 3D animated CG character art, smooth sculpted stylized features, expressive comedy cartoon eyes, "
-        "soft warm subsurface scattering rim light, rich saturated colors, no text, no watermark"
+        "Stylized 3D animated CG feature-film frame, sculpted stylized characters, expressive comedy cartoon eyes, "
+        "soft warm subsurface scattering rim light, rich saturated colors, no text, no subtitles, no watermark"
         if is_3d
-        else "Cinematic 35mm Brazilian television telenovela film still, realistic expressive acting, "
-             "shallow depth of field f/1.8 bokeh, golden hour natural sunlight, rich color grading, no text, no watermark"
+        else "Cinematic 35mm live-action Brazilian television telenovela still frame, realistic expressive acting, "
+             "shallow depth of field f/1.8 bokeh, golden hour natural sunlight, rich color grading, no text, no subtitles, no watermark"
     )
     char_lock = spec["lock_3d"] if is_3d else spec["lock_tv"]
-    emo_desc, _ = EMOTION_DIRECTIONS.get(emotion, EMOTION_DIRECTIONS["warm"])
-    prompt = f"{style_prefix}. {char_lock}, {emo_desc}. Background setting: {setting}, vertical 9:16 medium shot."
+    emo_desc, _, _ = EMOTION_DIRECTIONS.get(emotion, EMOTION_DIRECTIONS["warm"])
+    framing_meta = SHOT_FRAMINGS.get(shot_framing, SHOT_FRAMINGS["over_shoulder"])
+    action_clause = f", {physical_action_en}" if physical_action_en else ""
+    prompt = (
+        f"{style_prefix}. {framing_meta['flux_cue'].format(speaker_en=spec['label'])}. "
+        f"{char_lock}, {emo_desc}{action_clause}. Background setting: {setting}, vertical 9:16 portrait composition."
+    )
 
     nv_key = env_map.get("NVIDIA_API_KEY") or env_map.get("NIM_API_KEY") or ""
-    out_jpg = assets_dir / f"shot_{turn_idx}.jpg"
+    out_jpg = assets_dir / Path(base_name).with_suffix(".jpg").name
     ok, prov = _call_nvidia_flux_image(prompt, nv_key, out_jpg, "black-forest-labs/flux.1-dev")
     if not ok and prov == "content_filtered":
-        # Safe rephrased retry without age/regional edge tokens
         safe_prompt = (
-            f"{style_prefix}. Friendly cheerful Brazilian comedian character wearing {spec.get('shirt_color', 'colorful')} outfit, "
-            f"{emo_desc}, sunny rustic corner store village porch backdrop, vertical 9:16 portrait."
+            f"{style_prefix}. Over-the-shoulder vertical 9:16 cinema shot of cheerful Brazilian comedian character wearing "
+            f"{spec.get('shirt_color', 'colorful')} outfit, {emo_desc}, sunny village corner shop street background."
         )
         ok, prov = _call_nvidia_flux_image(safe_prompt, nv_key, out_jpg, "black-forest-labs/flux.1-dev")
 
     if ok and out_jpg.exists():
         shot_cache[cache_key] = (out_jpg, f"nvidia:{prov}")
-        return f"assets/{out_jpg.name}", f"nvidia:{prov}"
+        return out_jpg, f"assets/{out_jpg.name}", f"nvidia:{prov}"
 
-    # Deterministic illustrated SVG fallback (zero crashes, zero black screen)
-    out_svg = assets_dir / f"shot_{turn_idx}.svg"
-    _build_bespoke_svg_portrait(speaker_key, spec, visual_style, emotion, setting, out_svg)
+    # Deterministic clean vector artwork fallback
+    out_svg = assets_dir / Path(base_name).with_suffix(".svg").name
+    _build_bespoke_svg_portrait(speaker_key, spec, visual_style, emotion, shot_framing, out_svg, clean_no_text=True)
+    if force_jpg:
+        try:
+            _svg_to_clean_jpg(out_svg, out_jpg)
+            out_svg.unlink(missing_ok=True)
+            shot_cache[cache_key] = (out_jpg, f"svg_jpg_fallback:{prov}")
+            return out_jpg, f"assets/{out_jpg.name}", f"svg_jpg_fallback:{prov}"
+        except Exception:
+            pass
     shot_cache[cache_key] = (out_svg, f"svg_fallback:{prov}")
-    return f"assets/{out_svg.name}", f"svg_fallback:{prov}"
+    return out_svg, f"assets/{out_svg.name}", f"svg_fallback:{prov}"
+
+
+def build_veo_take_prompt(
+    speaker_spec: Dict[str, str],
+    tts_text: str,
+    visual_style: str,
+    shot_framing: str,
+    emotion: str,
+    physical_action_en: str,
+    setting: str,
+) -> str:
+    """Compose bilingual Veo 3.1 technical camera + acting prompt with exact Portuguese line."""
+    is_3d = visual_style == "3d_cartoon"
+    style_desc = (
+        "Stylized 3D animated CG comedy film shot, sculpted expressive character lighting, rich colors"
+        if is_3d
+        else "Cinematic 35mm live-action Brazilian telenovela shot, natural golden-hour daylight"
+    )
+    framing_cue = SHOT_FRAMINGS.get(shot_framing, SHOT_FRAMINGS["over_shoulder"])["veo_cue"]
+    _, _, default_acting = EMOTION_DIRECTIONS.get(emotion, EMOTION_DIRECTIONS["warm"])
+    acting_en = (physical_action_en or "").strip() or default_acting
+    veo_char = speaker_spec.get("veo_desc") or speaker_spec.get("lock_tv") or speaker_spec["label"]
+    clean_speech = tts_text.replace('"', "'").strip()
+    return (
+        f"{style_desc}, set on a {setting}. {framing_cue}. "
+        f"{veo_char}, {acting_en}, and speaks energetically in Brazilian Portuguese with a strong Northeastern accent: "
+        f"\"{clean_speech}\" "
+        f"Natural subtle handheld camera motion, authentic facial lip-sync and expressive gestures. "
+        f"No subtitles, no text overlay, no watermarks, realistic lip-sync speech in Brazilian Portuguese."
+    )
+
+
+def generate_flow_veo_pack(cfg: Dict[str, Any]) -> Dict[str, Any]:
+    """Generate Google Flow Veo 3.1 Production Pack (clean 1080x1920 Ingredients + bilingual prompts + credit math)."""
+    t_start = time.time()
+    visual_style = str(cfg.get("visual_style") or "3d_cartoon").strip().lower()
+    if visual_style not in ("3d_cartoon", "cinematic_tv"):
+        visual_style = "3d_cartoon"
+
+    raw_dialogue: List[Dict[str, Any]] = list(cfg.get("dialogue") or [])
+    if not raw_dialogue:
+        raise ValueError("Campo 'dialogue' vazio: informe ao menos 1 fala para gerar o Pack Veo 3.1.")
+
+    title = str(cfg.get("title") or "Causos do Sertão — Episódio 01").strip()
+    setting = str(
+        cfg.get("setting")
+        or "sunny rustic cobblestone sidewalk outside a colorful small countryside corner shop in Northeast Brazil with festive flags and bystanders watching"
+    ).strip()
+
+    pack_id = f"flow_{int(time.time())}_{uuid.uuid4().hex[:6]}"
+    pack_dir = Path(cfg.get("pack_dir") or (FLOW_PACKS_DIR / pack_id))
+    pack_dir.mkdir(parents=True, exist_ok=True)
+
+    env_map = _load_secrets_env()
+    shot_cache: Dict[Tuple[str, str, str, str], Tuple[Path, str]] = {}
+    takes: List[Dict[str, Any]] = []
+    prev_speaker: Optional[str] = None
+
+    for idx, raw_turn in enumerate(raw_dialogue):
+        spk_raw = str(raw_turn.get("speaker") or "Narrador")
+        spk_key, spec = _get_character_spec(spk_raw)
+        subtitle_text = str(raw_turn.get("subtitle_text") or raw_turn.get("text") or "").strip()
+        tts_text = str(raw_turn.get("tts_text") or subtitle_text).strip()
+        if not tts_text:
+            continue
+        if not subtitle_text:
+            subtitle_text = tts_text
+
+        emotion = str(raw_turn.get("emotion") or "warm").strip().lower()
+        shot_framing = _assign_shot_framing(
+            idx,
+            str(raw_turn.get("shot_framing") or ""),
+            emotion,
+            prev_speaker,
+            spk_key,
+        )
+        physical_action_en = str(raw_turn.get("physical_action_en") or "").strip()
+
+        ing_name = f"ingredient_take_{idx + 1:02d}.jpg"
+        ing_path, _, prov = _resolve_turn_visual(
+            speaker_key=spk_key,
+            spec=spec,
+            emotion=emotion,
+            shot_framing=shot_framing,
+            physical_action_en=physical_action_en,
+            visual_style=visual_style,
+            setting=setting,
+            assets_dir=pack_dir,
+            turn_idx=idx,
+            env_map=env_map,
+            shot_cache=shot_cache,
+            target_filename=ing_name,
+            force_jpg=True,
+        )
+
+        veo_prompt = build_veo_take_prompt(
+            speaker_spec=spec,
+            tts_text=tts_text,
+            visual_style=visual_style,
+            shot_framing=shot_framing,
+            emotion=emotion,
+            physical_action_en=physical_action_en,
+            setting=setting,
+        )
+        words_cnt = max(2, len(tts_text.split()))
+        est_sec = max(4, min(8, round(words_cnt / 2.3) + 2))
+        framing_meta = SHOT_FRAMINGS[shot_framing]
+
+        # Download relative path inside NOVELA_EXPORT_DIR (`exports/novela/...`)
+        try:
+            rel_inside_novela = ing_path.resolve().relative_to(NOVELA_EXPORT_DIR.resolve()).as_posix()
+        except Exception:
+            rel_inside_novela = f"flow_packs/{pack_id}/{ing_path.name}"
+
+        from urllib.parse import quote
+        q_rel = quote(rel_inside_novela, safe="")
+        takes.append({
+            "take_number": idx + 1,
+            "speaker": spec["label"],
+            "speaker_key": spk_key,
+            "badge_bg": spec["badge_bg"],
+            "emotion": emotion,
+            "shot_framing": shot_framing,
+            "shot_framing_label": framing_meta["label"],
+            "lens_mm": framing_meta["lens_mm"],
+            "estimated_duration_sec": est_sec,
+            "tts_text": tts_text,
+            "subtitle_text": subtitle_text,
+            "veo_prompt": veo_prompt,
+            "ingredient_filename": ing_path.name,
+            "ingredient_path": str(ing_path),
+            "ingredient_relpath": rel_inside_novela,
+            "ingredient_url": f"/api/outputs/download?stack=novela&root_idx=0&relpath={q_rel}&inline=1",
+            "ingredient_download_url": f"/api/outputs/download?stack=novela&root_idx=0&relpath={q_rel}",
+            "asset_source": prov,
+            "credits_veo_lite": 10,
+            "credits_veo_fast": 20,
+        })
+        prev_speaker = spk_key
+
+    if not takes:
+        raise ValueError("Nenhum take válido encontrado para o Pack Veo 3.1.")
+
+    num_takes = len(takes)
+    manifest = {
+        "ok": True,
+        "pack_id": pack_id,
+        "title": title,
+        "visual_style": visual_style,
+        "setting": setting,
+        "total_takes": num_takes,
+        "credit_unit_lite": 10,
+        "credit_unit_fast": 20,
+        "total_credits_lite": 10 * num_takes,
+        "total_credits_fast": 20 * num_takes,
+        "total_estimated_duration_sec": sum(t["estimated_duration_sec"] for t in takes),
+        "takes": takes,
+        "elapsed_sec": round(time.time() - t_start, 2),
+    }
+    (pack_dir / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+    return manifest
 
 
 def _build_master_audio_mix(
@@ -599,23 +905,23 @@ def _build_master_audio_mix(
     freeze_dur: float,
     total_dur: float,
     work_dir: Path,
+    include_freeze_sting: bool = True,
 ) -> Path:
-    """Concatenate per-turn speech on timeline + layer synthesized comedy turn pops & cliffhanger sting."""
+    """Concatenate per-turn speech + subtle scene cut pops normalized to 48kHz Stereo SoXR loudnorm."""
     raw_voice_track = work_dir / "voice_concat.wav"
     concat_list = work_dir / "voice_concat.txt"
-    lines = []
-    for t in turns:
-        lines.append(f"file '{t.audio_wav}'")
-    # Append trailing silence covering the 3.5s cliffhanger freeze-frame
-    freeze_sil = work_dir / "freeze_sil.wav"
-    _run_checked([
-        FFMPEG_BIN, "-y",
-        "-f", "lavfi", "-t", f"{freeze_dur:.3f}",
-        "-i", "anullsrc=channel_layout=stereo:sample_rate=48000",
-        "-c:a", "pcm_s16le",
-        str(freeze_sil),
-    ], timeout=20)
-    lines.append(f"file '{freeze_sil}'")
+    lines = [f"file '{t.audio_wav}'" for t in turns]
+
+    if freeze_dur > 0:
+        freeze_sil = work_dir / "freeze_sil.wav"
+        _run_checked([
+            FFMPEG_BIN, "-y",
+            "-f", "lavfi", "-t", f"{freeze_dur:.3f}",
+            "-i", "anullsrc=channel_layout=stereo:sample_rate=48000",
+            "-c:a", "pcm_s16le",
+            str(freeze_sil),
+        ], timeout=20)
+        lines.append(f"file '{freeze_sil}'")
     concat_list.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
     _run_checked([
@@ -625,51 +931,46 @@ def _build_master_audio_mix(
         str(raw_voice_track),
     ], timeout=60)
 
-    # Synthesize 2 lightweight playful SFX assets offline via ffmpeg lavfi
     pop_sfx = work_dir / "sfx_pop.wav"
-    sting_sfx = work_dir / "sfx_novela_sting.wav"
     _run_checked([
         FFMPEG_BIN, "-y",
-        "-f", "lavfi", "-t", "0.14",
-        "-i", "aevalsrc=0.14*sin(2*PI*(520+1600*t)*t)*exp(-22*t):s=48000:c=stereo",
+        "-f", "lavfi", "-t", "0.10",
+        "-i", "aevalsrc=0.10*sin(2*PI*(480+1400*t)*t)*exp(-28*t):s=48000:c=stereo",
         "-c:a", "pcm_s16le",
         str(pop_sfx),
     ], timeout=20)
 
-    # Dramatic comedic telenovela suspense triad chord (A minor / E7 comedic cliffhanger swell)
-    _run_checked([
-        FFMPEG_BIN, "-y",
-        "-f", "lavfi", "-t", f"{max(1.8, freeze_dur - 0.1):.3f}",
-        "-i", "aevalsrc=0.18*(0.55*sin(2*PI*220*t)+0.40*sin(2*PI*261.63*t)+0.35*sin(2*PI*329.63*t)+0.25*sin(2*PI*440*t))*(1-exp(-12*t))*exp(-0.55*t):s=48000:c=stereo",
-        "-af", f"afade=t=in:st=0:d=0.05,afade=t=out:st={max(1.0, freeze_dur - 1.2):.2f}:d=1.0",
-        "-c:a", "pcm_s16le",
-        str(sting_sfx),
-    ], timeout=20)
-
-    # Layer subtle turn transition pops + cliffhanger sting onto voice track & normalize 48kHz Stereo SoXR
     filter_inputs: List[str] = ["-i", str(raw_voice_track)]
     filter_parts: List[str] = ["[0:a]aresample=48000:resampler=soxr,volume=1.0[vtrack]"]
     mix_labels: List[str] = ["[vtrack]"]
     in_idx = 1
 
-    # Add subtle pop on character switches (skip t=0)
     prev_speaker = None
     for t in turns:
         if prev_speaker is not None and t.speaker_key != prev_speaker:
             delay_ms = max(0, int(round(t.slot_start * 1000)))
             filter_inputs.extend(["-i", str(pop_sfx)])
             lbl = f"[pop{in_idx}]"
-            filter_parts.append(f"[{in_idx}:a]volume=0.22,adelay={delay_ms}|{delay_ms}{lbl}")
+            filter_parts.append(f"[{in_idx}:a]volume=0.16,adelay={delay_ms}|{delay_ms}{lbl}")
             mix_labels.append(lbl)
             in_idx += 1
         prev_speaker = t.speaker_key
 
-    # Add dramatic cliffhanger novela sting at freeze_start
-    freeze_ms = max(0, int(round(freeze_start * 1000)))
-    filter_inputs.extend(["-i", str(sting_sfx)])
-    sting_lbl = f"[sting{in_idx}]"
-    filter_parts.append(f"[{in_idx}:a]volume=0.52,adelay={freeze_ms}|{freeze_ms}{sting_lbl}")
-    mix_labels.append(sting_lbl)
+    if include_freeze_sting and freeze_dur >= 1.5:
+        sting_sfx = work_dir / "sfx_novela_sting.wav"
+        _run_checked([
+            FFMPEG_BIN, "-y",
+            "-f", "lavfi", "-t", f"{max(1.5, freeze_dur - 0.1):.3f}",
+            "-i", "aevalsrc=0.18*(0.55*sin(2*PI*220*t)+0.40*sin(2*PI*261.63*t)+0.35*sin(2*PI*329.63*t)+0.25*sin(2*PI*440*t))*(1-exp(-12*t))*exp(-0.55*t):s=48000:c=stereo",
+            "-af", f"afade=t=in:st=0:d=0.05,afade=t=out:st={max(0.8, freeze_dur - 1.2):.2f}:d=1.0",
+            "-c:a", "pcm_s16le",
+            str(sting_sfx),
+        ], timeout=20)
+        freeze_ms = max(0, int(round(freeze_start * 1000)))
+        filter_inputs.extend(["-i", str(sting_sfx)])
+        sting_lbl = f"[sting{in_idx}]"
+        filter_parts.append(f"[{in_idx}:a]volume=0.48,adelay={freeze_ms}|{freeze_ms}{sting_lbl}")
+        mix_labels.append(sting_lbl)
 
     filter_parts.append(
         f"{''.join(mix_labels)}amix=inputs={len(mix_labels)}:duration=first:normalize=0,"
@@ -698,7 +999,7 @@ def _format_subtitle_html(text: str, highlight: str, accent_color: str) -> str:
     pattern = re.compile(re.escape(target), re.IGNORECASE)
     if pattern.search(safe_txt):
         return pattern.sub(
-            lambda m: f'<span class="kw-pop" style="color:{accent_color};text-shadow:0 3px 16px rgba(0,0,0,0.95)">{m.group(0)}</span>',
+            lambda m: f'<span class="kw-pop" style="color:{accent_color}">{m.group(0)}</span>',
             safe_txt,
             count=1,
         )
@@ -713,9 +1014,12 @@ def _build_hyperframes_html(
     total_dur: float,
     safe_zone: Dict[str, Any],
     visual_style: str,
+    clean_cinema_mode: bool,
+    subtitles_mode: str,
+    include_dictionary_endcard: bool,
     work_dir: Path,
 ) -> Path:
-    """Generate HyperFrames compliant index.html + gsap timeline animations."""
+    """Generate HyperFrames compliant index.html in Clean Cinema (100% full-bleed) or Classic Card mode."""
     assets_dir = work_dir / "assets"
     assets_dir.mkdir(parents=True, exist_ok=True)
     if GSAP_VENDOR.is_file():
@@ -724,17 +1028,14 @@ def _build_hyperframes_html(
     title = html.escape(str(cfg.get("title") or "Causos do Sertão — Episódio 01"))
     ep_badge = html.escape(str(cfg.get("episode_badge") or "🌵 NOVELINHA DO SERTÃO • EP. 01"))
     style_tag = "🎨 3D CARTOON" if visual_style == "3d_cartoon" else "🎬 NOVELA TV"
-    dictionary_items: List[Dict[str, str]] = list(cfg.get("dictionary") or [])
-    if not dictionary_items:
-        dictionary_items = [
-            {"term": "OXENTE!", "meaning": "Expressão de espanto, surpresa ou indignação"},
-            {"term": "BOTAR BONECO", "meaning": "Fazer drama, escândalo ou manha sem necessidade"},
-        ]
+    dictionary_items: List[Dict[str, str]] = list(cfg.get("dictionary") or []) or [
+        {"term": "OXENTE!", "meaning": "Expressão de espanto, surpresa ou indignação"},
+        {"term": "BOTAR BONECO", "meaning": "Fazer drama, escândalo ou manha sem necessidade"},
+    ]
 
     safe_top = int(safe_zone["safe_top"])
     safe_bottom = int(safe_zone["safe_bottom"])
     safe_left = int(safe_zone["safe_left"])
-    # Margin right keeps badges/cards clear of TikTok/Reels/Shopee sidebar icons (X >= 900)
     right_inset = max(72, 1080 - int(safe_zone["safe_right"]))
     caption_bottom_offset = 1920 - safe_bottom
 
@@ -747,40 +1048,49 @@ def _build_hyperframes_html(
         card_id = f"card-{t.index}"
         badge_id = f"badge-{t.index}"
         react_id = f"react-{t.index}"
-        sub_html = _format_subtitle_html(t.subtitle_text, t.highlight_phrase, t.accent)
+        sub_html = _format_subtitle_html(t.subtitle_text, t.highlight_phrase, "#fde047" if clean_cinema_mode else t.accent)
 
-        # Pick reaction sticker text for emotional peaks
-        sticker = html.escape((t.highlight_phrase or "").upper()[:26]) if t.highlight_phrase else ""
-        sticker_html = (
-            f'<div id="{react_id}" class="reaction-pill" style="background:{t.badge_bg};color:{t.badge_fg}">⚡ {sticker}!</div>'
-            if sticker
-            else f'<div id="{react_id}" class="reaction-pill" style="opacity:0"></div>'
-        )
-
-        # Pure CSS color overlay on top (NO CSS filter to obey HyperFrames media/render contract)
-        tint_class = "tv-film-grade" if visual_style == "cinematic_tv" else "cartoon-vibrant-grade"
-
-        scenes_html.append(f"""
+        if clean_cinema_mode:
+            # CLEAN CINEMA MODE: 100% full-bleed image, NO dialog boxes, NO top ribbons, NO badges!
+            minimal_cap_html = (
+                f'<div id="{card_id}" class="minimal-caption-wrap" style="left:{safe_left}px;right:{right_inset}px;bottom:{caption_bottom_offset + 12}px;">'
+                f'  <div class="minimal-caption-text">{sub_html}</div>'
+                f'</div>'
+                if subtitles_mode == "minimal"
+                else ""
+            )
+            scenes_html.append(f"""
+        <div id="{sid}" class="clip scene-panel" data-start="{t.slot_start:.3f}" data-duration="{t.slot_dur:.3f}" data-track-index="1" style="z-index:{10 + t.index};">
+          <div id="{shot_id}" class="cam-layer">
+            <img src="{t.shot_relpath}" alt="{html.escape(t.speaker_label)}" class="portrait-img" />
+          </div>
+          {minimal_cap_html}
+        </div>""")
+        else:
+            sticker = html.escape((t.highlight_phrase or "").upper()[:26]) if t.highlight_phrase else ""
+            sticker_html = (
+                f'<div id="{react_id}" class="reaction-pill" style="background:{t.badge_bg};color:{t.badge_fg}">⚡ {sticker}!</div>'
+                if sticker
+                else f'<div id="{react_id}" class="reaction-pill" style="opacity:0"></div>'
+            )
+            tint_class = "tv-film-grade" if visual_style == "cinematic_tv" else "cartoon-vibrant-grade"
+            scenes_html.append(f"""
         <div id="{sid}" class="clip scene-panel" data-start="{t.slot_start:.3f}" data-duration="{t.slot_dur:.3f}" data-track-index="1" style="z-index:{10 + t.index};">
           <div id="{shot_id}" class="cam-layer">
             <img src="{t.shot_relpath}" alt="{html.escape(t.speaker_label)}" class="portrait-img" />
             <div class="{tint_class}"></div>
             <div class="vignette-overlay"></div>
           </div>
-
           <div class="top-ribbon" style="top:{safe_top}px;left:{safe_left}px;right:{right_inset}px;">
             <span class="ep-pill">{ep_badge}</span>
             <span class="style-pill">{style_tag}</span>
           </div>
-
           <div style="position:absolute;top:{safe_top + 68}px;left:{safe_left}px;right:{right_inset}px;">
             <div class="ep-title-bar">{title}</div>
           </div>
-
           <div style="position:absolute;top:{safe_top + 148}px;right:{right_inset}px;">
             {sticker_html}
           </div>
-
           <div class="lower-safe-stack" style="left:{safe_left}px;right:{right_inset}px;bottom:{caption_bottom_offset}px;">
             <div id="{badge_id}" class="speaker-row">
               <span class="speaker-pill" style="background:{t.badge_bg};color:{t.badge_fg};">
@@ -794,54 +1104,61 @@ def _build_hyperframes_html(
           </div>
         </div>""")
 
-        # GSAP choreography anchored cleanly to timeline time `t.slot_start`
         ts = t.slot_start
         sd = max(0.5, t.slot_dur)
+        # Organic handheld shot-reverse-shot motion
         if t.camera_action == "shake":
             gsap_steps.append(
                 f'tl.fromTo("#{shot_id}", {{scale:1.03, x:0, rotation:0}}, '
-                f'{{scale:1.10, x:-14, rotation:-1.2, duration:0.09, repeat:3, yoyo:true, ease:"power2.inOut"}}, {ts:.3f});'
-                f'tl.to("#{shot_id}", {{scale:1.12, x:0, rotation:0, duration:{max(0.4, sd-0.38):.3f}, ease:"none"}}, {ts+0.36:.3f});'
+                f'{{scale:1.09, x:-10, rotation:-0.8, duration:0.08, repeat:3, yoyo:true, ease:"power2.inOut"}}, {ts:.3f});'
+                f'tl.to("#{shot_id}", {{scale:1.11, x:0, rotation:0, duration:{max(0.3, sd-0.34):.3f}, ease:"none"}}, {ts+0.32:.3f});'
             )
         elif t.camera_action == "whip_pan":
             gsap_steps.append(
-                f'tl.fromTo("#{shot_id}", {{x:85, scale:1.10}}, {{x:0, scale:1.04, duration:0.26, ease:"power3.out"}}, {ts:.3f});'
-                f'tl.to("#{shot_id}", {{scale:1.11, duration:{max(0.3, sd-0.26):.3f}, ease:"none"}}, {ts+0.26:.3f});'
+                f'tl.fromTo("#{shot_id}", {{x:55, scale:1.08}}, {{x:0, scale:1.03, duration:0.20, ease:"power3.out"}}, {ts:.3f});'
+                f'tl.to("#{shot_id}", {{scale:1.09, duration:{max(0.25, sd-0.20):.3f}, ease:"none"}}, {ts+0.20:.3f});'
             )
         elif t.camera_action == "dramatic_push":
             gsap_steps.append(
-                f'tl.fromTo("#{shot_id}", {{scale:1.0}}, {{scale:1.16, duration:{sd:.3f}, ease:"power1.in"}}, {ts:.3f});'
+                f'tl.fromTo("#{shot_id}", {{scale:1.0}}, {{scale:1.14, duration:{sd:.3f}, ease:"power1.in"}}, {ts:.3f});'
             )
         else:
+            x_pan = -12 if t.shot_framing == "over_shoulder" else 12
             gsap_steps.append(
-                f'tl.fromTo("#{shot_id}", {{scale:1.01, y:8}}, {{scale:1.10, y:-8, duration:{sd:.3f}, ease:"none"}}, {ts:.3f});'
+                f'tl.fromTo("#{shot_id}", {{scale:1.02, x:{x_pan}, y:5}}, {{scale:1.09, x:0, y:-5, duration:{sd:.3f}, ease:"none"}}, {ts:.3f});'
             )
 
-        gsap_steps.append(
-            f'tl.fromTo("#{badge_id}", {{x:-40, opacity:0}}, {{x:0, opacity:1, duration:0.22, ease:"back.out(1.7)"}}, {ts:.3f});'
-            f'tl.fromTo("#{card_id}", {{y:28, opacity:0, scale:0.96}}, {{y:0, opacity:1, scale:1, duration:0.24, ease:"power3.out"}}, {ts+0.03:.3f});'
-        )
-        if sticker:
+        if clean_cinema_mode:
+            if subtitles_mode == "minimal":
+                gsap_steps.append(
+                    f'tl.fromTo("#{card_id}", {{y:14, opacity:0}}, {{y:0, opacity:1, duration:0.16, ease:"power2.out"}}, {ts:.3f});'
+                )
+        else:
             gsap_steps.append(
-                f'tl.fromTo("#{react_id}", {{scale:0.3, rotation:-12, opacity:0}}, '
-                f'{{scale:1, rotation:-4, opacity:1, duration:0.28, ease:"back.out(2.1)"}}, {ts+0.12:.3f});'
+                f'tl.fromTo("#{badge_id}", {{x:-40, opacity:0}}, {{x:0, opacity:1, duration:0.22, ease:"back.out(1.7)"}}, {ts:.3f});'
+                f'tl.fromTo("#{card_id}", {{y:28, opacity:0, scale:0.96}}, {{y:0, opacity:1, scale:1, duration:0.24, ease:"power3.out"}}, {ts+0.03:.3f});'
             )
+            if t.highlight_phrase:
+                gsap_steps.append(
+                    f'tl.fromTo("#{react_id}", {{scale:0.3, rotation:-12, opacity:0}}, '
+                    f'{{scale:1, rotation:-4, opacity:1, duration:0.28, ease:"back.out(2.1)"}}, {ts+0.12:.3f});'
+                )
 
-    # Final 3.5s Soap-Opera Freeze Frame + Dictionary Card
-    last_turn = turns[-1]
-    dict_rows_html = ""
-    for item in dictionary_items[:3]:
-        term = html.escape(str(item.get("term") or item.get("word") or "").strip().upper())
-        meaning = html.escape(str(item.get("meaning") or item.get("desc") or "").strip())
-        if term:
-            dict_rows_html += (
-                f'<div class="dict-row">'
-                f'  <div class="dict-term">📖 {term}</div>'
-                f'  <div class="dict-mean">{meaning}</div>'
-                f'</div>'
-            )
-
-    freeze_scene_html = f"""
+    freeze_scene_html = ""
+    if include_dictionary_endcard and freeze_dur >= 1.5:
+        last_turn = turns[-1]
+        dict_rows_html = ""
+        for item in dictionary_items[:3]:
+            term = html.escape(str(item.get("term") or item.get("word") or "").strip().upper())
+            meaning = html.escape(str(item.get("meaning") or item.get("desc") or "").strip())
+            if term:
+                dict_rows_html += (
+                    f'<div class="dict-row">'
+                    f'  <div class="dict-term">📖 {term}</div>'
+                    f'  <div class="dict-mean">{meaning}</div>'
+                    f'</div>'
+                )
+        freeze_scene_html = f"""
         <div id="scene-freeze" class="clip scene-panel" data-start="{freeze_start:.3f}" data-duration="{freeze_dur:.3f}" data-track-index="1" style="z-index:{20 + len(turns)};">
           <div id="freeze-cam" class="cam-layer">
             <img src="{last_turn.shot_relpath}" alt="Freeze Frame" class="portrait-img" />
@@ -849,24 +1166,20 @@ def _build_hyperframes_html(
             <div class="freeze-letterbox-top"></div>
             <div class="freeze-letterbox-bot"></div>
           </div>
-
           <div id="freeze-card-wrap" class="freeze-center-safe" style="top:{safe_top + 45}px;bottom:{caption_bottom_offset + 20}px;left:{safe_left}px;right:{right_inset}px;">
             <div class="freeze-badge-top">⏸️ CONGELA A CENA!</div>
             <div class="dict-card">
               <div class="dict-header">🌵 DICIONÁRIO NORDESTINO</div>
               {dict_rows_html}
             </div>
-            <div id="cliffhanger-pill" class="cliffhanger-pill">
-              📺 Continua no próximo episódio...
-            </div>
+            <div id="cliffhanger-pill" class="cliffhanger-pill">📺 Continua no próximo episódio...</div>
           </div>
         </div>"""
-
-    gsap_steps.append(
-        f'tl.fromTo("#freeze-cam", {{scale:1.02}}, {{scale:1.15, duration:{freeze_dur:.3f}, ease:"power2.out"}}, {freeze_start:.3f});'
-        f'tl.fromTo("#freeze-card-wrap", {{scale:0.86, opacity:0}}, {{scale:1, opacity:1, duration:0.35, ease:"back.out(1.6)"}}, {freeze_start+0.08:.3f});'
-        f'tl.fromTo("#cliffhanger-pill", {{scale:0.95}}, {{scale:1.05, duration:0.45, repeat:4, yoyo:true, ease:"sine.inOut"}}, {freeze_start+0.45:.3f});'
-    )
+        gsap_steps.append(
+            f'tl.fromTo("#freeze-cam", {{scale:1.02}}, {{scale:1.15, duration:{freeze_dur:.3f}, ease:"power2.out"}}, {freeze_start:.3f});'
+            f'tl.fromTo("#freeze-card-wrap", {{scale:0.86, opacity:0}}, {{scale:1, opacity:1, duration:0.35, ease:"back.out(1.6)"}}, {freeze_start+0.08:.3f});'
+            f'tl.fromTo("#cliffhanger-pill", {{scale:0.95}}, {{scale:1.05, duration:0.45, repeat:4, yoyo:true, ease:"sine.inOut"}}, {freeze_start+0.45:.3f});'
+        )
 
     html_doc = f"""<!DOCTYPE html>
 <html lang="pt-BR">
@@ -881,18 +1194,20 @@ def _build_hyperframes_html(
     background: #090b10; color: #f8fafc;
     font-family: "Inter", "DejaVu Sans", "Liberation Sans", system-ui, sans-serif;
   }}
-  #root {{
-    position: relative; width: 1080px; height: 1920px; overflow: hidden; background: #090b10;
+  #root {{ position: relative; width: 1080px; height: 1920px; overflow: hidden; background: #090b10; }}
+  .scene-panel {{ position: absolute; inset: 0; overflow: hidden; }}
+  .cam-layer {{ position: absolute; inset: 0; transform-origin: 50% 42%; will-change: transform; }}
+  .portrait-img {{ width: 100%; height: 100%; object-fit: cover; display: block; }}
+  .minimal-caption-wrap {{
+    position: absolute; z-index: 8; text-align: center; pointer-events: none;
   }}
-  .scene-panel {{
-    position: absolute; inset: 0; overflow: hidden;
+  .minimal-caption-text {{
+    font-size: 38px; line-height: 1.22; font-weight: 900; color: #ffffff;
+    -webkit-text-stroke: 3px #000000;
+    paint-order: stroke fill;
+    text-shadow: 0 3px 10px rgba(0,0,0,0.95);
   }}
-  .cam-layer {{
-    position: absolute; inset: 0; transform-origin: 50% 42%; will-change: transform;
-  }}
-  .portrait-img {{
-    width: 100%; height: 100%; object-fit: cover; display: block;
-  }}
+  .kw-pop {{ font-weight: 900; }}
   .tv-film-grade {{
     position: absolute; inset: 0;
     background: linear-gradient(180deg, rgba(180,83,9,0.12) 0%, rgba(0,0,0,0) 40%, rgba(12,10,9,0.55) 100%);
@@ -905,59 +1220,38 @@ def _build_hyperframes_html(
     position: absolute; inset: 0;
     background: radial-gradient(circle at 50% 42%, rgba(0,0,0,0) 44%, rgba(5,7,12,0.72) 100%);
   }}
-  .top-ribbon {{
-    position: absolute; display: flex; align-items: center; justify-content: space-between; gap: 12px; z-index: 5;
-  }}
+  .top-ribbon {{ position: absolute; display: flex; align-items: center; justify-content: space-between; gap: 12px; z-index: 5; }}
   .ep-pill {{
     background: rgba(15, 23, 42, 0.86); border: 2px solid rgba(250, 204, 21, 0.65);
-    color: #fde047; padding: 10px 20px; border-radius: 999px;
-    font-size: 24px; font-weight: 800; letter-spacing: 0.6px;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.45);
+    color: #fde047; padding: 10px 20px; border-radius: 999px; font-size: 24px; font-weight: 800;
   }}
   .style-pill {{
     background: rgba(15, 23, 42, 0.86); border: 2px solid rgba(56, 189, 248, 0.55);
-    color: #e0f2fe; padding: 10px 18px; border-radius: 999px;
-    font-size: 22px; font-weight: 800;
+    color: #e0f2fe; padding: 10px 18px; border-radius: 999px; font-size: 22px; font-weight: 800;
   }}
   .ep-title-bar {{
-    display: inline-block;
-    background: rgba(10, 12, 18, 0.72); border-radius: 14px; padding: 10px 20px;
-    font-size: 28px; font-weight: 800; color: #ffffff;
-    text-shadow: 0 2px 10px rgba(0,0,0,0.9);
+    display: inline-block; background: rgba(10, 12, 18, 0.72); border-radius: 14px;
+    padding: 10px 20px; font-size: 28px; font-weight: 800; color: #ffffff;
   }}
   .reaction-pill {{
     display: inline-block; padding: 14px 26px; border-radius: 20px;
-    font-size: 32px; font-weight: 900; letter-spacing: 0.5px;
-    border: 4px solid #ffffff; box-shadow: 0 12px 30px rgba(0,0,0,0.55);
+    font-size: 32px; font-weight: 900; border: 4px solid #ffffff;
   }}
-  .lower-safe-stack {{
-    position: absolute; display: flex; flex-direction: column; gap: 14px; z-index: 6;
-  }}
-  .speaker-row {{
-    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
-  }}
+  .lower-safe-stack {{ position: absolute; display: flex; flex-direction: column; gap: 14px; z-index: 6; }}
+  .speaker-row {{ display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }}
   .speaker-pill {{
     padding: 10px 22px; border-radius: 14px; font-size: 30px; font-weight: 900;
-    letter-spacing: 0.4px; box-shadow: 0 8px 22px rgba(0,0,0,0.55);
     border: 3px solid rgba(255,255,255,0.85);
   }}
   .role-tag {{
     background: rgba(15, 23, 42, 0.84); color: #e2e8f0;
     padding: 8px 16px; border-radius: 12px; font-size: 22px; font-weight: 700;
-    border: 1px solid rgba(255,255,255,0.2);
   }}
   .subtitle-box {{
     background: rgba(10, 12, 18, 0.90); border-radius: 20px; padding: 22px 26px;
-    box-shadow: 0 16px 40px rgba(0,0,0,0.72);
     border-top: 1px solid rgba(255,255,255,0.16);
-    border-right: 1px solid rgba(255,255,255,0.16);
-    border-bottom: 1px solid rgba(255,255,255,0.16);
   }}
-  .subtitle-text {{
-    font-size: 40px; line-height: 1.24; font-weight: 800; color: #f8fafc;
-    text-shadow: 0 2px 6px rgba(0,0,0,0.85);
-  }}
-  .kw-pop {{ font-weight: 900; text-decoration: underline rgba(253, 224, 71, 0.55) 4px; }}
+  .subtitle-text {{ font-size: 40px; line-height: 1.24; font-weight: 800; color: #f8fafc; }}
   .freeze-sepia-tint {{
     position: absolute; inset: 0;
     background: linear-gradient(180deg, rgba(120,53,15,0.48) 0%, rgba(217,119,6,0.34) 45%, rgba(17,24,39,0.78) 100%);
@@ -969,30 +1263,25 @@ def _build_hyperframes_html(
   }}
   .freeze-badge-top {{
     background: #dc2626; color: #ffffff; padding: 12px 28px; border-radius: 999px;
-    font-size: 30px; font-weight: 900; letter-spacing: 1px;
-    border: 4px solid #fef08a; box-shadow: 0 12px 32px rgba(0,0,0,0.7);
+    font-size: 30px; font-weight: 900; border: 4px solid #fef08a;
   }}
   .dict-card {{
     width: 100%; background: rgba(15, 23, 42, 0.94); border: 4px solid #f59e0b;
-    border-radius: 28px; padding: 28px 30px;
-    box-shadow: 0 24px 60px rgba(0,0,0,0.85);
-    display: flex; flex-direction: column; gap: 18px;
+    border-radius: 28px; padding: 28px 30px; display: flex; flex-direction: column; gap: 18px;
   }}
   .dict-header {{
     font-size: 36px; font-weight: 900; color: #fde047; text-align: center;
     padding-bottom: 12px; border-bottom: 2px solid rgba(245,158,11,0.35);
   }}
   .dict-row {{
-    background: rgba(30, 41, 59, 0.85); border-radius: 18px; padding: 16px 20px;
-    border-left: 8px solid #38bdf8;
+    background: rgba(30, 41, 59, 0.85); border-radius: 18px; padding: 16px 20px; border-left: 8px solid #38bdf8;
   }}
   .dict-term {{ font-size: 30px; font-weight: 900; color: #38bdf8; margin-bottom: 6px; }}
   .dict-mean {{ font-size: 28px; line-height: 1.28; font-weight: 700; color: #f1f5f9; }}
   .cliffhanger-pill {{
     background: linear-gradient(90deg, #f59e0b, #ea580c); color: #ffffff;
     padding: 18px 34px; border-radius: 999px; font-size: 32px; font-weight: 900;
-    border: 3px solid #fef08a; box-shadow: 0 16px 36px rgba(0,0,0,0.75);
-    text-align: center;
+    border: 3px solid #fef08a; text-align: center;
   }}
 </style>
 </head>
@@ -1016,9 +1305,326 @@ def _build_hyperframes_html(
     return index_path
 
 
+# ---------------------------------------------------------------------------
+# Phase 2 & 3 Helpers: Intelligent Silence Trim Stitcher + Colab GPU Bridge
+# ---------------------------------------------------------------------------
+
+def _get_whisper_model() -> Any:
+    if "base" not in _WHISPER_CACHE:
+        from faster_whisper import WhisperModel
+        _WHISPER_CACHE["base"] = WhisperModel(
+            "base",
+            device="cpu",
+            compute_type="int8",
+            cpu_threads=2,
+            num_workers=1,
+        )
+    return _WHISPER_CACHE["base"]
+
+
+def _detect_speech_window(clip_path: Path, raw_dur: float, work_dir: Path, idx: int) -> Tuple[float, float, List[Dict[str, Any]]]:
+    """Find tight [start, end] speech bounds via faster-whisper INT8 (NumPy PCM) + silencedetect fallback."""
+    import wave
+    import numpy as np
+
+    words_meta: List[Dict[str, Any]] = []
+    wav_16k = work_dir / f"asr_{idx}.wav"
+    try:
+        _run_checked([
+            FFMPEG_BIN, "-y", "-v", "error", "-i", str(clip_path),
+            "-vn", "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le",
+            str(wav_16k),
+        ], timeout=45)
+        with wave.open(str(wav_16k), "rb") as wf:
+            pcm_bytes = wf.readframes(wf.getnframes())
+        audio_np = np.frombuffer(pcm_bytes, dtype=np.int16).astype(np.float32) / 32768.0
+        model = _get_whisper_model()
+        segments, _ = model.transcribe(
+            audio_np,
+            language="pt",
+            word_timestamps=True,
+            vad_filter=True,
+            beam_size=1,
+        )
+        for seg in segments:
+            if getattr(seg, "words", None):
+                for w in seg.words:
+                    tok = str(getattr(w, "word", "") or "").strip()
+                    if tok:
+                        words_meta.append({
+                            "word": tok,
+                            "start": float(w.start),
+                            "end": float(w.end),
+                        })
+            elif str(seg.text or "").strip():
+                words_meta.append({"word": seg.text.strip(), "start": float(seg.start), "end": float(seg.end)})
+    except Exception:
+        words_meta = []
+
+    if words_meta:
+        first_t = min(w["start"] for w in words_meta)
+        last_t = max(w["end"] for w in words_meta)
+        s_t = max(0.0, first_t - 0.14)
+        e_t = min(raw_dur, last_t + 0.16)
+        if e_t - s_t >= min(raw_dur, 0.8):
+            return round(s_t, 3), round(e_t, 3), words_meta
+
+    # Fallback: FFmpeg silencedetect to trim leading & trailing dead air cleanly
+    try:
+        proc = subprocess.run(
+            [FFMPEG_BIN, "-i", str(clip_path), "-af", "silencedetect=noise=-36dB:d=0.20", "-f", "null", "-"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=30,
+        )
+        stderr = proc.stderr
+        sil_starts = [float(x) for x in re.findall(r"silence_start:\s*([0-9.]+)", stderr)]
+        sil_ends = [float(x) for x in re.findall(r"silence_end:\s*([0-9.]+)", stderr)]
+        s_t = 0.0
+        e_t = raw_dur
+        if sil_starts and sil_starts[0] < 0.25 and sil_ends:
+            s_t = max(0.0, sil_ends[0] - 0.10)
+        if sil_starts and sil_starts[-1] > s_t + 0.6 and (
+            len(sil_starts) > len(sil_ends) or (sil_ends and sil_ends[-1] >= raw_dur - 0.30)
+        ):
+            e_t = min(raw_dur, sil_starts[-1] + 0.14)
+        if e_t - s_t >= min(raw_dur, 0.8):
+            return round(s_t, 3), round(e_t, 3), words_meta
+    except Exception:
+        pass
+
+    return 0.0, round(raw_dur, 3), words_meta
+
+
+def _format_ass_ts(sec: float) -> str:
+    sec = max(0.0, sec)
+    h = int(sec // 3600)
+    m = int((sec % 3600) // 60)
+    s = int(sec % 60)
+    cs = int(round((sec - math.floor(sec)) * 100))
+    if cs >= 100:
+        cs = 99
+    return f"{h}:{m:02d}:{s:02d}.{cs:02d}"
+
+
+def stitch_novela_takes(cfg: Dict[str, Any]) -> Dict[str, Any]:
+    """Trim silence lead/tail on ordered MP4 takes, normalize 1080x1920 30fps + 48kHz SoXR, optional minimal captions."""
+    t_start = time.time()
+    take_paths = [Path(str(p)) for p in (cfg.get("take_paths") or []) if str(p).strip()]
+    if len(take_paths) < 1:
+        raise ValueError("Informe ao menos 1 arquivo de take (.mp4) para costurar.")
+    for p in take_paths:
+        if not p.is_file():
+            raise FileNotFoundError(f"Take não encontrado: {p}")
+
+    platform_preset = str(cfg.get("platform_preset") or "tiktok_reels").strip().lower()
+    safe_zone = PLATFORM_SAFE_ZONES.get(platform_preset) or PLATFORM_SAFE_ZONES["tiktok_reels"]
+    subtitles_mode = str(cfg.get("subtitles_mode") or "none").strip().lower()
+    trim_silence = bool(cfg.get("trim_silence", True))
+    ambient_bed = bool(cfg.get("ambient_bed", False))
+
+    job_id = uuid.uuid4().hex[:8]
+    work_dir = Path(f"/tmp/hf_stitch_{job_id}")
+    work_dir.mkdir(parents=True, exist_ok=True)
+
+    output_raw = cfg.get("output")
+    if output_raw:
+        out_path = Path(str(output_raw))
+    else:
+        slug = re.sub(r"[^a-z0-9]+", "-", str(cfg.get("title") or "episodio-flow").lower()).strip("-")[:32] or "novela"
+        out_path = NOVELA_EXPORT_DIR / f"novela_stitched_{slug}_{int(time.time())}_{job_id}.mp4"
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    trimmed_clips: List[Path] = []
+    takes_metrics: List[Dict[str, Any]] = []
+    ass_events: List[Tuple[float, float, str]] = []
+    raw_total_dur = 0.0
+    timeline_cursor = 0.0
+
+    try:
+        for idx, src_clip in enumerate(take_paths):
+            info = _probe_media(src_clip)
+            raw_dur = info["duration"]
+            raw_total_dur += raw_dur
+
+            words_meta: List[Dict[str, Any]] = []
+            if trim_silence and info["has_audio"]:
+                cut_s, cut_e, words_meta = _detect_speech_window(src_clip, raw_dur, work_dir, idx)
+            elif not info["has_audio"]:
+                cut_s, cut_e = 0.0, raw_dur
+            else:
+                cut_s, cut_e = 0.0, raw_dur
+
+            seg_dur = max(0.4, cut_e - cut_s)
+            norm_clip = work_dir / f"norm_take_{idx:02d}.mp4"
+
+            v_filter = "scale=1080:1920:force_original_aspect_ratio=increase:flags=lanczos,crop=1080:1920,setsar=1,fps=30,format=yuv420p"
+            if info["has_audio"]:
+                cmd = [
+                    FFMPEG_BIN, "-y",
+                    "-ss", f"{cut_s:.3f}", "-t", f"{seg_dur:.3f}", "-i", str(src_clip),
+                    "-vf", v_filter,
+                    "-af", "aresample=48000:resampler=soxr,aformat=sample_fmts=fltp:channel_layouts=stereo",
+                    "-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
+                    "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2",
+                    str(norm_clip),
+                ]
+            else:
+                cmd = [
+                    FFMPEG_BIN, "-y",
+                    "-ss", f"{cut_s:.3f}", "-t", f"{seg_dur:.3f}", "-i", str(src_clip),
+                    "-f", "lavfi", "-t", f"{seg_dur:.3f}", "-i", "anullsrc=channel_layout=stereo:sample_rate=48000",
+                    "-vf", v_filter,
+                    "-map", "0:v:0", "-map", "1:a:0",
+                    "-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
+                    "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2",
+                    "-shortest",
+                    str(norm_clip),
+                ]
+            _run_checked(cmd, timeout=180)
+            actual_seg_dur = _probe_duration(norm_clip)
+            trimmed_clips.append(norm_clip)
+
+            # Group transcribed words into snappy 1-line captions shifted onto stitched timeline
+            if subtitles_mode == "minimal" and words_meta:
+                chunk: List[Dict[str, Any]] = []
+                for w in words_meta:
+                    chunk.append(w)
+                    if len(chunk) >= 5 or w["word"].endswith((".", "!", "?", ",")):
+                        c_s = max(0.0, chunk[0]["start"] - cut_s)
+                        c_e = min(actual_seg_dur, chunk[-1]["end"] - cut_s)
+                        txt = " ".join(x["word"] for x in chunk).strip()
+                        if txt and c_e > c_s:
+                            ass_events.append((timeline_cursor + c_s, timeline_cursor + c_e, txt))
+                        chunk = []
+                if chunk:
+                    c_s = max(0.0, chunk[0]["start"] - cut_s)
+                    c_e = min(actual_seg_dur, chunk[-1]["end"] - cut_s)
+                    txt = " ".join(x["word"] for x in chunk).strip()
+                    if txt and c_e > c_s:
+                        ass_events.append((timeline_cursor + c_s, timeline_cursor + c_e, txt))
+
+            takes_metrics.append({
+                "index": idx + 1,
+                "filename": src_clip.name,
+                "raw_duration": round(raw_dur, 2),
+                "cut_start": cut_s,
+                "cut_end": cut_e,
+                "final_duration": round(actual_seg_dur, 2),
+                "words_detected": len(words_meta),
+            })
+            timeline_cursor += actual_seg_dur
+
+        concat_mp4 = work_dir / "stitched_raw.mp4"
+        c_list = work_dir / "clips.txt"
+        c_list.write_text("\n".join(f"file '{p}'" for p in trimmed_clips) + "\n", encoding="utf-8")
+        _run_checked([
+            FFMPEG_BIN, "-y",
+            "-f", "concat", "-safe", "0", "-i", str(c_list),
+            "-c:v", "copy",
+            "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2",
+            str(concat_mp4),
+        ], timeout=120)
+
+        # Build filter chain: loudness normalization (48kHz SoXR I=-16) + optional minimal ASS captions
+        vf_filters: List[str] = []
+        if subtitles_mode == "minimal" and ass_events:
+            margin_v = max(80, 1920 - int(safe_zone["safe_bottom"]) + 20)
+            margin_r = max(60, 1080 - int(safe_zone["safe_right"]))
+            ass_path = work_dir / "minimal_caps.ass"
+            ass_header = (
+                "[Script Info]\nScriptType: v4.00+\nPlayResX: 1080\nPlayResY: 1920\n\n"
+                "[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, "
+                "Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, "
+                "MarginL, MarginR, MarginV, Encoding\n"
+                f"Style: CleanMin,DejaVu Sans,42,&H00FFFFFF,&H0000FFFF,&H00000000,&H00000000,-1,0,0,0,100,100,0,0,1,3,1,2,56,{margin_r},{margin_v},1\n\n"
+                "[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
+            )
+            ev_lines = [
+                f"Dialogue: 0,{_format_ass_ts(s)},{_format_ass_ts(e)},CleanMin,,0,0,0,,{txt}"
+                for s, e, txt in ass_events
+            ]
+            ass_path.write_text(ass_header + "\n".join(ev_lines) + "\n", encoding="utf-8")
+            vf_filters.append(f"ass={ass_path}")
+
+        af_filter = "aresample=48000:resampler=soxr,loudnorm=I=-16:TP=-1.5:LRA=11"
+        if ambient_bed:
+            af_filter = (
+                "aresample=48000:resampler=soxr,"
+                "highpass=f=65,loudnorm=I=-16:TP=-1.5:LRA=11"
+            )
+
+        final_cmd = [FFMPEG_BIN, "-y", "-i", str(concat_mp4)]
+        if vf_filters:
+            final_cmd.extend(["-vf", ",".join(vf_filters), "-c:v", "libx264", "-preset", "veryfast", "-crf", "17"])
+        else:
+            final_cmd.extend(["-c:v", "copy"])
+        final_cmd.extend([
+            "-af", af_filter,
+            "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2",
+            "-movflags", "+faststart",
+            str(out_path),
+        ])
+        _run_checked(final_cmd, timeout=180)
+
+        final_dur = _probe_duration(out_path)
+        return {
+            "ok": True,
+            "output_path": str(out_path),
+            "filename": out_path.name,
+            "platform_preset": platform_preset,
+            "subtitles_mode": subtitles_mode,
+            "trim_silence": trim_silence,
+            "takes_count": len(trimmed_clips),
+            "raw_total_duration": round(raw_total_dur, 2),
+            "duration": round(final_dur, 2),
+            "trimmed_seconds": round(max(0.0, raw_total_dur - final_dur), 2),
+            "takes_metrics": takes_metrics,
+            "elapsed_sec": round(time.time() - t_start, 2),
+        }
+    finally:
+        shutil.rmtree(work_dir, ignore_errors=True)
+
+
+def _call_colab_animate_take(
+    colab_url: str,
+    colab_token: str,
+    image_path: Path,
+    audio_wav: Path,
+    veo_prompt: str,
+    colab_engine: str,
+    out_mp4: Path,
+) -> Dict[str, Any]:
+    """Send 1 take portrait + PT-BR WAV + acting prompt to remote Google Colab GPU Worker `/animate-take`."""
+    endpoint = f"{colab_url.rstrip('/')}/animate-take"
+    payload = {
+        "image_b64": base64.b64encode(image_path.read_bytes()).decode("ascii"),
+        "audio_b64": base64.b64encode(audio_wav.read_bytes()).decode("ascii"),
+        "prompt": veo_prompt,
+        "engine": colab_engine if colab_engine in ("echomimic_v3", "latentsync") else "echomimic_v3",
+        "width": 1080,
+        "height": 1920,
+    }
+    headers = {"Content-Type": "application/json", "Accept": "application/json"}
+    if colab_token:
+        headers["X-Colab-Token"] = colab_token
+    req = urllib.request.Request(endpoint, data=json.dumps(payload).encode("utf-8"), headers=headers, method="POST")
+    with urllib.request.urlopen(req, timeout=240) as resp:
+        data = json.loads(resp.read().decode("utf-8"))
+    if not data.get("ok") or not data.get("video_b64"):
+        raise RuntimeError(f"Colab /animate-take falhou: {data.get('error') or 'sem video_b64'}")
+    out_mp4.write_bytes(base64.b64decode(data["video_b64"]))
+    return data
+
+
 def render_novela_episode(cfg: Dict[str, Any]) -> Dict[str, Any]:
-    """Execute end-to-end multi-character micro-series production and return structured summary."""
+    """Execute end-to-end multi-character micro-series production across v2.5 modes."""
     t_start_wall = time.time()
+    render_mode = str(cfg.get("render_mode") or "vps_preview").strip().lower()
+    if render_mode == "flow_pack":
+        return generate_flow_veo_pack(cfg)
+
     visual_style = str(cfg.get("visual_style") or "3d_cartoon").strip().lower()
     if visual_style not in ("3d_cartoon", "cinematic_tv"):
         visual_style = "3d_cartoon"
@@ -1026,17 +1632,22 @@ def render_novela_episode(cfg: Dict[str, Any]) -> Dict[str, Any]:
     platform_preset = str(cfg.get("platform_preset") or "tiktok_reels").strip().lower()
     safe_zone = PLATFORM_SAFE_ZONES.get(platform_preset) or PLATFORM_SAFE_ZONES["tiktok_reels"]
 
+    clean_cinema_mode = bool(cfg.get("clean_cinema_mode", True))
+    subtitles_mode = str(cfg.get("subtitles_mode") or ("none" if clean_cinema_mode else "minimal")).strip().lower()
+    if subtitles_mode not in ("none", "minimal"):
+        subtitles_mode = "none" if clean_cinema_mode else "minimal"
+    include_dictionary_endcard = bool(cfg.get("include_dictionary_endcard", False if clean_cinema_mode else True))
+
     raw_dialogue: List[Dict[str, Any]] = list(cfg.get("dialogue") or [])
     if not raw_dialogue:
         raise ValueError("Campo 'dialogue' vazio: informe ao menos 1 fala de personagem.")
 
     setting = str(
         cfg.get("setting")
-        or "sunny cobblestone sidewalk outside a traditional painted wooden country corner grocery shop in Northeast Brazil with festive triangular flags, warm late afternoon light"
+        or "sunny cobblestone sidewalk outside a painted wooden country corner grocery shop in Northeast Brazil with festive triangular flags and curious bystanders, warm afternoon sunlight"
     ).strip()
 
-    freeze_dur = float(cfg.get("freeze_duration") or 3.5)
-    freeze_dur = max(2.0, min(5.0, freeze_dur))
+    freeze_dur = float(cfg.get("freeze_duration") or (0.0 if not include_dictionary_endcard else 3.5))
     quality = str(cfg.get("quality") or "standard").strip().lower()
     if quality not in ("draft", "looks", "delivery", "standard", "high"):
         quality = "standard"
@@ -1060,23 +1671,32 @@ def render_novela_episode(cfg: Dict[str, Any]) -> Dict[str, Any]:
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     env_map = _load_secrets_env()
-    shot_cache: Dict[Tuple[str, str, str], Tuple[Path, str]] = {}
+    shot_cache: Dict[Tuple[str, str, str, str], Tuple[Path, str]] = {}
     compiled_turns: List[TurnCompiled] = []
     cursor_t = 0.0
+    prev_speaker: Optional[str] = None
 
     for idx, raw_turn in enumerate(raw_dialogue):
         spk_raw = str(raw_turn.get("speaker") or "Narrador")
         spk_key, spec = _get_character_spec(spk_raw)
         subtitle_text = str(raw_turn.get("subtitle_text") or raw_turn.get("text") or "").strip()
         tts_text = str(raw_turn.get("tts_text") or subtitle_text).strip()
-        if not subtitle_text:
-            subtitle_text = tts_text
         if not tts_text:
             continue
+        if not subtitle_text:
+            subtitle_text = tts_text
 
         emotion = str(raw_turn.get("emotion") or "warm").strip().lower()
-        _, default_cam = EMOTION_DIRECTIONS.get(emotion, EMOTION_DIRECTIONS["warm"])
+        _, default_cam, _ = EMOTION_DIRECTIONS.get(emotion, EMOTION_DIRECTIONS["warm"])
         camera_action = str(raw_turn.get("camera_action") or default_cam).strip().lower()
+        shot_framing = _assign_shot_framing(
+            idx,
+            str(raw_turn.get("shot_framing") or ""),
+            emotion,
+            prev_speaker,
+            spk_key,
+        )
+        physical_action_en = str(raw_turn.get("physical_action_en") or "").strip()
         highlight_phrase = str(raw_turn.get("expression_highlight") or raw_turn.get("highlight") or "").strip()
 
         raw_mp3 = audio_dir / f"turn_{idx}.mp3"
@@ -1088,18 +1708,23 @@ def render_novela_episode(cfg: Dict[str, Any]) -> Dict[str, Any]:
             pitch=str(raw_turn.get("pitch") or spec["pitch"]),
             raw_mp3=raw_mp3,
             clean_wav=clean_wav,
+            lead_pad=0.03 if clean_cinema_mode else 0.05,
+            tail_pad=0.09 if clean_cinema_mode else 0.22,
         )
 
-        shot_relpath, asset_source = _resolve_turn_visual(
+        shot_abs_path, shot_relpath, asset_source = _resolve_turn_visual(
             speaker_key=spk_key,
             spec=spec,
             emotion=emotion,
+            shot_framing=shot_framing,
+            physical_action_en=physical_action_en,
             visual_style=visual_style,
             setting=setting,
             assets_dir=assets_dir,
             turn_idx=idx,
             env_map=env_map,
             shot_cache=shot_cache,
+            force_jpg=(render_mode == "colab_gpu"),
         )
 
         compiled_turns.append(
@@ -1115,33 +1740,89 @@ def render_novela_episode(cfg: Dict[str, Any]) -> Dict[str, Any]:
                 subtitle_text=subtitle_text,
                 emotion=emotion,
                 camera_action=camera_action,
+                shot_framing=shot_framing,
+                physical_action_en=physical_action_en,
                 highlight_phrase=highlight_phrase,
                 audio_wav=clean_wav,
                 speech_dur=slot_dur,
                 slot_start=cursor_t,
                 slot_dur=slot_dur,
                 shot_relpath=shot_relpath,
+                shot_abs_path=shot_abs_path,
                 asset_source=asset_source,
             )
         )
         cursor_t += slot_dur
+        prev_speaker = spk_key
 
     if not compiled_turns:
-        raise ValueError("Nenhuma fala valida encontrada em 'dialogue'.")
+        raise ValueError("Nenhuma fala válida encontrada em 'dialogue'.")
 
+    # Mode 2: Remote Colab GPU Lip-Sync Bridge
+    if render_mode == "colab_gpu":
+        colab_url = str(cfg.get("colab_url") or env_map.get("COLAB_GPU_URL") or "").strip()
+        if not colab_url:
+            raise RuntimeError("COLAB_GPU_URL não configurada! Informe a URL do túnel Cloudflare do Google Colab.")
+        colab_token = str(cfg.get("colab_token") or env_map.get("COLAB_GPU_TOKEN") or "").strip()
+        colab_engine = str(cfg.get("colab_engine") or "echomimic_v3").strip().lower()
+
+        colab_clips: List[Path] = []
+        for t in compiled_turns:
+            _, spk_spec = _get_character_spec(t.speaker_label)
+            v_prompt = build_veo_take_prompt(
+                speaker_spec=spk_spec,
+                tts_text=t.tts_text,
+                visual_style=visual_style,
+                shot_framing=t.shot_framing,
+                emotion=t.emotion,
+                physical_action_en=t.physical_action_en,
+                setting=setting,
+            )
+            take_mp4 = work_dir / f"colab_take_{t.index:02d}.mp4"
+            _call_colab_animate_take(
+                colab_url=colab_url,
+                colab_token=colab_token,
+                image_path=t.shot_abs_path,
+                audio_wav=t.audio_wav,
+                veo_prompt=v_prompt,
+                colab_engine=colab_engine,
+                out_mp4=take_mp4,
+            )
+            colab_clips.append(take_mp4)
+
+        stitch_res = stitch_novela_takes({
+            "take_paths": [str(p) for p in colab_clips],
+            "platform_preset": platform_preset,
+            "subtitles_mode": subtitles_mode,
+            "trim_silence": False,
+            "output": str(out_path),
+        })
+        if not bool(cfg.get("keep_work_dir")):
+            shutil.rmtree(work_dir, ignore_errors=True)
+        return {
+            **stitch_res,
+            "render_mode": "colab_gpu",
+            "colab_engine": colab_engine,
+            "visual_style": visual_style,
+            "clean_cinema_mode": clean_cinema_mode,
+            "speakers": sorted({t.speaker_label for t in compiled_turns}),
+            "asset_sources": sorted({f"{t.asset_source}+colab:{colab_engine}" for t in compiled_turns}),
+            "elapsed_sec": round(time.time() - t_start_wall, 2),
+        }
+
+    # Mode 3 (Default): Clean Cinema Storyboard Preview rendered locally via HyperFrames Chromium + 48kHz SoXR
     freeze_start = cursor_t
     total_dur = freeze_start + freeze_dur
 
-    # Build master audio mix (speech + pops + cliffhanger novela chord, 48kHz stereo loudnorm)
     final_mix_wav = _build_master_audio_mix(
         turns=compiled_turns,
         freeze_start=freeze_start,
         freeze_dur=freeze_dur,
         total_dur=total_dur,
         work_dir=work_dir,
+        include_freeze_sting=include_dictionary_endcard,
     )
 
-    # Generate HyperFrames composition HTML + verify with lint check
     _build_hyperframes_html(
         cfg=cfg,
         turns=compiled_turns,
@@ -1150,6 +1831,9 @@ def render_novela_episode(cfg: Dict[str, Any]) -> Dict[str, Any]:
         total_dur=total_dur,
         safe_zone=safe_zone,
         visual_style=visual_style,
+        clean_cinema_mode=clean_cinema_mode,
+        subtitles_mode=subtitles_mode,
+        include_dictionary_endcard=include_dictionary_endcard,
         work_dir=work_dir,
     )
 
@@ -1172,7 +1856,6 @@ def render_novela_episode(cfg: Dict[str, Any]) -> Dict[str, Any]:
         "--low-memory-mode",
     ], cwd=work_dir, timeout=600)
 
-    # Mux rendered HTML frames with 48kHz Stereo SoXR loudnorm mix
     _run_checked([
         FFMPEG_BIN, "-y",
         "-i", str(silent_mp4),
@@ -1184,31 +1867,40 @@ def render_novela_episode(cfg: Dict[str, Any]) -> Dict[str, Any]:
         str(out_path),
     ], timeout=120)
 
-    keep_work = bool(cfg.get("keep_work_dir"))
-    if not keep_work:
+    if not bool(cfg.get("keep_work_dir")):
         shutil.rmtree(work_dir, ignore_errors=True)
 
     return {
         "ok": True,
         "output_path": str(out_path),
         "filename": out_path.name,
+        "render_mode": render_mode,
         "visual_style": visual_style,
         "platform_preset": platform_preset,
+        "clean_cinema_mode": clean_cinema_mode,
+        "subtitles_mode": subtitles_mode,
         "duration": round(total_dur, 2),
-        "scenes": len(compiled_turns) + 1,
+        "scenes": len(compiled_turns) + (1 if include_dictionary_endcard else 0),
         "turns": len(compiled_turns),
         "speakers": sorted({t.speaker_label for t in compiled_turns}),
+        "shot_framings": [t.shot_framing for t in compiled_turns],
         "asset_sources": sorted({t.asset_source for t in compiled_turns}),
         "elapsed_sec": round(time.time() - t_start_wall, 2),
     }
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="VPS Novela Studio Runner")
-    parser.add_argument("--config", required=True, help="Path to episode JSON config")
+    parser = argparse.ArgumentParser(description="VPS Novela Studio Runner v2.5")
+    parser.add_argument("--config", required=True, help="Path to JSON config")
+    parser.add_argument("--mode", default="render", choices=["render", "flow_pack", "stitch"], help="Execution mode")
     args = parser.parse_args()
     cfg = json.loads(Path(args.config).read_text(encoding="utf-8"))
-    res = render_novela_episode(cfg)
+    if args.mode == "flow_pack":
+        res = generate_flow_veo_pack(cfg)
+    elif args.mode == "stitch":
+        res = stitch_novela_takes(cfg)
+    else:
+        res = render_novela_episode(cfg)
     print(json.dumps(res, ensure_ascii=False))
     return 0
 

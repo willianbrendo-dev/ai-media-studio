@@ -176,34 +176,42 @@ def build_fallback_novela_script(
         "dialogue": [
             {
                 "speaker": "Dona Socorro",
-                "tts_text": f"Oxêêênte, Enzo! Larga esse celular um segundo! {clean_theme[:70]}!",
-                "subtitle_text": f"Oxente, Enzo! Larga esse celular! {clean_theme[:70]}!",
+                "tts_text": f"Oxêêênte, Enzo! {clean_theme[:65]}?! Larga esse celular, minino!",
+                "subtitle_text": f"Oxente, Enzo! {clean_theme[:65]}?! Larga esse celular!",
                 "emotion": "shocked",
                 "camera_action": "shake",
+                "shot_framing": "over_shoulder",
+                "physical_action_en": "puts hands on her hips, leans forward abruptly waving one finger in disbelief while two neighbors peek from behind",
                 "expression_highlight": main_expr,
             },
             {
                 "speaker": "Enzo",
-                "tts_text": f"Quê?! Tia Socorro, eu achei que {second_expr} era coisa séria de verdade! Tô passado!",
-                "subtitle_text": f"Quê?! Tia Socorro, achei que '{second_expr}' era coisa séria! Tô passado!",
+                "tts_text": f"Quê?! Tia Socorro, eu achei que {second_expr} era sério! Tô passado!",
+                "subtitle_text": f"Quê?! Tia Socorro, achei que '{second_expr}' era sério! Tô passado!",
                 "emotion": "confused",
                 "camera_action": "zoom_in",
+                "shot_framing": "reverse_over_shoulder",
+                "physical_action_en": "blinks rapidly looking up from his smartphone, clutching his chest in confused city-kid panic",
                 "expression_highlight": second_expr,
             },
             {
                 "speaker": "Seu Bastião",
-                "tts_text": "Hahahaha! Deixe de cunversa, menino! Aqui no sertão isso é café pequeno, viu?!",
-                "subtitle_text": "Hahaha! Deixe de cunversa, menino! Aqui no sertão isso é café pequeno!",
+                "tts_text": "Hahaha! Deixe de cunversa, cabra leso! Aqui no sertão isso é café pequeno!",
+                "subtitle_text": "Hahaha! Deixe de cunversa! Aqui no sertão isso é café pequeno!",
                 "emotion": "laughing",
                 "camera_action": "whip_pan",
+                "shot_framing": "over_shoulder",
+                "physical_action_en": "bursts into a hearty laugh while lifting his small aluminum coffee mug with an amused wink",
                 "expression_highlight": "Deixe de cunversa",
             },
             {
                 "speaker": "Dona Socorro",
-                "tts_text": "Vixe Maria, desse jeito eu vô botar boneco na praça inteira hoje! Aguenta coração!",
-                "subtitle_text": "Vixe Maria, desse jeito eu vou botar boneco na praça inteira hoje!",
+                "tts_text": "Vixe Maria, desse jeito eu vô botar boneco na calçada inteira hoje!",
+                "subtitle_text": "Vixe Maria, desse jeito eu vou botar boneco na calçada hoje!",
                 "emotion": "dramatic",
                 "camera_action": "dramatic_push",
+                "shot_framing": "reaction_closeup",
+                "physical_action_en": "throws her hands up dramatically rolling her eyes toward the sky in comedic exasperation",
                 "expression_highlight": "Botar Boneco",
             },
         ],
@@ -906,18 +914,21 @@ class GuidedPipelineOrchestrator:
             expr_list = ["Oxente", "Morreu Maria Preá", "Botar Boneco", "Deixe de cunversa"]
 
         sys_prompt = (
-            "Você é roteirista premiado de micro-séries de humor nordestino brasileiro para Reels/TikTok (20 a 30 segundos). "
+            "Você é roteirista e diretor cinematográfico de micro-séries de humor nordestino viral para Reels/TikTok (12 a 28 segundos, takes rápidos de 4s a 7s em corte seco plano/contraplano). "
             "Personagens fixos disponíveis: 'Dona Socorro' (matriarca dramática), 'Seu Bastião' (comerciante sábio debochado), "
             "'Enzo' (sobrinho da capital confuso), 'Narrador'. "
             "Responda EXCLUSIVAMENTE um JSON válido com as chaves:\n"
             "- title (string curta)\n"
             "- episode_badge (string)\n"
-            "- setting (descrição curta em inglês do cenário externo para geração de imagem)\n"
+            "- setting (descrição curta em inglês do cenário externo iluminado com figurantes discretos ao fundo)\n"
             "- dictionary (array de 2 objetos {term, meaning} explicando as gírias usadas em português claro e engraçado)\n"
-            "- dialogue (array com 4 a 6 falas curtas e ágeis alternando personagens; cada item com: "
-            "speaker, tts_text [grafia fonética expressiva nordestina para TTS], subtitle_text [grafia limpa legível na tela], "
+            "- dialogue (array com 3 a 5 takes curtos e velozes alternando personagens em plano e contraplano; cada item com: "
+            "speaker, tts_text [fala curta de 4s a 7s com grafia fonética expressiva nordestina para TTS/Veo], "
+            "subtitle_text [grafia limpa e curta], "
             "emotion [uma de: shocked, confused, laughing, proud, dramatic, warm], "
             "camera_action [uma de: shake, whip_pan, zoom_in, dramatic_push], "
+            "shot_framing [uma de: over_shoulder, reverse_over_shoulder, reaction_closeup], "
+            "physical_action_en [descrição curta em inglês da ação física e expressão corporal do personagem na cena], "
             "expression_highlight [palavra-chave curta])."
         )
         user_prompt = (
@@ -925,7 +936,7 @@ class GuidedPipelineOrchestrator:
             f"Expressões obrigatórias: {', '.join(expr_list)}\n"
             f"Tom de humor: {tone}\n"
             f"Selo do episódio: {episode_badge}\n"
-            "Entregue falas curtas de 1 a 2 frases por personagem para fechar entre 18s e 26s antes do Freeze Frame final."
+            "Entregue de 3 a 5 takes bem rápidos (1 frase impactante por take, estilo plano e contraplano por cima do ombro)."
         )
         raw_ai = await self._cascade_text(sys_prompt, user_prompt, 3200)
         parsed = _extract_json_block(raw_ai)
@@ -935,19 +946,25 @@ class GuidedPipelineOrchestrator:
             return fallback
 
         cleaned_dialogue: List[Dict[str, str]] = []
-        for row in parsed["dialogue"][:8]:
+        default_framings = ["over_shoulder", "reverse_over_shoulder", "reaction_closeup"]
+        for d_idx, row in enumerate(parsed["dialogue"][:8]):
             if not isinstance(row, dict):
                 continue
             sub = str(row.get("subtitle_text") or row.get("text") or "").strip()
             tts = str(row.get("tts_text") or sub).strip()
             if not sub:
                 continue
+            framing = str(row.get("shot_framing") or default_framings[d_idx % len(default_framings)]).strip().lower()
+            if framing not in ("over_shoulder", "reverse_over_shoulder", "reaction_closeup"):
+                framing = default_framings[d_idx % len(default_framings)]
             cleaned_dialogue.append({
                 "speaker": str(row.get("speaker") or "Dona Socorro").strip(),
                 "tts_text": tts,
                 "subtitle_text": sub,
                 "emotion": str(row.get("emotion") or "warm").strip().lower(),
                 "camera_action": str(row.get("camera_action") or "zoom_in").strip().lower(),
+                "shot_framing": framing,
+                "physical_action_en": str(row.get("physical_action_en") or "").strip(),
                 "expression_highlight": str(row.get("expression_highlight") or "").strip(),
             })
         if len(cleaned_dialogue) < 2:
@@ -1021,6 +1038,11 @@ class GuidedPipelineOrchestrator:
         if visual_style not in ("3d_cartoon", "cinematic_tv"):
             visual_style = "3d_cartoon"
 
+        clean_cinema = bool(params.get("clean_cinema_mode", True))
+        subtitles_mode = str(params.get("subtitles_mode") or ("none" if clean_cinema else "minimal")).strip().lower()
+        render_mode = str(params.get("render_mode") or "vps_preview").strip().lower()
+        colab_engine = str(params.get("colab_engine") or "echomimic_v3").strip().lower()
+
         nov_meta = await self._run_novela_cli(
             title=cp0.get("title") or params.get("title") or "Causos do Sertão — Ep. 01",
             episode_badge=cp0.get("episode_badge") or params.get("episode_badge") or "🌵 NOVELINHA DO SERTÃO • EP. 01",
@@ -1030,6 +1052,10 @@ class GuidedPipelineOrchestrator:
             dictionary=cp0.get("dictionary") or [],
             dialogue=cp0.get("dialogue") or [],
             quality=str(params.get("quality") or "standard"),
+            clean_cinema_mode=clean_cinema,
+            subtitles_mode=subtitles_mode,
+            render_mode=render_mode,
+            colab_engine=colab_engine,
         )
         final_out = {
             **nov_meta,
@@ -1041,9 +1067,17 @@ class GuidedPipelineOrchestrator:
                 "platform_preset": p_meta["id"],
                 "dictionary": cp0.get("dictionary") or [],
                 "dialogue": cp0.get("dialogue") or [],
+                "clean_cinema_mode": clean_cinema,
+                "subtitles_mode": subtitles_mode,
+                "render_mode": render_mode,
             },
         }
         return {
-            "summary": f"Episódio '{nov_meta.get('filename')}' ({nov_meta.get('visual_style')}, {nov_meta.get('size_human')}) finalizado com Dicionário & Freeze-Frame!",
+            "summary": (
+                f"Pack Google Flow Veo 3.1 pronto ({nov_meta.get('total_takes', 0)} takes, "
+                f"{nov_meta.get('total_credits_lite', 0)} créd Lite)!"
+                if render_mode == "flow_pack"
+                else f"Episódio Clean Cinema '{nov_meta.get('filename')}' ({nov_meta.get('visual_style')}, {nov_meta.get('size_human', '')}) finalizado!"
+            ),
             "final_output": final_out,
         }

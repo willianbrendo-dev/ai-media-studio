@@ -692,10 +692,10 @@ _STUDIO_CAPABILITIES_CATALOG: dict[str, dict[str, str]] = {
         "execution_ui": "/app/openseo/",
     },
     "novela_studio": {
-        "name": "Novela Studio · Micro-Séries Multi-Personagem",
-        "kind": "Motor Nativo (0 MB RAM ociosa · Trilha 6)",
-        "best_for": "Criar do zero novelinhas e causos nordestinos multi-personagem (Dona Socorro, Seu Bastião, Enzo, Narrador) em `3d_cartoon` ou `cinematic_tv`, com Dicionário Nordestino e Freeze-Frame final.",
-        "execution_api": "POST /api/quick/novela + POST /api/pipelines/start ('novela_regional_studio') · MCP: studio_run_novela",
+        "name": "Novela Studio · Cinema Clean, Flow Veo 3.1 & Colab GPU",
+        "kind": "Motor Nativo v2.5 (0 MB RAM ociosa · Trilha 6)",
+        "best_for": "Criar micro-séries multi-personagem estilo plano/contraplano 100% limpo (`clean_cinema_mode=True`) via 3 motores: (1) Pack Google Flow Veo 3.1 (Ingredients 1080x1920 + Prompts Bilíngues + Costurador de Takes), (2) Colab GPU Lip-Sync (EchoMimicV3/LatentSync) ou (3) Preview Rápido VPS.",
+        "execution_api": "POST /api/quick/novela/flow-pack + /stitch-takes + /api/quick/novela + /api/colab/status · MCP: studio_generate_flow_pack / studio_stitch_novela_takes / studio_run_novela",
         "execution_ui": "Aba Estúdio Rápido -> Modo Guiado (Trilha 6) ou Modo Hard -> Novela Studio",
     },
 }
@@ -710,7 +710,8 @@ def _recommend_studio_tracks(goal: str, format_hint: str = "") -> tuple[list[dic
     is_novela_create = any(k in text for k in (
         "novelinha", "causo", "nordest", "dona socorro", "bastião", "bastiao",
         "enzo", "micro-série", "micro-serie", "personagem", "personagens",
-        "diálogo", "dialogo", "3d_cartoon", "cinematic_tv", "dicionário nordestino",
+        "diálogo", "dialogo", "3d_cartoon", "cinematic_tv", "veo", "google flow",
+        "echomimic", "latentsync", "colab", "plano e contraplano", "costurar takes",
     )) or (("novela" in text or "série" in text or "serie" in text) and not any(c in text for c in ("cortar", "fatiar", "vídeo longo", "video longo", "supoclip")))
     is_ad_promo = any(k in text for k in (
         "shopee", "anúncio", "anuncio", "vendas", "venda", "oferta", "promo",
@@ -724,20 +725,20 @@ def _recommend_studio_tracks(goal: str, format_hint: str = "") -> tuple[list[dic
 
     if is_novela_create:
         tracks.append({
-            "track": "Fábrica de Novelinhas & Micro-Séries Multi-Personagem (Trilha 6)",
+            "track": "Novela Studio v2.5 · Cinema Clean (Google Flow Veo 3.1 / Colab GPU / VPS Preview)",
             "primary": {
                 **_STUDIO_CAPABILITIES_CATALOG["novela_studio"],
-                "why": "Cria episódios completos do zero sem ligar Docker (0 MB RAM ociosa), com vozes neurais distintas para cada personagem, Character Lock visual (`3d_cartoon` ou `cinematic_tv`), SFX de cena e Freeze-Frame com Dicionário Nordestino.",
-                "recommended_params": {"visual_style": "3d_cartoon", "platform_preset": "tiktok_reels", "tone": "Comédia Leve"},
+                "why": "Direção cinematográfica Shot-Reverse-Shot (plano/contraplano por cima do ombro) 100% limpa sem cartões poluindo o rosto. Gera Pack Veo 3.1 (Ingredients + prompts EN/PT + créditos 10/20), costura takes com corte seco via faster-whisper INT8 e integra lip-sync remoto no Google Colab GPU (EchoMimicV3/LatentSync).",
+                "recommended_params": {"render_mode": "flow_pack", "visual_style": "3d_cartoon", "clean_cinema_mode": True, "subtitles_mode": "none", "platform_preset": "tiktok_reels"},
             },
             "alternative_or_combo": {
                 **_STUDIO_CAPABILITIES_CATALOG["supoclip"],
-                "combo_note": "Se em vez de criar do zero você já tiver um vídeo longo gravado e quiser apenas fatiar em partes sequenciais, use o SupoClip no modo `novela`.",
+                "combo_note": "Se já tiver vídeo longo pronto para fatiar em partes, use SupoClip; para unir os clipes curtos de 6s–8s gerados no Google Flow Veo 3.1 com ritmo de corte seco, use `studio_stitch_novela_takes`.",
             },
         })
         questions.extend([
-            "Para a novelinha: qual estilo visual você prefere (`3d_cartoon` estilo animação expressiva ou `cinematic_tv` estilo novela de TV 35mm)?",
-            "Qual o tema do episódio, quais gírias/expressões regionais quer destacar e para qual rede (`tiktok_reels`, `yt_shorts` ou `shopee_20_9`)?",
+            "Qual motor prefere: (1) Pack Google Flow Veo 3.1 + Costurador de Takes, (2) Colab GPU Lip-Sync (EchoMimicV3/LatentSync) ou (3) Preview Rápido VPS Clean Cinema?",
+            "Qual estilo visual (`3d_cartoon` vs `cinematic_tv`), tema/gírias e quer tela 100% limpa sem texto (`none`) ou legenda minimalista 1 linha (`minimal`)?",
         ])
     is_cleanup_polish = any(k in text for k in (
         "silêncio", "silencio", "silêncios", "silencios", "limpar", "jump-cut",
@@ -1566,35 +1567,39 @@ def studio_run_novela(
     tone: str = "Comédia Leve",
     dialogue_json: str = "",
     dictionary_json: str = "",
+    clean_cinema_mode: bool = True,
+    subtitles_mode: str = "none",
+    render_mode: str = "vps_preview",
+    colab_engine: str = "echomimic_v3",
     quality: str = "standard",
     output_filename: str = "",
     wait: bool = True,
-    poll_timeout_s: float = 480.0,
+    poll_timeout_s: float = 600.0,
 ) -> str:
-    """Produce a multi-character vertical mini-novela / regional comedy episode (Zero Idle Docker RAM) via POST /api/quick/novela.
+    """Produce a multi-character vertical mini-novela / regional comedy episode (Clean Cinema Shot-Reverse-Shot, Flow Pack, or Colab GPU Lip-Sync).
 
     Args:
-        title: Episode title shown in the top ribbon.
-        visual_style: Visual aesthetic: '3d_cartoon' (animated CG character art) or 'cinematic_tv' (35mm realistic Brazilian telenovela).
-        platform_preset: Target Safe-Zone: 'tiktok_reels' (default), 'yt_shorts', or 'shopee_20_9'.
-        theme: Storyline/theme used to generate the script if dialogue_json is omitted.
-        expressions_csv: Comma-separated regional expressions to feature and explain in the ending Dictionary card.
-        tone: Comedy/drama tone (e.g., 'Comédia Leve', 'Novela Mexicana Exagerada').
-        dialogue_json: Optional JSON array string of turns [{speaker, tts_text, subtitle_text, emotion, camera_action, expression_highlight}].
-        dictionary_json: Optional JSON array string of dictionary entries [{term, meaning}].
-        quality: Render quality: 'draft' or 'standard' (default).
-        output_filename: Optional target filename under /opt/ai-media-studio/exports/novela/.
-        wait: Poll until completion (True default) and return Gallery preview/download URLs.
-        poll_timeout_s: Max wait seconds (default 480s).
+        title: Episode title.
+        visual_style: Visual aesthetic: '3d_cartoon' or 'cinematic_tv'.
+        platform_preset: Safe-Zone target: 'tiktok_reels', 'yt_shorts', or 'shopee_20_9'.
+        theme: Storyline/theme if dialogue_json is omitted.
+        expressions_csv: Comma-separated regional expressions to feature.
+        tone: Comedy/drama tone.
+        dialogue_json: Optional JSON array of turns.
+        dictionary_json: Optional JSON array of dictionary items.
+        clean_cinema_mode: True (default) for 100% clean full-bleed cinema without cluttering dialogue boxes/badges.
+        subtitles_mode: 'none' (default clean screen) or 'minimal' (thin white outline line).
+        render_mode: 'vps_preview' (default), 'flow_pack' (Veo 3.1 Prompts + Ingredients), or 'colab_gpu' (EchoMimicV3/LatentSync).
+        colab_engine: When render_mode='colab_gpu': 'echomimic_v3' or 'latentsync'.
+        quality: 'draft' or 'standard' (default).
+        output_filename: Optional filename under /opt/ai-media-studio/exports/novela/.
+        wait: Poll until completion (True default).
+        poll_timeout_s: Max poll wait seconds (default 600s).
     """
     _, base_url, headers, auth = _resolve_target_conn("vps")
     expr_list = [x.strip() for x in (expressions_csv or "").split(",") if x.strip()]
-    parsed_dialogue: list[dict[str, Any]] = []
-    if dialogue_json and dialogue_json.strip():
-        parsed_dialogue = json.loads(dialogue_json)
-    parsed_dict: list[dict[str, str]] = []
-    if dictionary_json and dictionary_json.strip():
-        parsed_dict = json.loads(dictionary_json)
+    parsed_dialogue: list[dict[str, Any]] = json.loads(dialogue_json) if dialogue_json and dialogue_json.strip() else []
+    parsed_dict: list[dict[str, str]] = json.loads(dictionary_json) if dictionary_json and dictionary_json.strip() else []
 
     body = {
         "title": title,
@@ -1605,6 +1610,10 @@ def studio_run_novela(
         "tone": tone,
         "dialogue": parsed_dialogue,
         "dictionary": parsed_dict,
+        "clean_cinema_mode": bool(clean_cinema_mode),
+        "subtitles_mode": subtitles_mode if subtitles_mode in ("none", "minimal") else "none",
+        "render_mode": render_mode if render_mode in ("vps_preview", "flow_pack", "colab_gpu") else "vps_preview",
+        "colab_engine": colab_engine if colab_engine in ("echomimic_v3", "latentsync") else "echomimic_v3",
         "quality": quality if quality in ("draft", "looks", "delivery", "standard", "high") else "standard",
         "output_filename": output_filename,
         "wait": False,
@@ -1618,6 +1627,85 @@ def studio_run_novela(
             if wait and data.get("task_id"):
                 data = _poll_quick_task(client, f"{base_url}/api/quick/novela/task/{data['task_id']}", timeout_s=poll_timeout_s)
             return json.dumps(data, ensure_ascii=False, indent=2)
+    except Exception as exc:
+        return json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False)
+
+
+@mcp.tool()
+def studio_generate_flow_pack(
+    title: str = "Causos do Sertão — Episódio 01",
+    visual_style: str = "3d_cartoon",
+    theme: str = "Enzo da capital confundindo gírias nordestinas na bodega de Seu Bastião",
+    expressions_csv: str = "Oxente, Morreu Maria Preá, Botar Boneco, Deixe de cunversa",
+    tone: str = "Comédia Leve",
+    dialogue_json: str = "",
+) -> str:
+    """Generate a Google Flow (Veo 3.1) Production Pack: clean 1080x1920 Shot-Reverse-Shot reference Ingredients + bilingual Veo 3.1 prompts + credit estimation (10 Lite / 20 Fast per take)."""
+    _, base_url, headers, auth = _resolve_target_conn("vps")
+    expr_list = [x.strip() for x in (expressions_csv or "").split(",") if x.strip()]
+    parsed_dialogue: list[dict[str, Any]] = json.loads(dialogue_json) if dialogue_json and dialogue_json.strip() else []
+    body = {
+        "title": title,
+        "visual_style": visual_style if visual_style in ("3d_cartoon", "cinematic_tv") else "3d_cartoon",
+        "theme": theme,
+        "expressions": expr_list,
+        "tone": tone,
+        "dialogue": parsed_dialogue,
+    }
+    try:
+        with httpx.Client(timeout=180.0, headers=headers, auth=auth) as client:
+            resp = client.post(f"{base_url}/api/quick/novela/flow-pack", json=body)
+            return json.dumps(resp.json(), ensure_ascii=False, indent=2)
+    except Exception as exc:
+        return json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False)
+
+
+@mcp.tool()
+def studio_stitch_novela_takes(
+    take_paths_csv: str = "",
+    batch_id: str = "",
+    output_ids_csv: str = "",
+    title: str = "Novelinha Flow — Corte Seco",
+    platform_preset: str = "tiktok_reels",
+    subtitles_mode: str = "none",
+    trim_silence: bool = True,
+) -> str:
+    """Stitch ordered Google Flow / Colab MP4 takes into one seamless 1080x1920 @ 30fps episode, trimming silent lead/tail via faster-whisper INT8 and normalizing audio to 48kHz Stereo SoXR."""
+    _, base_url, headers, auth = _resolve_target_conn("vps")
+    body = {
+        "title": title,
+        "batch_id": batch_id,
+        "take_paths": [x.strip() for x in (take_paths_csv or "").split(",") if x.strip()],
+        "output_ids": [x.strip() for x in (output_ids_csv or "").split(",") if x.strip()],
+        "platform_preset": platform_preset,
+        "subtitles_mode": subtitles_mode if subtitles_mode in ("none", "minimal") else "none",
+        "trim_silence": bool(trim_silence),
+        "wait": False,
+    }
+    try:
+        with httpx.Client(timeout=30.0, headers=headers, auth=auth) as client:
+            resp = client.post(f"{base_url}/api/quick/novela/stitch-takes", json=body)
+            if resp.status_code >= 400:
+                return json.dumps({"ok": False, "status_code": resp.status_code, "detail": resp.text[:400]}, ensure_ascii=False)
+            data = resp.json()
+            if data.get("task_id"):
+                data = _poll_quick_task(client, f"{base_url}/api/quick/novela/stitch-takes/task/{data['task_id']}", timeout_s=240.0)
+            return json.dumps(data, ensure_ascii=False, indent=2)
+    except Exception as exc:
+        return json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False)
+
+
+@mcp.tool()
+def studio_colab_status(colab_url: str = "", colab_token: str = "") -> str:
+    """Check status of remote Google Colab GPU Worker tunnel, or save and test a new trycloudflare.com URL if colab_url is provided."""
+    _, base_url, headers, auth = _resolve_target_conn("vps")
+    try:
+        with httpx.Client(timeout=15.0, headers=headers, auth=auth) as client:
+            if colab_url and colab_url.strip():
+                r = client.post(f"{base_url}/api/colab/config", json={"colab_url": colab_url.strip(), "colab_token": colab_token.strip()})
+            else:
+                r = client.get(f"{base_url}/api/colab/status")
+            return json.dumps(r.json(), ensure_ascii=False, indent=2)
     except Exception as exc:
         return json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False)
 

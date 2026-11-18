@@ -885,10 +885,114 @@
 
                 <div id="gp-nov-preview-box" class="hidden rounded-2xl bg-[#070a08] border border-amber-500/25 p-3 space-y-2">
                   <div class="flex items-center justify-between text-[11px]">
-                    <span class="font-bold text-amber-300">📜 Prévia do Roteiro &amp; Dicionário</span>
+                    <span class="font-bold text-amber-300">📜 Prévia do Roteiro &amp; Plano/Contraplano</span>
                     <span id="gp-nov-preview-count" class="font-mono text-slate-400"></span>
                   </div>
                   <div id="gp-nov-preview-lines" class="space-y-1.5 text-xs max-h-48 overflow-y-auto pr-1"></div>
+                </div>
+
+                <!-- SELETOR DE MOTOR DE PRODUCAO V2.5 -->
+                <input id="gp-nov-render-mode" type="hidden" value="flow_pack" />
+                <div class="space-y-2 rounded-2xl bg-[#070a08] border border-white/10 p-3">
+                  <div class="flex flex-wrap items-center justify-between gap-2">
+                    <label class="text-[11px] font-extrabold uppercase tracking-wider text-amber-300">🎬 Motor de Produção Clean Cinema (v2.5)</label>
+                    <label class="inline-flex items-center gap-1.5 text-[11px] text-slate-300 cursor-pointer min-h-[36px]">
+                      <input id="gp-nov-clean-cinema" type="checkbox" checked class="w-4 h-4 accent-amber-500 rounded" />
+                      <span>Tela 100% Limpa (Sem Caixas)</span>
+                    </label>
+                  </div>
+
+                  <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <button id="gp-nov-mode-flow_pack" type="button" onclick="setNovelaRenderMode('flow_pack')"
+                      class="touch-btn min-h-[52px] px-3 py-2 rounded-xl border text-left transition cursor-pointer bg-amber-500/20 border-amber-400/70 text-amber-200 min-w-0">
+                      <div class="text-xs font-extrabold leading-tight break-words">🎬 Modo 1: Google Flow Veo 3.1</div>
+                      <div class="text-[10px] opacity-80 leading-tight mt-0.5">Pack Ingredients + Prompts + Costura</div>
+                    </button>
+                    <button id="gp-nov-mode-colab_gpu" type="button" onclick="setNovelaRenderMode('colab_gpu')"
+                      class="touch-btn min-h-[52px] px-3 py-2 rounded-xl border text-left transition cursor-pointer bg-white/[0.03] border-white/10 text-slate-300 hover:bg-white/[0.07] min-w-0">
+                      <div class="text-xs font-extrabold leading-tight break-words">🚀 Modo 2: Colab GPU Lip-Sync</div>
+                      <div class="text-[10px] opacity-80 leading-tight mt-0.5">EchoMimicV3 / LatentSync via Túnel</div>
+                    </button>
+                    <button id="gp-nov-mode-vps_preview" type="button" onclick="setNovelaRenderMode('vps_preview')"
+                      class="touch-btn min-h-[52px] px-3 py-2 rounded-xl border text-left transition cursor-pointer bg-white/[0.03] border-white/10 text-slate-300 hover:bg-white/[0.07] min-w-0">
+                      <div class="text-xs font-extrabold leading-tight break-words">⚡ Modo 3: Preview Rápido VPS</div>
+                      <div class="text-[10px] opacity-80 leading-tight mt-0.5">Storyboard Clean Cinema CPU</div>
+                    </button>
+                  </div>
+
+                  <!-- SUBPAINEL MODO 1: GOOGLE FLOW VEO 3.1 + COSTURADOR -->
+                  <div id="gp-nov-panel-flow_pack" class="space-y-3 pt-1">
+                    <div class="flex flex-col sm:flex-row gap-2">
+                      <button id="btn-nov-flow-pack" type="button" onclick="generateNovelaFlowPack('guided')"
+                        class="touch-btn flex-1 min-h-[44px] px-3.5 rounded-xl text-xs font-extrabold bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 transition cursor-pointer">
+                        🎬 Gerar Pack Google Flow (Ingredients + Prompts Veo 3.1)
+                      </button>
+                    </div>
+                    <div id="nov-flow-pack-result" class="hidden space-y-2.5">
+                      <div class="flex flex-wrap items-center justify-between gap-2 px-3 py-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-[11px]">
+                        <span id="nov-flow-credits-summary" class="font-bold text-amber-200"></span>
+                        <span class="font-mono text-slate-300">Shot-Reverse-Shot 1080x1920</span>
+                      </div>
+                      <div id="nov-flow-pack-cards" class="space-y-2.5 max-h-[420px] overflow-y-auto pr-1"></div>
+                    </div>
+
+                    <!-- COSTURADOR DE TAKES DO GOOGLE FLOW -->
+                    <div class="rounded-xl bg-[#0d1210] border border-cyan-500/25 p-3 space-y-2.5">
+                      <div class="flex flex-wrap items-center justify-between gap-2">
+                        <span class="text-xs font-extrabold text-cyan-300">🎞️ Costurar Takes do Google Flow (.mp4)</span>
+                        <select id="nov-stitch-subtitles" class="min-h-[38px] bg-[#070a08] border border-white/10 rounded-lg px-2 text-[11px] text-white outline-none">
+                          <option value="none" selected>Legenda: Tela 100% Limpa (Sem Texto)</option>
+                          <option value="minimal">Legenda: Minimalista (1 linha fina)</option>
+                        </select>
+                      </div>
+                      <div class="flex flex-col sm:flex-row gap-2">
+                        <input id="nov-stitch-files" type="file" accept="video/*" multiple onchange="uploadNovelaTakes(event)"
+                          class="w-full min-h-[44px] bg-[#070a08] border border-white/10 rounded-xl px-2.5 py-2 text-[11px] text-slate-300 file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:bg-cyan-500/20 file:text-cyan-200" />
+                        <button id="btn-nov-stitch" type="button" onclick="stitchNovelaTakes()"
+                          class="touch-btn shrink-0 min-h-[44px] px-3.5 rounded-xl text-xs font-extrabold bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-200 border border-cyan-400/40 transition cursor-pointer">
+                          ✂️ Costurar Takes (48kHz)
+                        </button>
+                      </div>
+                      <div id="nov-stitch-list" class="hidden space-y-1.5 text-[11px]"></div>
+                      <div id="nov-stitch-result" class="hidden space-y-2 pt-1"></div>
+                    </div>
+                  </div>
+
+                  <!-- SUBPAINEL MODO 2: GOOGLE COLAB GPU WORKER -->
+                  <div id="gp-nov-panel-colab_gpu" class="hidden space-y-2.5 pt-1">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                      <span id="nov-colab-status-badge" class="px-2.5 py-1 rounded-full text-[10px] font-mono bg-slate-800 text-slate-300 border border-white/10">Colab: Verificando...</span>
+                      <a id="btn-nov-colab-notebook" href="/api/colab/notebook" download="ai_studio_colab_novela_gpu.ipynb"
+                        class="touch-btn min-h-[40px] px-3 rounded-xl text-[11px] font-bold bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-200 border border-indigo-400/40 inline-flex items-center gap-1.5">
+                        📓 Baixar Notebook Colab (.ipynb)
+                      </a>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      <input id="nov-colab-url" type="url" placeholder="https://xxxx.trycloudflare.com"
+                        class="sm:col-span-2 w-full min-h-[44px] bg-[#0d1210] border border-white/10 focus:border-indigo-400 rounded-xl px-3 text-xs text-white outline-none" />
+                      <select id="nov-colab-engine" class="w-full min-h-[44px] bg-[#0d1210] border border-white/10 rounded-xl px-2.5 text-xs text-white outline-none">
+                        <option value="echomimic_v3" selected>EchoMimicV3-Flash</option>
+                        <option value="latentsync">LatentSync 1.5</option>
+                      </select>
+                    </div>
+                    <button id="btn-nov-colab-connect" type="button" onclick="connectColabTunnel()"
+                      class="touch-btn w-full min-h-[44px] px-3 rounded-xl text-xs font-bold bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-200 border border-indigo-400/40 transition cursor-pointer">
+                      🔌 Conectar &amp; Testar Túnel Colab GPU
+                    </button>
+                  </div>
+
+                  <!-- SUBPAINEL MODO 3: PREVIEW CLEAN CINEMA VPS -->
+                  <div id="gp-nov-panel-vps_preview" class="hidden space-y-2 pt-1">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <select id="gp-nov-subtitles" class="w-full min-h-[44px] bg-[#0d1210] border border-white/10 rounded-xl px-2.5 text-xs text-white outline-none">
+                        <option value="none" selected>Legenda: Tela 100% Limpa (Sem Texto)</option>
+                        <option value="minimal">Legenda: Minimalista 1 Linha (Contorno Preto)</option>
+                      </select>
+                      <div class="px-3 py-2 rounded-xl bg-white/[0.03] border border-white/10 text-[11px] text-slate-300 flex items-center">
+                        ⚡ Corte rápido Plano &amp; Contraplano em CPU (`0 MB Docker`)
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -1781,6 +1885,42 @@
                   </select>
                 </div>
               </div>
+
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 items-center rounded-2xl bg-[#070a08] border border-white/10 p-3">
+                <div class="space-y-1">
+                  <label class="text-[11px] font-semibold text-amber-300 block">Motor de Produção</label>
+                  <select id="qnv-render-mode" class="w-full min-h-[44px] bg-[#0d1210] border border-white/10 rounded-xl px-2.5 text-xs text-white outline-none">
+                    <option value="vps_preview" selected>⚡ Preview Rápido VPS (Clean Cinema)</option>
+                    <option value="colab_gpu">🚀 Colab GPU Lip-Sync (EchoMimicV3/LatentSync)</option>
+                    <option value="flow_pack">🎬 Pack Google Flow Veo 3.1</option>
+                  </select>
+                </div>
+                <div class="space-y-1">
+                  <label class="text-[11px] font-semibold text-slate-400 block">Legendas Clean Cinema</label>
+                  <select id="qnv-subtitles-mode" class="w-full min-h-[44px] bg-[#0d1210] border border-white/10 rounded-xl px-2.5 text-xs text-white outline-none">
+                    <option value="none" selected>Sem Texto (100% Limpo)</option>
+                    <option value="minimal">Minimalista 1 Linha (Contorno Fino)</option>
+                  </select>
+                </div>
+                <div class="flex flex-col justify-center gap-1.5 pt-2 sm:pt-4">
+                  <label class="inline-flex items-center gap-2 text-xs text-slate-200 cursor-pointer min-h-[36px]">
+                    <input id="qnv-clean-cinema" type="checkbox" checked class="w-4 h-4 accent-amber-500 rounded" />
+                    <span>Clean Cinema (Sem Caixas/Placas)</span>
+                  </label>
+                </div>
+              </div>
+
+              <div class="flex flex-wrap gap-2">
+                <button id="btn-qnv-flow-pack" type="button" onclick="generateNovelaFlowPack('hard')"
+                  class="touch-btn min-h-[44px] px-3.5 rounded-xl text-xs font-bold bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-400/40 cursor-pointer transition">
+                  🎬 Gerar Pack Google Flow Veo 3.1 deste Roteiro
+                </button>
+                <a href="/api/colab/notebook" download="ai_studio_colab_novela_gpu.ipynb"
+                  class="touch-btn min-h-[44px] px-3.5 rounded-xl text-xs font-bold bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-200 border border-indigo-400/40 inline-flex items-center gap-1.5">
+                  📓 Baixar Colab GPU Notebook
+                </a>
+              </div>
+              <div id="qnv-flow-pack-result" class="hidden space-y-2 rounded-2xl bg-[#070a08] border border-amber-500/25 p-3"></div>
 
               <div class="space-y-2">
                 <div class="text-[11px] font-semibold text-slate-400">Falas do Episódio (Camada Dupla: Texto Falado Fonético + Legenda Limpa)</div>
@@ -4704,11 +4844,16 @@
         };
       }
       if (guidedTemplateId === 'novela_regional_studio') {
+        const cleanCinema = Boolean(document.getElementById('gp-nov-clean-cinema')?.checked ?? true);
         const out = {
           visual_style: document.getElementById('gp-nov-style')?.value || '3d_cartoon',
           theme: document.getElementById('gp-nov-theme')?.value || 'Enzo da capital confundindo gírias nordestinas na bodega de Seu Bastião',
           expressions: document.getElementById('gp-nov-expressions')?.value || 'Oxente, Morreu Maria Preá, Botar Boneco',
           tone: document.getElementById('gp-nov-tone')?.value || 'Comédia Leve',
+          clean_cinema_mode: cleanCinema,
+          subtitles_mode: document.getElementById('gp-nov-subtitles')?.value || 'none',
+          render_mode: document.getElementById('gp-nov-render-mode')?.value || 'flow_pack',
+          colab_engine: document.getElementById('nov-colab-engine')?.value || 'echomimic_v3',
         };
         if (Array.isArray(gpNovGeneratedDialogue) && gpNovGeneratedDialogue.length) {
           out.dialogue = gpNovGeneratedDialogue;
@@ -4851,12 +4996,24 @@
       }
 
       if (st.ready && st.final_output && resBox) {
-        resBox.classList.remove('hidden');
-        if (vidEl && st.final_output.preview_url) vidEl.src = st.final_output.preview_url;
-        if (dlEl && st.final_output.download_url) {
-          dlEl.href = st.final_output.download_url;
-          dlEl.setAttribute('download', st.final_output.filename || 'studio_output.mp4');
+        const hasVid = Boolean(st.final_output.preview_url);
+        const hasDl = Boolean(st.final_output.download_url);
+        if (vidEl) {
+          vidEl.classList.toggle('hidden', !hasVid);
+          if (hasVid) vidEl.src = st.final_output.preview_url;
         }
+        if (dlEl) {
+          dlEl.classList.toggle('hidden', !hasDl);
+          if (hasDl) {
+            dlEl.href = st.final_output.download_url;
+            dlEl.setAttribute('download', st.final_output.filename || 'studio_output.mp4');
+          }
+        }
+        if (Array.isArray(st.final_output.takes) && typeof renderNovFlowPackCards === 'function') {
+          novFlowLastPack = st.final_output;
+          renderNovFlowPackCards(st.final_output, false);
+        }
+        resBox.classList.remove('hidden');
       }
     }
 
@@ -5021,6 +5178,12 @@
                 class="min-h-[38px] bg-[#0d1210] border border-white/10 rounded-lg px-2 text-xs text-slate-200 outline-none">
                 ${['shocked', 'confused', 'laughing', 'proud', 'dramatic', 'warm'].map(em => `<option value="${em}" ${(row.emotion || 'warm') === em ? 'selected' : ''}>${em}</option>`).join('')}
               </select>
+              <select onchange="qnvDialogueRows[${idx}].shot_framing = this.value"
+                class="min-h-[38px] bg-[#0d1210] border border-white/10 rounded-lg px-2 text-xs text-cyan-200 outline-none">
+                <option value="over_shoulder" ${(row.shot_framing || 'over_shoulder') === 'over_shoulder' ? 'selected' : ''}>Plano (Ombro)</option>
+                <option value="reverse_over_shoulder" ${row.shot_framing === 'reverse_over_shoulder' ? 'selected' : ''}>Contraplano</option>
+                <option value="reaction_closeup" ${row.shot_framing === 'reaction_closeup' ? 'selected' : ''}>Close-Up Reação</option>
+              </select>
               <input type="text" value="${escapeHtml(row.expression_highlight || '')}" placeholder="Palavra destaque"
                 onchange="qnvDialogueRows[${idx}].expression_highlight = this.value"
                 class="min-h-[38px] w-36 bg-[#0d1210] border border-white/10 rounded-lg px-2 text-xs text-amber-200 outline-none" />
@@ -5091,10 +5254,256 @@
       }
     }
 
+    let novFlowLastPack = null;
+    let novStitchBatchId = '';
+    let novStitchTakes = [];
+
+    function setNovelaRenderMode(mode) {
+      const m = ['flow_pack', 'colab_gpu', 'vps_preview'].includes(mode) ? mode : 'flow_pack';
+      const hidden = document.getElementById('gp-nov-render-mode');
+      if (hidden) hidden.value = m;
+      ['flow_pack', 'colab_gpu', 'vps_preview'].forEach(id => {
+        const btn = document.getElementById(`gp-nov-mode-${id}`);
+        const panel = document.getElementById(`gp-nov-panel-${id}`);
+        const active = id === m;
+        if (btn) {
+          btn.className = active
+            ? 'touch-btn min-h-[52px] px-3 py-2 rounded-xl border text-left transition cursor-pointer bg-amber-500/20 border-amber-400/70 text-amber-200 min-w-0'
+            : 'touch-btn min-h-[52px] px-3 py-2 rounded-xl border text-left transition cursor-pointer bg-white/[0.03] border-white/10 text-slate-300 hover:bg-white/[0.07] min-w-0';
+        }
+        if (panel) panel.classList.toggle('hidden', !active);
+      });
+      if (m === 'colab_gpu') fetchColabStatus();
+    }
+
+    async function fetchColabStatus() {
+      const badge = document.getElementById('nov-colab-status-badge');
+      const urlInp = document.getElementById('nov-colab-url');
+      try {
+        const res = await fetch('/api/colab/status');
+        if (!res.ok) return;
+        const d = await res.json();
+        if (urlInp && d.url && !urlInp.value) urlInp.value = d.url;
+        if (badge) {
+          badge.textContent = d.online
+            ? `🟢 Colab Online (${d.gpu})`
+            : (d.configured ? `🟡 Túnel Offline` : `⚪ Colab Desconectado`);
+          badge.className = d.online
+            ? 'px-2.5 py-1 rounded-full text-[10px] font-mono bg-emerald-500/20 text-emerald-300 border border-emerald-400/40'
+            : 'px-2.5 py-1 rounded-full text-[10px] font-mono bg-slate-800 text-slate-300 border border-white/10';
+        }
+      } catch (_) {}
+    }
+
+    async function connectColabTunnel() {
+      const btn = document.getElementById('btn-nov-colab-connect');
+      const urlVal = (document.getElementById('nov-colab-url')?.value || '').trim();
+      if (btn) { btn.disabled = true; btn.textContent = '⏳ Testando túnel Colab...'; }
+      try {
+        const res = await fetch('/api/colab/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ colab_url: urlVal }),
+        });
+        const d = await res.json();
+        await fetchColabStatus();
+        showToast(d.message || (d.online ? 'Colab conectado!' : 'Túnel salvo (offline no momento)'), d.online ? 'success' : 'info');
+      } catch (err) {
+        showToast(err.message, 'error');
+      } finally {
+        if (btn) { btn.disabled = false; btn.textContent = '🔌 Conectar & Testar Túnel Colab GPU'; }
+      }
+    }
+
+    function copyVeoPrompt(takeNumber) {
+      const tk = (novFlowLastPack?.takes || []).find(t => t.take_number === takeNumber);
+      if (!tk) return;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(tk.veo_prompt).catch(() => {});
+      }
+      showToast(`Prompt Veo 3.1 do Take #${takeNumber} copiado!`, 'success');
+    }
+
+    function renderNovFlowPackCards(pack, isHard) {
+      const cardsHtml = (pack.takes || []).map(tk => `
+        <div class="p-3 rounded-xl bg-[#0d1210] border border-white/10 space-y-2">
+          <div class="flex items-start gap-3">
+            <img src="${escapeHtml(tk.ingredient_url)}" alt="Take ${tk.take_number}" class="w-16 h-28 object-cover rounded-lg border border-amber-400/40 shrink-0" />
+            <div class="min-w-0 flex-1 space-y-1">
+              <div class="flex flex-wrap items-center gap-1.5">
+                <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold text-slate-950" style="background:${escapeHtml(tk.badge_bg || '#f59e0b')}">Take #${tk.take_number} · ${escapeHtml(tk.speaker)}</span>
+                <span class="px-2 py-0.5 rounded-full text-[10px] font-mono bg-white/5 text-slate-300">${escapeHtml(tk.shot_framing)} · ~${tk.estimated_duration_sec}s</span>
+                <span class="px-2 py-0.5 rounded-full text-[10px] font-mono bg-amber-500/15 text-amber-300">${tk.credits_veo_lite} Lite / ${tk.credits_veo_fast} Fast créd</span>
+              </div>
+              <div class="text-[11px] font-semibold text-white">“${escapeHtml(tk.tts_text)}”</div>
+              <textarea readonly rows="3" class="w-full bg-[#070a08] border border-white/10 rounded-lg p-2 text-[10px] font-mono text-slate-300 outline-none">${escapeHtml(tk.veo_prompt)}</textarea>
+              <div class="flex flex-wrap gap-2">
+                <button type="button" onclick="copyVeoPrompt(${tk.take_number})"
+                  class="touch-btn min-h-[38px] px-2.5 rounded-lg text-[11px] font-bold bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-400/40 cursor-pointer">
+                  📋 Copiar Prompt Veo 3.1
+                </button>
+                <a href="${escapeHtml(tk.ingredient_download_url)}" download="${escapeHtml(tk.ingredient_filename)}"
+                  class="touch-btn min-h-[38px] px-2.5 rounded-lg text-[11px] font-bold bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200 border border-emerald-400/40 inline-flex items-center">
+                  ⬇️ Baixar Ingredient
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      `).join('');
+
+      if (isHard) {
+        const box = document.getElementById('qnv-flow-pack-result');
+        if (box) {
+          box.classList.remove('hidden');
+          box.innerHTML = `<div class="text-xs font-bold text-amber-300">🎬 ${pack.total_takes} Takes · Veo 3.1 Lite: ${pack.total_credits_lite} créditos · Fast: ${pack.total_credits_fast} créditos</div>` + cardsHtml;
+        }
+      } else {
+        const box = document.getElementById('nov-flow-pack-result');
+        const sum = document.getElementById('nov-flow-credits-summary');
+        const cards = document.getElementById('nov-flow-pack-cards');
+        if (box) box.classList.remove('hidden');
+        if (sum) sum.textContent = `💰 ${pack.total_takes} Takes · Flow Lite: ${pack.total_credits_lite} créd | Fast: ${pack.total_credits_fast} créd`;
+        if (cards) cards.innerHTML = cardsHtml;
+      }
+    }
+
+    async function generateNovelaFlowPack(source) {
+      const isHard = source === 'hard';
+      const btn = document.getElementById(isHard ? 'btn-qnv-flow-pack' : 'btn-nov-flow-pack');
+      if (btn) { btn.disabled = true; btn.textContent = '⏳ Gerando Ingredients + Prompts Veo 3.1...'; }
+      try {
+        const payload = isHard
+          ? {
+              title: document.getElementById('qnv-title')?.value || 'Novela Flow Veo 3.1',
+              visual_style: document.getElementById('qnv-style')?.value || '3d_cartoon',
+              dialogue: qnvDialogueRows,
+            }
+          : {
+              title: gpNovGeneratedMeta.title || document.getElementById('gp-nov-theme')?.value || 'Causos do Sertão',
+              visual_style: document.getElementById('gp-nov-style')?.value || '3d_cartoon',
+              theme: document.getElementById('gp-nov-theme')?.value || '',
+              expressions: (document.getElementById('gp-nov-expressions')?.value || '').split(',').map(s => s.trim()).filter(Boolean),
+              tone: document.getElementById('gp-nov-tone')?.value || 'Comédia Leve',
+              dialogue: Array.isArray(gpNovGeneratedDialogue) && gpNovGeneratedDialogue.length ? gpNovGeneratedDialogue : [],
+            };
+        const res = await fetch('/api/quick/novela/flow-pack', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const pack = await res.json();
+        if (!res.ok || !pack.ok) throw new Error(pack.detail || 'Erro ao gerar Pack Veo 3.1');
+        novFlowLastPack = pack;
+        if (!isHard && Array.isArray(pack.dialogue)) gpNovGeneratedDialogue = pack.dialogue;
+        renderNovFlowPackCards(pack, isHard);
+        showToast(`Pack Veo 3.1 gerado (${pack.total_takes} takes, ${pack.total_credits_lite} créd Lite)!`, 'success');
+      } catch (err) {
+        showToast(`Erro Pack Flow: ${err.message}`, 'error');
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = isHard ? '🎬 Gerar Pack Google Flow Veo 3.1 deste Roteiro' : '🎬 Gerar Pack Google Flow (Ingredients + Prompts Veo 3.1)';
+        }
+      }
+    }
+
+    function renderStitchTakesList() {
+      const list = document.getElementById('nov-stitch-list');
+      if (!list) return;
+      if (!novStitchTakes.length) { list.classList.add('hidden'); list.innerHTML = ''; return; }
+      list.classList.remove('hidden');
+      list.innerHTML = novStitchTakes.map((t, i) => `
+        <div class="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg bg-[#070a08] border border-white/10">
+          <span class="truncate text-slate-200 font-mono">#${i + 1} · ${escapeHtml(t.original_name || t.filename)} (${t.duration || 0}s)</span>
+          <span class="text-cyan-300 shrink-0">${escapeHtml(t.size_human || '')}</span>
+        </div>
+      `).join('');
+    }
+
+    async function uploadNovelaTakes(e) {
+      const files = Array.from(e.target.files || []);
+      if (!files.length) return;
+      const fd = new FormData();
+      files.forEach(f => fd.append('videos', f));
+      try {
+        showToast(`Enviando ${files.length} take(s) para o costurador...`, 'info');
+        const res = await fetch('/api/quick/novela/upload-takes', { method: 'POST', body: fd });
+        const d = await res.json();
+        if (!res.ok || !d.ok) throw new Error(d.detail || 'Erro no upload');
+        novStitchBatchId = d.batch_id;
+        novStitchTakes = d.takes || [];
+        renderStitchTakesList();
+        showToast(`${novStitchTakes.length} takes prontos para costurar!`, 'success');
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    }
+
+    async function stitchNovelaTakes() {
+      if (!novStitchBatchId || !novStitchTakes.length) {
+        showToast('Selecione os takes .mp4 do Google Flow antes de costurar.', 'error');
+        return;
+      }
+      const btn = document.getElementById('btn-nov-stitch');
+      const resBox = document.getElementById('nov-stitch-result');
+      if (btn) { btn.disabled = true; btn.textContent = '⏳ Costurando com Whisper + SoXR...'; }
+      if (resBox) { resBox.classList.remove('hidden'); resBox.innerHTML = '<div class="text-xs text-cyan-300">Aparando silêncios e equalizando 48kHz...</div>'; }
+      try {
+        const res = await fetch('/api/quick/novela/stitch-takes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: document.getElementById('gp-nov-theme')?.value || 'Novelinha Flow',
+            batch_id: novStitchBatchId,
+            filenames: novStitchTakes.map(t => t.filename),
+            platform_preset: guidedPlatform || 'tiktok_reels',
+            subtitles_mode: document.getElementById('nov-stitch-subtitles')?.value || 'none',
+            trim_silence: true,
+          }),
+        });
+        const job = await res.json();
+        if (!res.ok || !job.task_id) throw new Error(job.detail || 'Erro ao iniciar costura');
+
+        const poll = async () => {
+          const stR = await fetch(`/api/quick/novela/stitch-takes/task/${job.task_id}`);
+          const st = await stR.json();
+          if (st.ready && st.download_url) {
+            if (resBox) {
+              resBox.innerHTML = `
+                <div class="text-xs font-bold text-emerald-300">✅ Episódio costurado (${st.duration}s · -${st.trimmed_seconds}s de silêncio aparado)!</div>
+                <video src="${escapeHtml(st.preview_url)}" controls preload="metadata" class="w-full rounded-xl border border-white/10 bg-black max-h-60"></video>
+                <a href="${escapeHtml(st.download_url)}" download="${escapeHtml(st.filename)}" class="touch-btn min-h-[44px] px-3 rounded-xl text-xs font-bold bg-emerald-500/20 text-emerald-200 border border-emerald-400/40 flex items-center justify-center">⬇️ Baixar Episódio Costurado (${escapeHtml(st.size_human || '')})</a>
+              `;
+            }
+            if (btn) { btn.disabled = false; btn.textContent = '✂️ Costurar Takes (48kHz)'; }
+            fetchOutputs();
+            showToast('Episódio costurado salvo na Galeria!', 'success');
+            return;
+          }
+          if (st.failed) {
+            if (btn) { btn.disabled = false; btn.textContent = '✂️ Costurar Takes (48kHz)'; }
+            if (resBox) resBox.innerHTML = `<div class="text-xs text-rose-300">Falha: ${escapeHtml(st.error || 'Erro')}</div>`;
+            return;
+          }
+          setTimeout(poll, 2000);
+        };
+        setTimeout(poll, 1500);
+      } catch (err) {
+        if (btn) { btn.disabled = false; btn.textContent = '✂️ Costurar Takes (48kHz)'; }
+        showToast(err.message, 'error');
+      }
+    }
+
     let qnvPollTimer = null;
     async function submitHardNovela(e) {
       e.preventDefault();
       if (qnvPollTimer) clearTimeout(qnvPollTimer);
+      const rmode = document.getElementById('qnv-render-mode')?.value || 'vps_preview';
+      if (rmode === 'flow_pack') {
+        await generateNovelaFlowPack('hard');
+        return;
+      }
       const btn = document.getElementById('btn-qnv-submit');
       const box = document.getElementById('qnv-status-box');
       const dlEl = document.getElementById('qnv-downloads');
@@ -5115,6 +5524,10 @@
             title: document.getElementById('qnv-title')?.value || 'Causos do Sertão — Ep. 01',
             visual_style: document.getElementById('qnv-style')?.value || '3d_cartoon',
             platform_preset: document.getElementById('qnv-platform')?.value || 'tiktok_reels',
+            clean_cinema_mode: Boolean(document.getElementById('qnv-clean-cinema')?.checked ?? true),
+            subtitles_mode: document.getElementById('qnv-subtitles-mode')?.value || 'none',
+            render_mode: rmode,
+            colab_engine: document.getElementById('nov-colab-engine')?.value || 'echomimic_v3',
             dictionary: Array.isArray(parsedDict) ? parsedDict : [],
             dialogue: qnvDialogueRows,
             quality: 'standard',
@@ -5262,7 +5675,9 @@
       setGuidedTemplate('shopee_viral_clone');
       setGuidedPlatform('shopee_20_9');
       setGuidedNovelaStyle('3d_cartoon');
+      setNovelaRenderMode('flow_pack');
       renderHardNovelaRows();
+      fetchColabStatus();
       setQuickStudioMode('guided');
       safeCreateIcons();
       refreshAll();

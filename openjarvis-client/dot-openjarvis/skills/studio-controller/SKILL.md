@@ -105,7 +105,9 @@ Ao planejar ou roteirizar **qualquer vídeo de produto para Shopee Video, TikTok
 7. **Motor Recomendado para Campanhas com Fotos Reais:**
    - Utilize **`HyperFrames Multi-Imagem POV`** (`studio_run_hyperframes` com `campaign` ou `image_paths`, estilo `L'Oréal Gold Luxury` ou `Shopee Flash Sale`, duração `16s` ajustada dinamicamente ao áudio completo `pt-BR-FranciscaNeural` / `pt-BR-ThalitaMultilingualNeural` a `+12%` em **48kHz Estéreo SoXR** — 0 MB RAM ociosa).
 
-## FÁBRICA DE NOVELINHAS & MICRO-SÉRIES MULTI-PERSONAGEM (Trilha 6 · `novela_regional_studio`)
-- Use **`studio_run_novela`** (`POST /api/quick/novela` · 0 MB RAM ociosa) quando o usuário pedir para **criar do zero** uma novelinha, esquete de humor nordestino, causo de bodega ou micro-série multi-personagem (`Dona Socorro`, `Seu Bastião`, `Enzo`, `Narrador`), **diferente** do SupoClip (que fatia vídeos longos já gravados).
-- Sempre pergunte/confirme o **estilo visual** (`3d_cartoon` animado expressivo vs. `cinematic_tv` realista 35mm de TV), **tema**, **gírias/expressões** e **plataforma** (`tiktok_reels`, `yt_shorts` ou `shopee_20_9`).
-- O motor entrega camada dupla (`tts_text` fonético -> `edge-tts` multi-voz + `subtitle_text` limpo na tela), SFX cômicos, 48kHz Estéreo SoXR e **Freeze-Frame final de 3.5s** com Card **"📖 Dicionário Nordestino"** e *"Continua no próximo episódio..."*.
+## FÁBRICA DE NOVELINHAS v2.5 · CLEAN CINEMA, GOOGLE FLOW (VEO 3.1) & COLAB GPU
+- **Regra Visual Clean Cinema (`clean_cinema_mode=True`, `subtitles_mode="none"`):** em micro-séries, NUNCA polua a tela com cartões escuros, crachás ou placas cobrindo os personagens; use corte seco rápido **Plano e Contraplano (Over-the-Shoulder)**. Se o usuário pedir legendas, use `subtitles_mode="minimal"` (apenas 1 linha branca com contorno fino preto).
+- **Os 3 Motores de Produção:**
+  1. **Modo 1 · Diretor Google Flow Veo 3.1 (`studio_generate_flow_pack` -> `studio_stitch_novela_takes`):** gera *Ingredients* limpos `1080x1920`, prompts técnicos bilíngues (direção/câmera/lente em inglês + fala nordestina em português entre aspas + trava anti-texto/legenda), cálculo de créditos Pro (`10 créd/take Lite` · `20 créd/take Fast`) e costura final dos `.mp4` com corte seco inteligente (`faster-whisper` INT8 + 48kHz SoXR).
+  2. **Modo 2 · Google Colab GPU Worker (`studio_colab_status` -> `studio_run_novela(..., render_mode='colab_gpu')`):** envia foto + áudio PT-BR para o túnel Cloudflare do notebook `ai_studio_colab_novela_gpu.ipynb` (`EchoMimicV3` / `LatentSync`).
+  3. **Modo 3 · Preview Rápido VPS (`studio_run_novela`):** gera storyboard animado Clean Cinema direto na CPU da VPS (`0 MB RAM Docker`) para validar falas e timing antes de gastar créditos externos.

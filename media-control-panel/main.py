@@ -252,6 +252,7 @@ SKILL_PROMPTS: Dict[str, str] = {
     "hyperframes-cli": "Renderize o projeto de vídeo local via CLI HyperFrames e exporte em formato MP4 otimizado para CPU",
     "video-use": "Processe este vídeo no Video Use (faster-whisper INT8 + corte de silêncios 48kHz SoXR + color grade + legendas): [CAMINHO_DO_VIDEO]",
     "manim-video": "Crie uma animação matemática/técnica didática no estilo 3Blue1Brown usando Manim Community Edition para: [CONCEITO]",
+    "novela-veo-colab-director": "Atue como Diretor Cinematográfico Clean Cinema (plano e contraplano sem poluição visual) e gere um Production Pack para Google Flow (Veo 3.1) ou dispare via Colab GPU Lip-Sync sobre o tema: [TEMA E EXPRESSÕES]",
 }
 
 MANAGED_KEYS = [
@@ -2156,6 +2157,8 @@ HYPERFRAMES_RUNNER = STUDIO_BASE_DIR / "tools/hyperframes/vps_ad_runner.py"
 NOVELA_RUNNER = STUDIO_BASE_DIR / "tools/hyperframes/vps_novela_runner.py"
 VIRAL_ANALYZER_RUNNER = STUDIO_BASE_DIR / "tools/hyperframes/viral_reference_analyzer.py"
 VIDEOUSE_INPUTS_DIR = STUDIO_BASE_DIR / ".cache/videouse_inputs"
+NOVELA_TAKES_CACHE_DIR = STUDIO_BASE_DIR / ".cache/novela_takes"
+COLAB_NOTEBOOK_PATH = STUDIO_BASE_DIR / "tools/colab-gpu-worker/ai_studio_colab_novela_gpu.ipynb"
 VIDEOUSE_EXPORTS_DIR = STUDIO_BASE_DIR / "exports/videouse"
 HYPERFRAMES_EXPORTS_DIR = STUDIO_BASE_DIR / "exports/hyperframes"
 NOVELA_EXPORTS_DIR = STUDIO_BASE_DIR / "exports/novela"
@@ -2904,7 +2907,7 @@ async def api_quick_hyperframes_task(task_id: str):
 
 
 # ==============================================================================
-# Novela Studio Multi-Personagem (v2.4 — Trilha 6 Zero-RAM)
+# Novela Studio Multi-Personagem (v2.5 — Clean Cinema, Veo 3.1 Pack, Take Stitcher & Colab GPU)
 # ==============================================================================
 
 class QuickNovelaScriptRequest(BaseModel):
@@ -2926,23 +2929,72 @@ class QuickNovelaRequest(BaseModel):
     expressions: List[str] = []
     tone: str = "Comédia Leve"
     quality: str = "standard"
+    clean_cinema_mode: bool = True
+    subtitles_mode: str = "none"
+    include_dictionary_endcard: Optional[bool] = None
+    render_mode: str = "vps_preview"
+    colab_engine: str = "echomimic_v3"
+    colab_url: str = ""
     output_filename: str = ""
     wait: bool = False
 
 
-async def _invoke_novela_cli(out_path: Path, cfg_payload: Dict[str, Any]) -> Dict[str, Any]:
+class QuickNovelaFlowPackRequest(BaseModel):
+    title: str = "Causos do Sertão — Episódio 01"
+    visual_style: str = "3d_cartoon"
+    setting: str = ""
+    dialogue: List[Dict[str, Any]] = []
+    theme: str = "Enzo confundindo gírias nordestinas na mercearia do sertão"
+    expressions: List[str] = ["Oxente", "Morreu Maria Preá", "Botar Boneco"]
+    tone: str = "Comédia Leve"
+    episode_badge: str = "🌵 NOVELINHA DO SERTÃO • EP. 01"
+
+
+class QuickNovelaStitchRequest(BaseModel):
+    title: str = "Novelinha Flow — Corte Seco"
+    batch_id: str = ""
+    filenames: List[str] = []
+    take_paths: List[str] = []
+    output_ids: List[str] = []
+    platform_preset: str = "tiktok_reels"
+    subtitles_mode: str = "none"
+    trim_silence: bool = True
+    ambient_bed: bool = False
+    output_filename: str = ""
+    wait: bool = False
+
+
+class ColabConfigRequest(BaseModel):
+    colab_url: str = ""
+    colab_token: str = ""
+
+
+async def _invoke_novela_cli(
+    out_path: Path,
+    cfg_payload: Dict[str, Any],
+    mode: str = "render",
+) -> Dict[str, Any]:
     if not NOVELA_RUNNER.exists() or not VIDEOUSE_PYTHON.exists():
         raise HTTPException(status_code=500, detail="Motor Novela Studio não configurado em /opt/ai-media-studio/tools/hyperframes/vps_novela_runner.py")
 
     NOVELA_EXPORTS_DIR.mkdir(parents=True, exist_ok=True)
     cfg_file = Path(f"/tmp/novela_job_{uuid.uuid4().hex[:10]}.json")
-    full_cfg = {**cfg_payload, "output": str(out_path)}
+    full_cfg = {**cfg_payload}
+    if mode in ("render", "stitch"):
+        full_cfg["output"] = str(out_path)
+    if not full_cfg.get("colab_url"):
+        vault = load_vault()
+        if vault.get("COLAB_GPU_URL"):
+            full_cfg["colab_url"] = vault["COLAB_GPU_URL"]
+        if vault.get("COLAB_GPU_TOKEN") and not full_cfg.get("colab_token"):
+            full_cfg["colab_token"] = vault["COLAB_GPU_TOKEN"]
     cfg_file.write_text(json.dumps(full_cfg, ensure_ascii=False, indent=2), encoding="utf-8")
 
     try:
         proc = await asyncio.create_subprocess_exec(
             str(VIDEOUSE_PYTHON),
             str(NOVELA_RUNNER),
+            "--mode", mode,
             "--config", str(cfg_file),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
@@ -2951,10 +3003,15 @@ async def _invoke_novela_cli(out_path: Path, cfg_payload: Dict[str, Any]) -> Dic
         stdout_txt = stdout_b.decode("utf-8", errors="ignore").strip()
         stderr_txt = stderr_b.decode("utf-8", errors="ignore").strip()
 
-        if proc.returncode != 0 or not out_path.exists():
+        if proc.returncode != 0:
             raise RuntimeError((stderr_txt or stdout_txt or f"Exit code {proc.returncode}")[-600:])
 
         meta = json.loads(stdout_txt.splitlines()[-1])
+        if mode == "flow_pack":
+            return meta
+
+        if not out_path.exists():
+            raise RuntimeError(f"Arquivo final esperado não gerado: {out_path}")
         dl = _output_download_meta("novela", out_path)
         return {**meta, **dl, "size_human": _human_size(out_path.stat().st_size)}
     finally:
@@ -2963,6 +3020,10 @@ async def _invoke_novela_cli(out_path: Path, cfg_payload: Dict[str, Any]) -> Dic
 
 async def _pipeline_run_novela_cli(**kwargs: Any) -> Dict[str, Any]:
     NOVELA_EXPORTS_DIR.mkdir(parents=True, exist_ok=True)
+    rmode = str(kwargs.get("render_mode") or "vps_preview").strip().lower()
+    if rmode == "flow_pack":
+        return await _invoke_novela_cli(NOVELA_EXPORTS_DIR / "pack.unused", kwargs, mode="flow_pack")
+
     raw_name = str(kwargs.get("output_filename") or "").strip()
     if raw_name:
         safe_name = re.sub(r"[^a-zA-Z0-9_.-]+", "_", raw_name)
@@ -2973,7 +3034,7 @@ async def _pipeline_run_novela_cli(**kwargs: Any) -> Dict[str, Any]:
         vstyle = str(kwargs.get("visual_style") or "3d_cartoon").strip().lower()
         safe_name = f"novela_{slug}_{vstyle}_{int(time.time())}_{uuid.uuid4().hex[:6]}.mp4"
     out_path = NOVELA_EXPORTS_DIR / safe_name
-    return await _invoke_novela_cli(out_path, kwargs)
+    return await _invoke_novela_cli(out_path, kwargs, mode="render")
 
 
 async def _execute_novela_job(task_id: str, out_path: Path, cfg_payload: Dict[str, Any]) -> None:
@@ -2981,7 +3042,12 @@ async def _execute_novela_job(task_id: str, out_path: Path, cfg_payload: Dict[st
     try:
         job["status"] = "processing"
         job["progress"] = 20
-        job["message"] = "Sintetizando vozes dos personagens, retratos Character Lock e Freeze-Frame..."
+        rmode = str(cfg_payload.get("render_mode") or "vps_preview").strip().lower()
+        job["message"] = (
+            "Gerando Ingredients 1080x1920 + Prompts Bilíngues Google Flow Veo 3.1..."
+            if rmode == "flow_pack"
+            else "Sintetizando vozes e cenas Clean Cinema Shot-Reverse-Shot..."
+        )
 
         if not cfg_payload.get("dialogue"):
             generated = await PIPELINE_ORCHESTRATOR.generate_novela_script(
@@ -2999,14 +3065,19 @@ async def _execute_novela_job(task_id: str, out_path: Path, cfg_payload: Dict[st
                 cfg_payload["title"] = generated["title"]
 
         job["progress"] = 50
-        res = await _invoke_novela_cli(out_path, cfg_payload)
+        cli_mode = "flow_pack" if rmode == "flow_pack" else "render"
+        res = await _invoke_novela_cli(out_path, cfg_payload, mode=cli_mode)
         job.update(res)
         job["dialogue"] = cfg_payload.get("dialogue")
         job["dictionary"] = cfg_payload.get("dictionary")
         job["status"] = "completed"
         job["progress"] = 100
         job["ready"] = True
-        job["message"] = f"Novelinha '{out_path.name}' renderizada em {cfg_payload.get('visual_style')}!"
+        job["message"] = (
+            f"Pack Veo 3.1 pronto ({res.get('total_takes', 0)} takes, {res.get('total_credits_lite', 0)} créd Lite)!"
+            if rmode == "flow_pack"
+            else f"Novelinha Clean Cinema '{out_path.name}' ({cfg_payload.get('visual_style')}) renderizada!"
+        )
     except Exception as exc:
         job["status"] = "error"
         job["failed"] = True
@@ -3025,6 +3096,239 @@ async def api_quick_novela_generate_script(req: QuickNovelaScriptRequest):
     return {"ok": True, **script_data}
 
 
+@app.post("/api/quick/novela/flow-pack")
+async def api_quick_novela_flow_pack(req: QuickNovelaFlowPackRequest):
+    cfg_payload = req.model_dump() if hasattr(req, "model_dump") else req.dict()
+    if not cfg_payload.get("dialogue"):
+        generated = await PIPELINE_ORCHESTRATOR.generate_novela_script(
+            theme=req.theme or req.title,
+            expressions=req.expressions or [],
+            tone=req.tone,
+            episode_badge=req.episode_badge,
+        )
+        cfg_payload["dialogue"] = generated["dialogue"]
+        if not cfg_payload.get("setting"):
+            cfg_payload["setting"] = generated.get("setting") or ""
+        if not cfg_payload.get("title"):
+            cfg_payload["title"] = generated.get("title") or req.title
+    res = await _invoke_novela_cli(NOVELA_EXPORTS_DIR / "pack.unused", cfg_payload, mode="flow_pack")
+    res["dialogue"] = cfg_payload.get("dialogue")
+    return res
+
+
+@app.post("/api/quick/novela/upload-takes")
+async def api_quick_novela_upload_takes(request: Request):
+    form = await request.form()
+    uploads: List[UploadFile] = []
+    for k in form.keys():
+        for val in form.getlist(k):
+            if hasattr(val, "filename") and hasattr(val, "read"):
+                uploads.append(val)
+    if len(uploads) < 1:
+        raise HTTPException(status_code=400, detail="Envie pelo menos 1 arquivo de take (.mp4/.mov/.webm).")
+    if len(uploads) > 8:
+        raise HTTPException(status_code=400, detail="Limite de até 8 takes por costura.")
+
+    batch_id = f"batch_{int(time.time())}_{uuid.uuid4().hex[:6]}"
+    batch_dir = (NOVELA_TAKES_CACHE_DIR / batch_id).resolve()
+    batch_dir.mkdir(parents=True, exist_ok=True)
+    allowed_exts = {".mp4", ".mov", ".webm", ".mkv", ".m4v"}
+    saved_takes: List[Dict[str, Any]] = []
+
+    for idx, up in enumerate(uploads):
+        raw_name = Path(up.filename or f"take_{idx+1}.mp4").name
+        ext = Path(raw_name).suffix.lower()
+        if ext not in allowed_exts:
+            ext = ".mp4"
+        safe_fname = f"take_{idx+1:02d}_{re.sub(r'[^a-zA-Z0-9_.-]+', '_', Path(raw_name).stem)[:40]}{ext}"
+        dest = (batch_dir / safe_fname).resolve()
+        if not dest.is_relative_to(batch_dir):
+            raise HTTPException(status_code=400, detail="Nome de arquivo inválido.")
+        content = await up.read()
+        if len(content) < 512:
+            raise HTTPException(status_code=400, detail=f"Arquivo '{raw_name}' vazio ou corrompido.")
+        dest.write_bytes(content)
+
+        dur_s = 0.0
+        probe = await run_cmd([
+            "ffprobe", "-v", "error", "-show_entries", "format=duration",
+            "-of", "default=noprint_wrappers=1:nokey=1", str(dest),
+        ], timeout=15)
+        try:
+            dur_s = round(float(probe["stdout"].strip() or "0"), 2)
+        except Exception:
+            dur_s = 0.0
+
+        saved_takes.append({
+            "index": idx + 1,
+            "filename": safe_fname,
+            "original_name": raw_name,
+            "path": str(dest),
+            "duration": dur_s,
+            "size_human": _human_size(len(content)),
+        })
+
+    return {"ok": True, "batch_id": batch_id, "count": len(saved_takes), "takes": saved_takes}
+
+
+async def _execute_novela_stitch_job(task_id: str, out_path: Path, cfg_payload: Dict[str, Any]) -> None:
+    job = _LOCAL_MEDIA_JOBS[task_id]
+    try:
+        job["status"] = "processing"
+        job["progress"] = 25
+        job["message"] = "Aparando silêncios (faster-whisper INT8), alinhando 48kHz SoXR e costurando plano/contraplano..."
+        res = await _invoke_novela_cli(out_path, cfg_payload, mode="stitch")
+        job.update(res)
+        job["status"] = "completed"
+        job["progress"] = 100
+        job["ready"] = True
+        job["message"] = f"Episódio costurado '{out_path.name}' pronto ({res.get('takes_count', 0)} takes, -{res.get('trimmed_seconds', 0)}s de silêncio)!"
+    except Exception as exc:
+        job["status"] = "error"
+        job["failed"] = True
+        job["error"] = str(exc)
+        job["message"] = f"Falha ao costurar takes: {exc}"
+
+
+@app.post("/api/quick/novela/stitch-takes")
+async def api_quick_novela_stitch_takes(req: QuickNovelaStitchRequest):
+    resolved_paths: List[Path] = []
+    allowed_bases = [NOVELA_TAKES_CACHE_DIR.resolve(), NOVELA_EXPORTS_DIR.resolve(), STUDIO_BASE_DIR.resolve()]
+
+    if req.batch_id and req.filenames:
+        bdir = (NOVELA_TAKES_CACHE_DIR / re.sub(r"[^a-zA-Z0-9_-]+", "", req.batch_id)).resolve()
+        for fn in req.filenames:
+            cand = (bdir / Path(fn).name).resolve()
+            if cand.is_relative_to(bdir) and cand.is_file():
+                resolved_paths.append(cand)
+    elif req.batch_id and not req.filenames and not req.take_paths:
+        bdir = (NOVELA_TAKES_CACHE_DIR / re.sub(r"[^a-zA-Z0-9_-]+", "", req.batch_id)).resolve()
+        if bdir.is_dir():
+            resolved_paths.extend(sorted(p for p in bdir.iterdir() if p.is_file()))
+
+    for raw_tp in (req.take_paths or []):
+        cand = Path(str(raw_tp).strip()).resolve()
+        if cand.is_file() and any(cand.is_relative_to(b) for b in allowed_bases):
+            resolved_paths.append(cand)
+
+    for oid in (req.output_ids or []):
+        resolved_paths.append(_resolve_videouse_input(oid, "", False))
+
+    if len(resolved_paths) < 1:
+        raise HTTPException(status_code=400, detail="Nenhum take válido encontrado para costurar.")
+
+    NOVELA_EXPORTS_DIR.mkdir(parents=True, exist_ok=True)
+    raw_name = (req.output_filename or "").strip()
+    if raw_name:
+        safe_name = re.sub(r"[^a-zA-Z0-9_.-]+", "_", raw_name)
+        if not safe_name.endswith(".mp4"):
+            safe_name += ".mp4"
+    else:
+        slug = re.sub(r"[^a-zA-Z0-9_-]+", "-", (req.title or "stitched").lower()).strip("-")[:32] or "stitched"
+        safe_name = f"novela_stitched_{slug}_{int(time.time())}_{uuid.uuid4().hex[:6]}.mp4"
+    out_path = NOVELA_EXPORTS_DIR / safe_name
+
+    task_id = f"novst-{uuid.uuid4().hex[:10]}"
+    _trim_local_media_jobs()
+    cfg_payload = {
+        "title": req.title,
+        "take_paths": [str(p) for p in resolved_paths],
+        "platform_preset": req.platform_preset,
+        "subtitles_mode": req.subtitles_mode if req.subtitles_mode in ("none", "minimal") else "none",
+        "trim_silence": bool(req.trim_silence),
+        "ambient_bed": bool(req.ambient_bed),
+    }
+    _LOCAL_MEDIA_JOBS[task_id] = {
+        "ok": True,
+        "task_id": task_id,
+        "engine": "novela_stitch",
+        "status": "processing",
+        "progress": 10,
+        "ready": False,
+        "failed": False,
+        "title": req.title,
+        "takes_count": len(resolved_paths),
+        "filename": safe_name,
+        "created_at": time.time(),
+        "message": f"Costurando {len(resolved_paths)} takes com corte seco inteligente...",
+    }
+
+    task = asyncio.create_task(_execute_novela_stitch_job(task_id, out_path, cfg_payload))
+    _LOCAL_MEDIA_JOBS[task_id]["_task"] = task
+
+    if req.wait:
+        try:
+            await asyncio.wait_for(asyncio.shield(task), timeout=240.0)
+        except asyncio.TimeoutError:
+            pass
+
+    return {k: v for k, v in _LOCAL_MEDIA_JOBS[task_id].items() if k != "_task"}
+
+
+@app.get("/api/quick/novela/stitch-takes/task/{task_id}")
+async def api_quick_novela_stitch_task(task_id: str):
+    job = _LOCAL_MEDIA_JOBS.get(task_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Tarefa de costura não encontrada")
+    return {k: v for k, v in job.items() if k != "_task"}
+
+
+async def _probe_colab_tunnel(colab_url: str, colab_token: str = "") -> Dict[str, Any]:
+    clean_url = sanitize_base_url(colab_url, "")
+    if not clean_url:
+        return {"ok": True, "configured": False, "online": False, "url": "", "gpu": "", "engines": [], "message": "Túnel Colab não configurado"}
+    try:
+        headers = {"Accept": "application/json"}
+        if colab_token:
+            headers["X-Colab-Token"] = colab_token
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            r = await client.get(f"{clean_url}/health", headers=headers)
+        if r.status_code == 200:
+            data = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
+            return {
+                "ok": True,
+                "configured": True,
+                "online": True,
+                "url": clean_url,
+                "gpu": str(data.get("gpu") or "Colab GPU"),
+                "engines": list(data.get("engines") or ["echomimic_v3", "latentsync"]),
+                "message": f"Conectado ao Colab GPU ({data.get('gpu') or 'Ativo'})!",
+            }
+        return {"ok": True, "configured": True, "online": False, "url": clean_url, "gpu": "", "engines": [], "message": f"Colab respondeu HTTP {r.status_code}"}
+    except Exception as exc:
+        return {"ok": True, "configured": True, "online": False, "url": clean_url, "gpu": "", "engines": [], "message": f"Túnel offline ou inacessível: {type(exc).__name__}"}
+
+
+@app.get("/api/colab/notebook")
+async def api_colab_notebook():
+    if not COLAB_NOTEBOOK_PATH.is_file():
+        raise HTTPException(status_code=404, detail="Notebook Colab GPU Worker não encontrado na VPS.")
+    return FileResponse(
+        COLAB_NOTEBOOK_PATH,
+        media_type="application/x-ipynb+json",
+        filename="ai_studio_colab_novela_gpu.ipynb",
+    )
+
+
+@app.get("/api/colab/status")
+async def api_colab_status():
+    vault = load_vault()
+    c_url = (vault.get("COLAB_GPU_URL") or os.environ.get("COLAB_GPU_URL") or "").strip()
+    c_tok = (vault.get("COLAB_GPU_TOKEN") or os.environ.get("COLAB_GPU_TOKEN") or "").strip()
+    return await _probe_colab_tunnel(c_url, c_tok)
+
+
+@app.post("/api/colab/config")
+async def api_colab_config(req: ColabConfigRequest):
+    vault = load_vault()
+    clean_url = sanitize_base_url(req.colab_url, "")
+    vault["COLAB_GPU_URL"] = clean_url
+    if req.colab_token is not None:
+        vault["COLAB_GPU_TOKEN"] = req.colab_token.strip()
+    save_vault_file(vault)
+    return await _probe_colab_tunnel(clean_url, vault.get("COLAB_GPU_TOKEN", ""))
+
+
 @app.post("/api/quick/novela")
 async def api_quick_novela(req: QuickNovelaRequest):
     if not NOVELA_RUNNER.exists() or not VIDEOUSE_PYTHON.exists():
@@ -3032,6 +3336,7 @@ async def api_quick_novela(req: QuickNovelaRequest):
 
     NOVELA_EXPORTS_DIR.mkdir(parents=True, exist_ok=True)
     vstyle = req.visual_style if req.visual_style in ("3d_cartoon", "cinematic_tv") else "3d_cartoon"
+    rmode = req.render_mode if req.render_mode in ("vps_preview", "flow_pack", "colab_gpu") else "vps_preview"
     raw_name = (req.output_filename or "").strip()
     if raw_name:
         safe_name = re.sub(r"[^a-zA-Z0-9_.-]+", "_", raw_name)
@@ -3046,10 +3351,12 @@ async def api_quick_novela(req: QuickNovelaRequest):
     _trim_local_media_jobs()
     cfg_payload = req.model_dump() if hasattr(req, "model_dump") else req.dict()
     cfg_payload["visual_style"] = vstyle
+    cfg_payload["render_mode"] = rmode
     _LOCAL_MEDIA_JOBS[task_id] = {
         "ok": True,
         "task_id": task_id,
         "engine": "novela",
+        "render_mode": rmode,
         "status": "processing",
         "progress": 10,
         "ready": False,
@@ -3057,9 +3364,11 @@ async def api_quick_novela(req: QuickNovelaRequest):
         "title": req.title,
         "visual_style": vstyle,
         "platform_preset": req.platform_preset,
+        "clean_cinema_mode": req.clean_cinema_mode,
+        "subtitles_mode": req.subtitles_mode,
         "filename": safe_name,
         "created_at": time.time(),
-        "message": f"Iniciando produção multi-personagem ({vstyle})...",
+        "message": f"Iniciando Novela Studio v2.5 ({rmode} · {vstyle})...",
     }
 
     task = asyncio.create_task(_execute_novela_job(task_id, out_path, cfg_payload))
