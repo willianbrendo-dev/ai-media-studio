@@ -1,6 +1,6 @@
 ================================================================================================
 AI MEDIA STUDIO — DOSSIÊ TÉCNICO E ARQUITETURAL COMPLETO
-Gerado por introspecção em: 2026-11-18 14:29:49 -03
+Gerado por introspecção em: 2026-11-18 14:58:10 -03
 Repositório Local: /home/wbrendo/.gemini/antigravity/scratch/ai-media-studio
 VPS Produção: root@187.77.202.176:/opt/ai-media-studio/ (https://187.77.202.176.sslip.io)
 Política de Segurança: Zero valores de segredos exibidos; apenas nomes de chaves e status SET=True/False.
@@ -222,7 +222,7 @@ SEÇÃO 1 · INVENTÁRIO COMPLETO DE ARQUIVOS, MÓDULOS, CLASSES E FUNÇÕES
       * L310-L1265 class GuidedPipelineOrchestrator(methods=15: __init__(L313), state_path(L359), _save_state(L365), load_state(L376), list_runs(L385), start(L398), resume(L470), _run_pipeline_task(L494), _step_shopee_viral_clone(L584), _step_novela_shorts_polish(L697)...) — Executes multi-step production pipelines asynchronously with disk checkpoints and strict RAM protection.
 
 ### tools/hyperframes/vps_novela_runner.py
-    VPS Equiv.: /opt/ai-media-studio/tools/hyperframes/vps_novela_runner.py | Tamanho: 103.0 KB (105514 bytes) | Linhas: 2358
+    VPS Equiv.: /opt/ai-media-studio/tools/hyperframes/vps_novela_runner.py | Tamanho: 103.0 KB (105505 bytes) | Linhas: 2358
     Papel     : Motor Clean Cinema Multi-Personagem, Dual-Style Live-Action/3D, 4 Cortes Virais, Flow Veo 3.1 Pack e Take Stitcher
     Docstring : VPS Novela Studio Runner — Cinema Clean Engine v2.5.
     Símbolos principais:
@@ -286,7 +286,7 @@ SEÇÃO 1 · INVENTÁRIO COMPLETO DE ARQUIVOS, MÓDULOS, CLASSES E FUNÇÕES
       * L1044-L1106 def synthesize_dialogue_preview(dialogue, accent_engine, out_mp3, colab_url, colab_token) — Synthesize rapid multi-character or single-line MP3 audio preview (48kHz Stereo SoXR).
 
 ### tools/hyperframes/novela_lipsync_animator.py
-    VPS Equiv.: /opt/ai-media-studio/tools/hyperframes/novela_lipsync_animator.py | Tamanho: 37.6 KB (38534 bytes) | Linhas: 884
+    VPS Equiv.: /opt/ai-media-studio/tools/hyperframes/novela_lipsync_animator.py | Tamanho: 37.3 KB (38181 bytes) | Linhas: 877
     Papel     : Cascata Lip-Sync Real (Tier 1 Colab GPU LivePortrait/LatentSync/MuseTalk; Tier 2 Local CPU MediaPipe 478pts + Visemas 2.5D cv2.remap)
     Docstring : True 2.5D Lip-Sync & Facial Motion Cascade Engine (v2.8).
     Símbolos principais:
@@ -296,19 +296,19 @@ SEÇÃO 1 · INVENTÁRIO COMPLETO DE ARQUIVOS, MÓDULOS, CLASSES E FUNÇÕES
       * L230-L354  def detect_face_rig(img_bgr) — Detect facial mouth, chin, eye, eyebrow, and head rig coordinates (MediaPipe -> Haar -> Anatomical).
       * L357-L369  def _compute_blink_schedule(num_frames, fps, seed_val) — Generate smooth natural eye-blink closures every 2.5s-3.5s.
       * L372-L480  def _precompute_roi_weights(roi_h, roi_w, local_rig, roi_src) — Precompute vectorized Gaussian spatial influence maps inside the cropped head/torso ROI.
-      * L483-L730  def _animate_local_viseme_take(image_path, audio_wav, out_mp4, emotion, emotion_preset, camera_action, lead_in_pause, is_silent_reaction...) — Render genuine 30fps 2.5D phonetic lip-sync + glasses-safe blink + head/reaction acting locally on CPU.
-      * L733-L829  def _try_tier1_colab_animate(image_path, audio_wav, out_mp4, prompt, colab_url, colab_token, colab_engine, emotion_preset...)
-      * L832-L884  def animate_character_talking_take(image_path, audio_wav, out_mp4, prompt, emotion, emotion_preset, camera_action, lead_in_pause...) — Cascade Lip-Sync animator: Tier 1 Colab GPU v2.8 if reachable, else Tier 2 Local 2.5D Visemes.
+      * L483-L723  def _animate_local_viseme_take(image_path, audio_wav, out_mp4, emotion, emotion_preset, camera_action, lead_in_pause, is_silent_reaction...) — Render genuine 30fps 2.5D phonetic lip-sync + glasses-safe blink + head/reaction acting locally on CPU.
+      * L726-L822  def _try_tier1_colab_animate(image_path, audio_wav, out_mp4, prompt, colab_url, colab_token, colab_engine, emotion_preset...)
+      * L825-L877  def animate_character_talking_take(image_path, audio_wav, out_mp4, prompt, emotion, emotion_preset, camera_action, lead_in_pause...) — Cascade Lip-Sync animator: Tier 1 Colab GPU v2.8 if reachable, else Tier 2 Local 2.5D Visemes.
 
 ### tools/hyperframes/verify_lipsync_motion.py
-    VPS Equiv.: /opt/ai-media-studio/tools/hyperframes/verify_lipsync_motion.py | Tamanho: 9.9 KB (10161 bytes) | Linhas: 254
+    VPS Equiv.: /opt/ai-media-studio/tools/hyperframes/verify_lipsync_motion.py | Tamanho: 13.1 KB (13392 bytes) | Linhas: 318
     Papel     : Auditor Computer Vision frame a frame (estabilização por âncora nasal, mouth ROI speech vs silence, piscar sem oclusão e Reaction Shot)
     Docstring : Computer Vision Lip-Sync & Facial Motion Auditor (v2.7).
     Símbolos principais:
       * L42-L69   def _extract_rms_per_frame(mp4_path, fps, num_frames)
       * L72-L96   def _track_anchor_shift(ref_gray, cur_gray, ax, ay, aw, ah, pad)
-      * L99-L240  def audit_lipsync_video(mp4_path, min_mouth_diff)
-      * L243-L250  def main()
+      * L99-L304  def audit_lipsync_video(mp4_path, min_mouth_diff)
+      * L307-L314  def main()
 
 ### tools/hyperframes/vps_ad_runner.py
     VPS Equiv.: /opt/ai-media-studio/tools/hyperframes/vps_ad_runner.py | Tamanho: 55.0 KB (56339 bytes) | Linhas: 1569
@@ -363,7 +363,7 @@ SEÇÃO 1 · INVENTÁRIO COMPLETO DE ARQUIVOS, MÓDULOS, CLASSES E FUNÇÕES
       * L493-L515  def main()
 
 ### openjarvis-client/studio_controller_mcp.py
-    VPS Equiv.: ~/open-jarvis/studio_controller_mcp.py | Tamanho: 83.3 KB (85314 bytes) | Linhas: 1750
+    VPS Equiv.: ~/open-jarvis/studio_controller_mcp.py | Tamanho: 84.7 KB (86700 bytes) | Linhas: 1760
     Papel     : Servidor MCP stdio (OpenJarvis Operador Master) conectado às APIs do Painel na VPS e estação local
     Docstring : Local Ecosystem MCP Server (studio_controller) for OpenJarvis.
     Símbolos principais:
@@ -392,11 +392,11 @@ SEÇÃO 1 · INVENTÁRIO COMPLETO DE ARQUIVOS, MÓDULOS, CLASSES E FUNÇÕES
       * L1432-L1488 def studio_analyze_viral_references(campaign_id, product_title, product_price, product_description, viral_video_paths, target) — Reverse-engineer 1 or more Shopee viral reference MP4 videos (faster-whisper INT8 + scene cuts + WPM + audio energy + AI
       * L1492-L1543 def studio_run_guided_pipeline(template_id, platform_preset, params_json, wait_for_completion, target) — Run one of the 5 Guided Pipelines with automatic 1-stack-at-a-time Docker RAM relay and checkpoints.
       * L1547-L1557 def webcam_look(prompt) — Capture 1 frame on demand from /dev/video0, release the camera immediately, and describe it with Gemini 2.5 Flash.
-      * L1561-L1634 def studio_run_novela(title, visual_style, platform_preset, theme, expressions_csv, tone, dialogue_json, dictionary_json...) — Produce a multi-character vertical mini-novela / regional comedy episode (Clean Cinema Shot-Reverse-Shot, Flow Pack, or 
-      * L1638-L1663 def studio_generate_flow_pack(title, visual_style, theme, expressions_csv, tone, dialogue_json) — Generate a Google Flow (Veo 3.1) Production Pack: clean 1080x1920 Shot-Reverse-Shot reference Ingredients + bilingual Ve
-      * L1667-L1705 def studio_stitch_novela_takes(take_paths_csv, batch_id, output_ids_csv, title, platform_preset, subtitles_mode, trim_silence, redub_with_regional_tts...) — Stitch ordered Google Flow / Colab MP4 takes into one seamless 1080x1920 @ 30fps episode, optionally redubbing takes wit
-      * L1709-L1731 def studio_preview_regional_voice(accent_engine, speaker, text, emotion, dialogue_json) — Synthesize a quick 48kHz Stereo SoXR preview MP3 of regional Northeast voices (Dona Socorro, Seu Bastião, Enzo) via Gemi
-      * L1735-L1746 def studio_colab_status(colab_url, colab_token) — Check status of remote Google Colab GPU Worker tunnel, or save and test a new trycloudflare.com URL if colab_url is prov
+      * L1561-L1640 def studio_run_novela(title, visual_style, dramatic_structure, platform_preset, theme, expressions_csv, tone, dialogue_json...) — Produce a multi-character vertical mini-novela / regional comedy episode (v2.8 Dual-World Cinema/3D + Viral 4-Cut Direct
+      * L1644-L1673 def studio_generate_flow_pack(title, visual_style, dramatic_structure, theme, expressions_csv, tone, dialogue_json) — Generate a v2.8 Google Flow (Veo 3.1) Production Pack: closed-mouth 1080x1920 Shot-Reverse-Shot reference Ingredients + 
+      * L1677-L1715 def studio_stitch_novela_takes(take_paths_csv, batch_id, output_ids_csv, title, platform_preset, subtitles_mode, trim_silence, redub_with_regional_tts...) — Stitch ordered Google Flow / Colab MP4 takes into one seamless 1080x1920 @ 30fps episode, optionally redubbing takes wit
+      * L1719-L1741 def studio_preview_regional_voice(accent_engine, speaker, text, emotion, dialogue_json) — Synthesize a quick 48kHz Stereo SoXR preview MP3 of regional Northeast voices (Dona Socorro, Seu Bastião, Enzo) via Gemi
+      * L1745-L1756 def studio_colab_status(colab_url, colab_token) — Check status of remote Google Colab GPU Worker tunnel, or save and test a new trycloudflare.com URL if colab_url is prov
 
 ### openjarvis-client/clap_listener.py
     VPS Equiv.: ~/open-jarvis/clap_listener.py | Tamanho: 43.6 KB (44604 bytes) | Linhas: 991
@@ -585,11 +585,11 @@ SEÇÃO 1 · INVENTÁRIO COMPLETO DE ARQUIVOS, MÓDULOS, CLASSES E FUNÇÕES
       * L1432-L1488 studio_analyze_viral_references(campaign_id, product_title, product_price, product_description, viral_video_paths, target) — Reverse-engineer 1 or more Shopee viral reference MP4 videos (faster-whisper INT8 + scene cuts + WPM + audio energy + AI Cascade) 
       * L1492-L1543 studio_run_guided_pipeline(template_id, platform_preset, params_json, wait_for_completion, target) — Run one of the 5 Guided Pipelines with automatic 1-stack-at-a-time Docker RAM relay and checkpoints.
       * L1547-L1557 webcam_look(prompt) — Capture 1 frame on demand from /dev/video0, release the camera immediately, and describe it with Gemini 2.5 Flash.
-      * L1561-L1634 studio_run_novela(title, visual_style, platform_preset, theme, expressions_csv, tone, dialogue_json, dictionary_json, clean_cinema_mode, subtitles_mode, render_mode, colab_engine, accent_engine, quality, output_filename, wait, poll_timeout_s) — Produce a multi-character vertical mini-novela / regional comedy episode (Clean Cinema Shot-Reverse-Shot, Flow Pack, or Colab GPU 
-      * L1638-L1663 studio_generate_flow_pack(title, visual_style, theme, expressions_csv, tone, dialogue_json) — Generate a Google Flow (Veo 3.1) Production Pack: clean 1080x1920 Shot-Reverse-Shot reference Ingredients + bilingual Veo 3.1 prom
-      * L1667-L1705 studio_stitch_novela_takes(take_paths_csv, batch_id, output_ids_csv, title, platform_preset, subtitles_mode, trim_silence, redub_with_regional_tts, accent_engine, dialogue_json) — Stitch ordered Google Flow / Colab MP4 takes into one seamless 1080x1920 @ 30fps episode, optionally redubbing takes with regional
-      * L1709-L1731 studio_preview_regional_voice(accent_engine, speaker, text, emotion, dialogue_json) — Synthesize a quick 48kHz Stereo SoXR preview MP3 of regional Northeast voices (Dona Socorro, Seu Bastião, Enzo) via Gemini Native 
-      * L1735-L1746 studio_colab_status(colab_url, colab_token) — Check status of remote Google Colab GPU Worker tunnel, or save and test a new trycloudflare.com URL if colab_url is provided.
+      * L1561-L1640 studio_run_novela(title, visual_style, dramatic_structure, platform_preset, theme, expressions_csv, tone, dialogue_json, dictionary_json, clean_cinema_mode, subtitles_mode, render_mode, colab_engine, accent_engine, quality, output_filename, wait, poll_timeout_s) — Produce a multi-character vertical mini-novela / regional comedy episode (v2.8 Dual-World Cinema/3D + Viral 4-Cut Direction + 2.5D
+      * L1644-L1673 studio_generate_flow_pack(title, visual_style, dramatic_structure, theme, expressions_csv, tone, dialogue_json) — Generate a v2.8 Google Flow (Veo 3.1) Production Pack: closed-mouth 1080x1920 Shot-Reverse-Shot reference Ingredients + second-by-
+      * L1677-L1715 studio_stitch_novela_takes(take_paths_csv, batch_id, output_ids_csv, title, platform_preset, subtitles_mode, trim_silence, redub_with_regional_tts, accent_engine, dialogue_json) — Stitch ordered Google Flow / Colab MP4 takes into one seamless 1080x1920 @ 30fps episode, optionally redubbing takes with regional
+      * L1719-L1741 studio_preview_regional_voice(accent_engine, speaker, text, emotion, dialogue_json) — Synthesize a quick 48kHz Stereo SoXR preview MP3 of regional Northeast voices (Dona Socorro, Seu Bastião, Enzo) via Gemini Native 
+      * L1745-L1756 studio_colab_status(colab_url, colab_token) — Check status of remote Google Colab GPU Worker tunnel, or save and test a new trycloudflare.com URL if colab_url is provided.
     Catálogo de Skills por Diretório:
       * Global Antigravity (~/.gemini/config/skills) (40 skills): ask-matt, code-review, codebase-design, diagnosing-bugs, domain-modeling, figma, grill-me, grill-with-docs, grilling, handoff, hyperframes, hyperframes-cli, hyperframes-registry, hypit, implement, implement-spec, improve-codebase-architecture, manim-video, media-use, novela-veo-colab-director, pr, prototype, remotion-to-hyperframes, research, retro, reverse-any-video, setup-matt-pocock-skills, slideshow, style-sampling, tdd, teach, to-questionnaire, to-spec, to-tickets, triage, video-use, wait-what, wayfinder, wizard, writing-for-agents
       * Shared Agents (~/.agents/skills) (39 skills): ask-matt, code-review, codebase-design, diagnosing-bugs, domain-modeling, figma, grill-me, grill-with-docs, grilling, handoff, hyperframes, hyperframes-cli, hyperframes-registry, hypit, implement, implement-spec, improve-codebase-architecture, manim-video, media-use, pr, prototype, remotion-to-hyperframes, research, retro, reverse-any-video, setup-matt-pocock-skills, slideshow, style-sampling, tdd, teach, to-questionnaire, to-spec, to-tickets, triage, video-use, wait-what, wayfinder, wizard, writing-for-agents
@@ -921,9 +921,9 @@ SEÇÃO 4 · SUÍTES DE TESTE AUTOMATIZADO (PLAYWRIGHT E2E, COMPUTER VISION & Á
   - tests/e2e_interactive_stage2.mjs         (28.7 KB) :: #!/usr/bin/env node | import fs from 'node:fs'; | import zlib from 'node:zlib'; | import { execFileSync } from
   - tests/e2e_novela_studio_v24.mjs          (9.6 KB) :: #!/usr/bin/env node | import fs from 'node:fs'; | import { createRequire } from 'node:module';
   - tests/e2e_novela_v25.mjs                 (12.1 KB) :: #!/usr/bin/env node | import fs from 'node:fs'; | import { createRequire } from 'node:module';
-  - tests/e2e_novela_voices_v26.mjs          (12.9 KB) :: #!/usr/bin/env node | import fs from 'node:fs'; | import { execSync } from 'node:child_process'; | import { cr
+  - tests/e2e_novela_voices_v26.mjs          (15.3 KB) :: #!/usr/bin/env node | import fs from 'node:fs'; | import { execSync } from 'node:child_process'; | import { cr
   - tests/e2e_openjarvis_master.mjs          (10.2 KB) :: #!/usr/bin/env node | import fs from 'node:fs'; | import { createRequire } from 'node:module';
-  - tests/verify_lipsync_motion.py           (12.7 KB) :: #!/usr/bin/env python3 | """Computer Vision Lip-Sync & Facial Motion Auditor (v2.7). | Audits any animated tal
+  - tests/verify_lipsync_motion.py           (13.1 KB) :: #!/usr/bin/env python3 | """Computer Vision Lip-Sync & Facial Motion Auditor (v2.7). | Audits any animated tal
   - tests/verify_shopee_safezone.py          (6.0 KB) :: #!/usr/bin/env python3 | """Extract frames (0s, 5s, 9s, 15s, 17s) from rendered 1080x1920 MP4, overlay Shopee 
   - tests/verify_studio_deep.py              (26.7 KB) :: #!/usr/bin/env python3 | """ | AI Media Studio B2B Enterprise — Deep TDD & SecOps Verification Suite | =======
 
