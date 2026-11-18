@@ -1,0 +1,179 @@
+diff --git a/src/openjarvis/agents/orchestrator.py b/src/openjarvis/agents/orchestrator.py
+index 9f581c64..3db1520b 100644
+--- a/src/openjarvis/agents/orchestrator.py
++++ b/src/openjarvis/agents/orchestrator.py
+@@ -412,6 +412,83 @@ class OrchestratorAgent(ToolUsingAgent):
+     # Function-calling mode (original behaviour)
+     # ------------------------------------------------------------------
+ 
++    def _select_openai_tools(
++        self,
++        input_text: str,
++        context: Optional[AgentContext] = None,
++    ) -> list[dict[str, Any]]:
++        """Filter OpenAI tool schemas dynamically by intent to prevent bulk MCP token exhaustion."""
++        if not self._tools:
++            return []
++        all_tools = self._executor.get_openai_tools()
++        if not all_tools:
++            return []
++
++        if context is not None and context.tools:
++            if context.tools == ["__none__"]:
++                return []
++            allowed_ctx = set(context.tools)
++            return [
++                t for t in all_tools
++                if (t.get("function") or {}).get("name") in allowed_ctx
++            ]
++
++        all_names = {
++            (t.get("function") or {}).get("name", "")
++            for t in all_tools
++        }
++        has_ecosystem_mcp = any(
++            n.startswith(("desktop_", "studio_")) or n == "webcam_look"
++            for n in all_names
++        )
++        if not has_ecosystem_mcp:
++            return all_tools
++
++        low = (input_text or "").lower()
++        selected_names: set[str] = set()
++
++        vision_kw = (
++            "câmera", "camera", "webcam", "webicão", "webicao",
++            "segurando", "mostrando", "olhe", "olha", "vendo",
++            "veja o que", "identifique",
++        )
++        desktop_kw = (
++            "chrome", "navegador", "browser", "aba", "guia", "shopee",
++            "chopia", "shopi", "afiliado", "filhado", "site", "url",
++            "link", "janela", "tela", "clica", "clicar", "clique",
++            "digita", "digitar", "tecla", "atalho", "desktop",
++            "abrir", "abra", "abre", "youtube",
++        )
++        studio_kw = (
++            "stack", "container", "contêiner", "conteiner", "docker",
++            "estúdio", "estudio", "moneyprinter", "supoclip",
++            "openfilm", "voicestudio", "openseo", "agenttube", "higgsfield",
++            "cascata", "cascade", "status", "log", "modo dev", "modo-dev",
++            "skill", "ligar", "ligue", "liga", "desligar", "desligue",
++            "desliga", "iniciar", "inicie", "parar", "pare", "reiniciar",
++            "reinicie", "job", " via api", " pela api",
++            "vps", "nuvem", "cloud", "servidor", "remoto", "remota",
++            "saída", "saidas", "galeria", "download", "baixar",
++        )
++
++        if any(k in low for k in vision_kw):
++            selected_names.add("webcam_look")
++        if any(k in low for k in desktop_kw):
++            selected_names.add("studio_open_url")
++            selected_names.update(n for n in all_names if n.startswith("desktop_"))
++        if any(k in low for k in studio_kw) or ("painel" in low and "afiliad" not in low and "shopee" not in low):
++            selected_names.update(
++                n for n in all_names if n.startswith("studio_") and n != "studio_open_url"
++            )
++
++        if not selected_names:
++            return []
++
++        return [
++            t for t in all_tools
++            if (t.get("function") or {}).get("name") in selected_names
++        ]
++
+     def _run_function_calling(
+         self,
+         input: str,
+@@ -427,8 +504,8 @@ class OrchestratorAgent(ToolUsingAgent):
+             system_prompt=self._system_prompt,
+         )
+ 
+-        # Get OpenAI-format tool definitions
+-        openai_tools = self._executor.get_openai_tools() if self._tools else []
++        # Get OpenAI-format tool definitions filtered dynamically by user intent
++        openai_tools = self._select_openai_tools(input, context)
+ 
+         all_tool_results: list[ToolResult] = []
+         turns = 0
+diff --git a/src/openjarvis/speech/__init__.py b/src/openjarvis/speech/__init__.py
+index b400accb..228cab87 100644
+--- a/src/openjarvis/speech/__init__.py
++++ b/src/openjarvis/speech/__init__.py
+@@ -15,7 +15,7 @@ for _mod in ("faster_whisper", "openai_whisper", "deepgram"):
+         logger.debug("Optional STT backend %s not loaded: %s", _mod, _exc)
+ 
+ # Optional TTS backends — each registers itself via @TTSRegistry.register()
+-for _mod in ("cartesia_tts", "elevenlabs_tts", "kokoro_tts", "openai_tts"):
++for _mod in ("edge_tts_backend", "cartesia_tts", "elevenlabs_tts", "kokoro_tts", "openai_tts"):
+     try:
+         importlib.import_module(f".{_mod}", __name__)
+     except ImportError as _exc:
+diff --git a/src/openjarvis/speech/_tts_discovery.py b/src/openjarvis/speech/_tts_discovery.py
+index 9d39c213..8cfc3078 100644
+--- a/src/openjarvis/speech/_tts_discovery.py
++++ b/src/openjarvis/speech/_tts_discovery.py
+@@ -15,13 +15,14 @@ if TYPE_CHECKING:
+ 
+ logger = logging.getLogger(__name__)
+ 
+-# Priority order: local first, then cloud.
+-TTS_BACKEND_ORDER = ("kokoro", "openai_tts", "cartesia", "elevenlabs")
++# Priority order: local/lightweight first, then cloud.
++TTS_BACKEND_ORDER = ("edge_tts", "kokoro", "openai_tts", "cartesia", "elevenlabs")
+ 
+ # Voice IDs are backend-specific and NOT portable. ``speech.voice_id`` applies
+ # only to ``speech.tts_backend``; if synthesis falls back to another backend we
+ # use that backend's own default rather than passing an unrecognized ID through.
+ BACKEND_DEFAULT_VOICE = {
++    "edge_tts": "pt-BR-AntonioNeural",
+     "kokoro": "bm_george",  # British male
+     "openai_tts": "onyx",  # deepest OpenAI preset
+     "cartesia": "",  # no safe static default; let Cartesia choose
+diff --git a/src/openjarvis/speech/faster_whisper.py b/src/openjarvis/speech/faster_whisper.py
+index 8955fc5a..0a1a00a3 100644
+--- a/src/openjarvis/speech/faster_whisper.py
++++ b/src/openjarvis/speech/faster_whisper.py
+@@ -7,6 +7,14 @@ import os
+ import tempfile
+ from typing import List, Optional
+ 
++for _tvar in (
++    "OMP_NUM_THREADS",
++    "MKL_NUM_THREADS",
++    "OPENBLAS_NUM_THREADS",
++    "VECLIB_MAXIMUM_THREADS",
++):
++    os.environ.setdefault(_tvar, "2")
++
+ from openjarvis.core.registry import SpeechRegistry
+ from openjarvis.speech._stubs import Segment, SpeechBackend, TranscriptionResult
+ 
+@@ -87,10 +95,13 @@ class FasterWhisperBackend(SpeechBackend):
+                 )
+                 raise ImportError(self._last_error)
+             compute_type = self._resolve_compute_type()
++            cpu_threads = int(os.environ.get("OMP_NUM_THREADS", "2") or "2")
+             self._model = WhisperModel(
+                 self._model_size,
+                 device=self._device,
+                 compute_type=compute_type,
++                cpu_threads=cpu_threads,
++                num_workers=1,
+             )
+         self._last_error = None
+         return self._model
+diff --git a/src/openjarvis/tools/text_to_speech.py b/src/openjarvis/tools/text_to_speech.py
+index c8f832cd..1c4e7e93 100644
+--- a/src/openjarvis/tools/text_to_speech.py
++++ b/src/openjarvis/tools/text_to_speech.py
+@@ -79,7 +79,7 @@ class TextToSpeechTool(BaseTool):
+             except Exception:
+                 pass
+         backend_key = backend_key or "cartesia"
+-        _ALIASES = {"openai": "openai_tts"}
++        _ALIASES = {"openai": "openai_tts", "edge-tts": "edge_tts", "edge": "edge_tts"}
+         backend_key = _ALIASES.get(backend_key, backend_key)
+         output_dir = params.get("output_dir", "")
+         # Read speed without a falsy default so "the caller did not set speed"

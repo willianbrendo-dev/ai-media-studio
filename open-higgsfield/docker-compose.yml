@@ -1,0 +1,13 @@
+services:
+  open-higgsfield:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: open-higgsfield
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./data:/app/data
+      - ./outputs:/app/outputs
+    env_file:
+      - .env

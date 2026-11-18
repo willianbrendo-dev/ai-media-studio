@@ -1,0 +1,32 @@
+[Unit]
+Description=AI Media Studio Control Panel v2.1 (Cloud VPS 127.0.0.1:9000)
+After=network.target docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/ai-media-studio/media-control-panel
+ExecStart=/opt/ai-media-studio/media-control-panel/.venv/bin/uvicorn main:app --host 127.0.0.1 --port 9000
+Restart=always
+RestartSec=3
+Environment="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+Environment="PYTHONUNBUFFERED=1"
+Environment="STUDIO_BASE_DIR=/opt/ai-media-studio"
+Environment="STUDIO_HOME_DIR=/root"
+Environment="STUDIO_PANEL_DIR=/opt/ai-media-studio/media-control-panel"
+Environment="OPENFILM_DATA_DIR=/opt/ai-media-studio/.openfilm"
+Environment="OPENFILM_VIDEOS_DIR=/opt/ai-media-studio/Videos/OpenFilm"
+Environment="STUDIO_MODE=vps"
+Environment="OMP_NUM_THREADS=2"
+Environment="MKL_NUM_THREADS=2"
+Environment="OPENBLAS_NUM_THREADS=2"
+Environment="VECLIB_MAXIMUM_THREADS=2"
+
+Environment="STUDIO_MODO_DEV_BIN=/usr/local/bin/modo-dev"
+
+Environment="STUDIO_DEV_SKILLS_VAULT=/opt/ai-media-studio/dev-skills-vault"
+
+Environment="DEV_SKILLS_VAULT=/opt/ai-media-studio/dev-skills-vault"
+
+[Install]
+WantedBy=multi-user.target

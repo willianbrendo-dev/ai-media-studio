@@ -1,0 +1,60 @@
+{
+  "id": "elseve-kit2",
+  "name": "Kit 2 Óleos Extraordinário Elseve L'Oréal Paris 100ml",
+  "platform": "Shopee Video / TikTok Shop / Reels",
+  "commission_note": "Comissão extra 23% Shopee",
+  "pricing": {
+    "kit_price": "R$ 69,99",
+    "unit_price": "R$ 34,99",
+    "quantity": "2 frascos de 100ml (200ml total)",
+    "psychology_hook": "Menos de R$ 35 cada frasco original L'Oréal!"
+  },
+  "recommended_image_paths": [
+    "/opt/ai-media-studio/campaigns/elseve-kit2/5181401464922901712.jpg",
+    "/opt/ai-media-studio/campaigns/elseve-kit2/5181401464922901706.jpg",
+    "/opt/ai-media-studio/campaigns/elseve-kit2/5181401464922901711.jpg",
+    "/opt/ai-media-studio/campaigns/elseve-kit2/5181401464922901709.jpg",
+    "/opt/ai-media-studio/campaigns/elseve-kit2/5181401464922901710.jpg",
+    "/opt/ai-media-studio/campaigns/elseve-kit2/5181401464922901713.jpg"
+  ],
+  "excluded_assets": [
+    {
+      "filename": "5181401464922901708.jpg",
+      "reason": "Regra Anti-Confusão: mostra linha completa com 6 produtos (Shampoo, Condicionador, Creme 3 em 1, Óleo, Máscara e Creme de Pentear); proibido em anúncio do Kit 2 Óleos."
+    },
+    {
+      "filename": "5181401464922901707.jpg",
+      "reason": "Regra Anti-Confusão: mostra rotina de 4 passos com Shampoo, Condicionador e Máscara além do óleo."
+    },
+    {
+      "filename": "5181401464922901714.jpg",
+      "reason": "Print interno da página de afiliado Shopee (referência de briefing: R$ 69,99 e comissão extra 23%, não exibir como foto do produto)."
+    }
+  ],
+  "asset_roles": {
+    "5181401464922901712.jpg": {
+      "scene": "Cena 1 · Hook Antes e Depois (0s–3.5s)",
+      "description": "Foto real Antes e Depois Sem Retoque em cabelos cacheados"
+    },
+    "5181401464922901706.jpg": {
+      "scene": "Cena 2A · Benefícios Close POV (3.5s–6.0s)",
+      "description": "Dois frascos + selos Controle de Frizz, Redução de Pontas Duplas, Proteção Térmica até 230°C"
+    },
+    "5181401464922901711.jpg": {
+      "scene": "Cena 2B · Resultado 1 Semana de Brilho (6.0s–8.5s)",
+      "description": "Modelo + frasco com destaque 1 Semana de Nutrição e Brilho"
+    },
+    "5181401464922901709.jpg": {
+      "scene": "Cena 3A · Fórmula 6 Óleos Preciosos (8.5s–10.2s)",
+      "description": "Gotas douradas Mais Nutrição com 6 Óleos de Flores Preciosas"
+    },
+    "5181401464922901710.jpg": {
+      "scene": "Cena 3B · Quebra de Objeção (10.2s–12.0s)",
+      "description": "Nova Embalagem, Mesma Fórmula Original L'Oréal"
+    },
+    "5181401464922901713.jpg": {
+      "scene": "Cena 4 · Oferta Final Kit 2 + Carrinho Laranja (12.0s–fim)",
+      "description": "Os 2 frascos de 100ml do Kit em fundo limpo para destaque de R$ 69,99 (R$ 34,99 cada)"
+    }
+  }
+}

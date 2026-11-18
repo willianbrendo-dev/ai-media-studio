@@ -1,0 +1,23 @@
+services:
+  openfilm:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: openfilm-studio
+    restart: unless-stopped
+    network_mode: host
+    env_file:
+      - .env
+    environment:
+      - NODE_OPTIONS=--max-old-space-size=4096
+      - OPENFILM_LIBRARY=/root/Videos/OpenFilm/Projects
+    volumes:
+      - /opt/ai-media-studio/.openfilm:/root/.openfilm
+      - /opt/ai-media-studio/Videos/OpenFilm:/root/Videos/OpenFilm
+      - /opt/ai-media-studio/openfilm/packages/openfilm/studio/server:/app/packages/openfilm/studio/server
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://127.0.0.1:3005/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s

@@ -1,0 +1,219 @@
+// @vitest-environment node
+import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+
+/** Both native save handlers, driven through the real registered IPC code. */
+const native = vi.hoisted(() => ({
+  handlers: new Map<string, (event: unknown, raw: unknown) => Promise<unknown>>(),
+  savePath: '',
+  failWrites: false,
+  setupLog: vi.fn(async () => 'sanitized setup log'),
+  setupCheck: vi.fn(async () => ({ status: 'unavailable' })),
+}));
+
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs/promises')>();
+  /** Simulate a disk that fills up halfway through any write. */
+  const halfThenFail = async (
+    write: (data: Uint8Array) => Promise<void>,
+    data: string | Uint8Array,
+  ) => {
+    const bytes = typeof data === 'string' ? Buffer.from(data) : data;
+    await write(bytes.subarray(0, bytes.length >> 1));
+    throw Object.assign(new Error('no space left on device'), { code: 'ENOSPC' });
+  };
+  return {
+    ...actual,
+    writeFile: (async (path: string, data: string | Uint8Array, options?: unknown) =>
+      native.failWrites
+        ? halfThenFail((bytes) => actual.writeFile(path, bytes), data)
+        : actual.writeFile(path, data, options as never)) as typeof actual.writeFile,
+    open: (async (...args: Parameters<typeof actual.open>) => {
+      const handle = await actual.open(...args);
+      const write = handle.writeFile.bind(handle);
+      handle.writeFile = (async (data: string | Uint8Array) =>
+        native.failWrites ? halfThenFail((bytes) => write(bytes), data) : write(data)) as never;
+      return handle;
+    }) as typeof actual.open,
+  };
+});
+
+const owner = vi.hoisted(() => {
+  const mainFrame = { url: 'app://voicestudio/index.html' };
+  const webContents = { mainFrame };
+  return { webContents, isMaximized: () => false };
+});
+
+vi.mock('electron', () => ({
+  app: { getPath: () => tmpdir(), exit: vi.fn() },
+  BrowserWindow: { fromWebContents: () => owner, getAllWindows: () => [] },
+  dialog: {
+    showSaveDialog: vi.fn(async () => ({ canceled: false, filePath: native.savePath })),
+  },
+  ipcMain: {
+    handle: (channel: string, handler: (event: unknown, raw: unknown) => Promise<unknown>) =>
+      native.handlers.set(channel, handler),
+    on: vi.fn(),
+  },
+  net: { fetch: vi.fn(async () => new Response('replacement audio bytes')) },
+  shell: {},
+  systemPreferences: {},
+}));
+vi.mock('./site-browser', () => ({ registerSiteBrowser: vi.fn() }));
+
+import { CHANNELS, registerIpc } from './ipc';
+import type { BackendSupervisor } from './backend';
+import { decodeDownloadFailure } from '../shared/download-failure';
+import { diagnosticRejectionEpoch, runDiagnosticOperation, trackDiagnosticOperations } from './diagnostic-operation';
+import type { DiagnosticState } from '../preload/diagnostics';
+
+let directory: string;
+const event = { sender: owner.webContents, senderFrame: owner.webContents.mainFrame };
+
+beforeEach(async () => {
+  directory = await mkdtemp(join(tmpdir(), 'voicestudio-save-'));
+  native.savePath = join(directory, 'take.wav');
+  native.failWrites = false;
+  native.handlers.clear();
+  registerIpc(
+    {
+      subscribe: () => () => {},
+      baseUrl: 'http://127.0.0.1:3900',
+      requestHeaders: () => ({}),
+      getSetupDiagnostics: native.setupLog,
+      checkSetupConnection: native.setupCheck,
+    } as unknown as BackendSupervisor,
+    () => owner as never,
+  );
+});
+afterEach(async () => {
+  await rm(directory, { recursive: true, force: true });
+});
+
+it('observes each actual main IPC operation before its asynchronous descendants start', async () => {
+  let epoch: string | null = null;
+  const reports = { status: () => ({ grant_epoch: epoch }) as DiagnosticState };
+  const stop = trackDiagnosticOperations();
+  try {
+    registerIpc(
+      { subscribe: () => () => {}, restart: async () => { await Promise.resolve(); } } as unknown as BackendSupervisor,
+      () => owner as never,
+      async () => {},
+      (work) => runDiagnosticOperation(reports, work),
+    );
+    const invoke = native.handlers.get(CHANNELS.backendRestart)!;
+    const old = invoke(event, undefined);
+    epoch = 'a'.repeat(32);
+    await old;
+    expect(diagnosticRejectionEpoch(old, reports)).toBeNull();
+    const fresh = invoke(event, undefined);
+    epoch = 'b'.repeat(32);
+    await fresh;
+    expect(diagnosticRejectionEpoch(fresh, reports)).toBe('a'.repeat(32));
+  } finally { stop(); }
+});
+
+const saves = [
+  [
+    'backend downloads',
+    CHANNELS.filesSaveAudio,
+    () => ({ url: '/api/audio/take.wav', suggestedName: 'take.wav' }),
+  ],
+  [
+    'local data',
+    CHANNELS.filesSaveData,
+    () => ({ data: new TextEncoder().encode('replacement data bytes'), suggestedName: 'take.wav' }),
+  ],
+] as const;
+
+it.each(saves)(
+  'keeps an existing export intact when saving %s fails',
+  async (_, channel, request) => {
+    await writeFile(native.savePath, 'complete previous export');
+    native.failWrites = true;
+    await expect(native.handlers.get(channel)!(event, request())).rejects.toThrow('no space');
+    expect(await readFile(native.savePath, 'utf8')).toBe('complete previous export');
+    expect(await readdir(directory)).toEqual(['take.wav']);
+  },
+);
+
+it.each(saves)(
+  'replaces an existing export when saving %s succeeds',
+  async (_, channel, request) => {
+    await writeFile(native.savePath, 'complete previous export that is longer');
+    await expect(native.handlers.get(channel)!(event, request())).resolves.toEqual({
+      canceled: false,
+      path: native.savePath,
+    });
+    expect(await readFile(native.savePath, 'utf8')).toMatch(/^replacement (audio|data) bytes$/);
+    expect(await readdir(directory)).toEqual(['take.wav']);
+  },
+);
+
+it('carries the backend error body when a backend download fails (#2616)', async () => {
+  const { net } = await import('electron');
+  const detail = {
+    code: 'dub_background_unavailable',
+    message: 'Separated background is incomplete',
+  };
+  vi.mocked(net.fetch).mockResolvedValueOnce(
+    new Response(JSON.stringify({ detail }), { status: 409, statusText: 'Conflict' }),
+  );
+  await writeFile(native.savePath, 'complete previous export');
+  const error = await native.handlers.get(CHANNELS.filesSaveAudio)!(event, {
+    url: '/api/dub/export/x',
+    suggestedName: 'take.wav',
+  }).catch((cause: unknown) => cause);
+  expect(error).toBeInstanceOf(Error);
+  expect((error as Error).message).toMatch(/^Could not download the file \(HTTP 409\)/);
+  expect(decodeDownloadFailure(error)).toEqual({
+    status: 409,
+    statusText: 'Conflict',
+    body: JSON.stringify({ detail }),
+  });
+  expect(await readFile(native.savePath, 'utf8')).toBe('complete previous export');
+});
+
+it.each([CHANNELS.backendSetupDiagnostics, CHANNELS.backendCheckSetupConnection])(
+  'restricts setup diagnostics to the trusted main frame (%s)',
+  async (channel) => {
+    const handler = native.handlers.get(channel)!;
+    expect(() =>
+      handler({ ...event, senderFrame: { url: 'https://example.com' } }, undefined),
+    ).toThrow();
+    const result = await handler(event, undefined);
+    expect(result).toEqual(
+      channel === CHANNELS.backendSetupDiagnostics
+        ? 'sanitized setup log'
+        : { status: 'unavailable' },
+    );
+  },
+);
+
+it('writes exact timestamp-free UTF-8 transcript bytes with GET and keeps cancellation free of requests', async () => {
+  const { net, dialog } = await import('electron');
+  const content = 'Bonjour & <monde>\nÀ bientôt\n';
+  vi.mocked(net.fetch).mockResolvedValueOnce(
+    new Response(content, { headers: { 'Content-Type': 'text/plain; charset=utf-8' } }),
+  );
+  native.savePath = join(directory, 'transcript.txt');
+  const request = { url: '/api/dub/txt/job?lang=fr', suggestedName: 'transcript.txt' };
+  await expect(native.handlers.get(CHANNELS.filesSaveAudio)!(event, request)).resolves.toEqual({
+    canceled: false,
+    path: native.savePath,
+  });
+  expect(await readFile(native.savePath)).toEqual(Buffer.from(content, 'utf8'));
+  expect(net.fetch).toHaveBeenLastCalledWith(
+    'http://127.0.0.1:3900/dub/txt/job?lang=fr',
+    expect.objectContaining({ method: 'GET' }),
+  );
+  const sent = vi.mocked(net.fetch).mock.calls.length;
+  vi.mocked(dialog.showSaveDialog).mockResolvedValueOnce({ canceled: true, filePath: '' });
+  await expect(native.handlers.get(CHANNELS.filesSaveAudio)!(event, request)).resolves.toEqual({
+    canceled: true,
+  });
+  expect(net.fetch).toHaveBeenCalledTimes(sent);
+  expect(await readFile(native.savePath)).toEqual(Buffer.from(content, 'utf8'));
+});

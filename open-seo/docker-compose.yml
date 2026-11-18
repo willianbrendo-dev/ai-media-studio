@@ -1,0 +1,24 @@
+services:
+  open-seo:
+    image: ghcr.io/every-app/open-seo:latest
+    container_name: open-seo
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - CLOUDFLARE_INCLUDE_PROCESS_ENV=true
+      - PORT=3040
+      - ALLOWED_HOST=
+      - AUTH_MODE=local_noauth
+      - OPENSEO_TELEMETRY_DISABLED=true
+      - DO_NOT_TRACK=true
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+    ports:
+      - "127.0.0.1:3040:3040"
+    volumes:
+      - open_seo_data:/app/.wrangler
+
+volumes:
+  open_seo_data:

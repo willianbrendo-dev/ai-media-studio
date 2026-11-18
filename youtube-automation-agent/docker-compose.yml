@@ -1,0 +1,23 @@
+services:
+  agenttube:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: agenttube
+    restart: unless-stopped
+    network_mode: host
+    env_file:
+      - .env
+    environment:
+      - HOST=127.0.0.1
+      - PORT=3010
+      - STUDIO_CASCADE_BASE_URL=http://127.0.0.1:9000/v1
+      - STUDIO_CASCADE_API_KEY=studio-cascade
+    volumes:
+      - ./data:/app/data
+      - ./uploads:/app/uploads
+      - ./config:/app/config
+      - ./index.js:/app/index.js:ro
+      - ./agents:/app/agents:ro
+      - ./utils:/app/utils:ro
+      - ./dashboard:/app/dashboard:ro

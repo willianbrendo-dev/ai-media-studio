@@ -1,0 +1,115 @@
+"""Bucketing contract for scripts/crash_class_report.py — the reliability
+cycle's recurrence metric.
+
+Pins two things:
+- title → sub-class mapping matches the auto-reporter's real title shapes
+  (seeded from error messages, so titles are machine-stable), and
+- body → build bucket mapping matches the exact `**Build status:**` lines
+  the bug reporter stamps (electron/src/renderer/src/components/report-bug.tsx) — a drift in
+  either side silently zeroes the metric.
+"""
+
+from __future__ import annotations
+
+import importlib.util
+import sys
+from pathlib import Path
+
+import pytest
+
+SCRIPT_PATH = Path(__file__).resolve().parents[2] / "scripts" / "crash_class_report.py"
+
+
+@pytest.fixture(scope="module")
+def report():
+    spec = importlib.util.spec_from_file_location("crash_class_report", SCRIPT_PATH)
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules["crash_class_report"] = mod
+    spec.loader.exec_module(mod)
+    return mod
+
+
+@pytest.mark.parametrize(
+    ("title", "expected"),
+    [
+        # The real title shapes from the historical corpus.
+        ("[Bug] Can't reach the local VoiceStudio backend. It has not answered", "unreachable"),
+        ("[Bug] Can't reach the local OmniVoice backend — it may still be starti", "unreachable"),
+        ("[Bug] It was answering 6 minutes ago and then stopped responding", "unreachable"),
+        ("[Crash] Backend died (exit code 1)", "backend-died"),
+        ("[Crash] Backend ended uncleanly (previous run)", "backend-died"),
+        ("[Backend] Backend failed to start", "never-started"),
+        # Non-class titles must not count toward the metric.
+        ("[Bug] Synthesize produced silence in Design mode", None),
+        ("[Feature] Add a voice changer", None),
+    ],
+)
+def test_title_bucketing(report, title, expected):
+    sub = next((k for k, rx in report.CRASH_CLASS.items() if rx.search(title)), None)
+    assert sub == expected
+
+
+def test_build_status_lines_match_the_reporter_stamps(report):
+    # The OUTDATED literal must stay in lockstep with the live reporter
+    # (renderer components/report-bug.tsx); the "current" and Version forms are
+    # still recognised for reports filed by earlier builds.
+    assert report.OUTDATED.search("**Build status:** OUTDATED — `v0.5.0` was already out when this was filed")
+    assert report.CURRENT.search("**Build status:** current at filing time (latest `v0.5.0`)")
+    assert not report.OUTDATED.search("**Build status:** current at filing time (latest `v0.5.0`)")
+    assert report.VERSION_LINE.search("**Version:** `0.5.1-3`").group(1) == "0.5.1-3"
+
+
+@pytest.mark.parametrize(
+    ("body", "version", "expected"),
+    [
+        # Stamp-based (no target version).
+        ("**Build status:** OUTDATED — `v0.5.0` was already out when this was filed", None, "outdated"),
+        ("**Build status:** current at filing time (latest `v0.5.0`)", None, "current"),
+        ("no stamp at all", None, "unknown"),
+        # With --version the Version line is authoritative: a report stamped
+        # "current" during ANOTHER version's window must not count here.
+        ("**Version:** `0.4.2`\n**Build status:** current at filing time (latest `v0.4.2`)", "0.5.0", "outdated"),
+        ("**Version:** `0.5.0`\n**Build status:** current at filing time (latest `v0.5.0`)", "0.5.0", "current"),
+        ("**Version:** `0.5.1-3`", "0.5.1", "current"),  # preview stamps match by base
+        ("**App:** VoiceStudio 0.5.8 (build abc1234)", "0.5.8", "current"),
+        ("**App:** VoiceStudio 0.5.7 (build abc1234)", "0.5.8", "outdated"),
+        ("**App:** VoiceStudio 0.5.9-beta.2 (build abc1234)", "0.5.9-beta.2", "current"),
+        ("**App:** VoiceStudio 0.5.9-beta.1 (build abc1234)", "0.5.9-beta.2", "outdated"),
+        ("**App:** VoiceStudio 0.5.9-beta.2 (build abc1234)", "0.5.9", "outdated"),
+        ("**Version:** `0.5.9-beta.2`", "0.5.9-beta.2", "current"),
+        ("**Version:** `0.5.9-beta.2`", "0.5.9", "outdated"),
+        ("**App:** VoiceStudio 0.5.8 (build abc1234)", None, "unknown"),
+        ("no version line", "0.5.0", "unknown"),
+    ],
+)
+def test_classify_build(report, body, version, expected):
+    assert report.classify_build(body, version) == expected
+
+
+def test_reporter_source_still_emits_the_stamps(report):
+    # Fail here (not in production silence) if the live reporter rewords the marker.
+    src = (SCRIPT_PATH.parents[1] / "electron/src/renderer/src/components/report-bug.tsx").read_text(encoding="utf-8")
+    assert "**Build status:** OUTDATED" in src
+    assert "**App:** VoiceStudio ${__APP_VERSION__}" in src
+
+
+def test_cli_counts_current_reporter_versions_without_assuming_freshness(report, monkeypatch, capsys):
+    bodies = [
+        "**App:** VoiceStudio 0.5.9-beta.2 (build abc1234)",
+        "**App:** VoiceStudio 0.5.9-beta.1 (build def5678)",
+        "**Version:** `0.5.8`",
+        "no version or freshness evidence",
+    ]
+    monkeypatch.setattr(report, "fetch_issues", lambda since: [
+        {"number": index, "title": "[Crash] Backend died (exit code 1)", "body": body}
+        for index, body in enumerate(bodies, start=1)
+    ])
+    monkeypatch.setattr(sys, "argv", ["crash_class_report.py", "--since", "2026-11-01",
+                                      "--version", "0.5.9-beta.2"])
+    assert report.main() == 0
+    output = capsys.readouterr().out
+    assert "Recurrence metric (current-version crash-class reports): 1" in output
+    assert "#1      [backend-died/current]" in output
+    assert "#2      [backend-died/outdated]" in output
+    assert "#3      [backend-died/outdated]" in output
+    assert "#4      [backend-died/unknown]" in output

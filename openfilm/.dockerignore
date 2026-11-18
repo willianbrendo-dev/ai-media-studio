@@ -1,0 +1,8 @@
+node_modules
+.git
+.github
+apps/desktop/dist
+apps/desktop/release
+packages/openfilm/studio/ui/dist
+*.log
+.env

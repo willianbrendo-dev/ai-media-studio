@@ -1,0 +1,172 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+TARGET_HOME="${STUDIO_HOME_DIR:-$HOME}"
+if [ -n "${DEV_SKILLS_VAULT:-}" ] && [ -d "${DEV_SKILLS_VAULT}" ]; then
+  VAULT_DIR="${DEV_SKILLS_VAULT}"
+elif [ -d "/opt/ai-media-studio/dev-skills-vault" ]; then
+  VAULT_DIR="/opt/ai-media-studio/dev-skills-vault"
+else
+  VAULT_DIR="$TARGET_HOME/dev-skills-vault"
+fi
+
+DEST_GEMINI="${STUDIO_SKILLS_DIR:-$TARGET_HOME/.gemini/config/skills}"
+DEST_AGENTS="${STUDIO_AGENTS_SKILLS_DIR:-$TARGET_HOME/.agents/skills}"
+DESTS=("$DEST_GEMINI" "$DEST_AGENTS")
+BUCKETS=("engineering" "productivity")
+
+collect_vault_skills() {
+  local bucket dir skill_md
+  for bucket in "${BUCKETS[@]}"; do
+    dir="$VAULT_DIR/skills/$bucket"
+    [ -d "$dir" ] || continue
+    while IFS= read -r -d '' skill_md; do
+      dirname "$skill_md"
+    done < <(find "$dir" -mindepth 2 -maxdepth 2 -name "SKILL.md" -print0 | sort -z)
+  done
+}
+
+is_vault_symlink() {
+  local entry="$1"
+  [ -L "$entry" ] || return 1
+  local resolved
+  resolved="$(readlink -m "$entry" 2>/dev/null || true)"
+  case "$resolved" in
+    "$VAULT_DIR"|"$VAULT_DIR"/*)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+count_vault_links() {
+  local dest="$1"
+  local count=0
+  [ -d "$dest" ] || { echo 0; return; }
+  local entry
+  for entry in "$dest"/*; do
+    [ -e "$entry" ] || [ -L "$entry" ] || continue
+    if is_vault_symlink "$entry"; then
+      count=$((count + 1))
+    fi
+  done
+  echo "$count"
+}
+
+count_global_skills() {
+  local dest="$1"
+  local count=0
+  [ -d "$dest" ] || { echo 0; return; }
+  local entry
+  for entry in "$dest"/*; do
+    [ -e "$entry" ] || continue
+    if ! is_vault_symlink "$entry" && [ -d "$entry" ]; then
+      count=$((count + 1))
+    fi
+  done
+  echo "$count"
+}
+
+cmd_on() {
+  if [ ! -d "$VAULT_DIR/skills" ]; then
+    echo "Erro: cofre não encontrado em $VAULT_DIR" >&2
+    exit 1
+  fi
+
+  mapfile -t skill_dirs < <(collect_vault_skills)
+  if [ "${#skill_dirs[@]}" -eq 0 ]; then
+    echo "Erro: nenhuma skill encontrada em $VAULT_DIR/skills/{engineering,productivity}" >&2
+    exit 1
+  fi
+
+  local dest src name target linked=0 skipped=0
+  for dest in "${DESTS[@]}"; do
+    mkdir -p "$dest"
+    for src in "${skill_dirs[@]}"; do
+      name="$(basename "$src")"
+      target="$dest/$name"
+      if [ -e "$target" ] && [ ! -L "$target" ]; then
+        echo "Aviso: mantendo skill local não-symlink $target" >&2
+        skipped=$((skipped + 1))
+        continue
+      fi
+      ln -sfn "$src" "$target"
+      linked=$((linked + 1))
+    done
+  done
+
+  echo "Modo Dev ATIVADO: ${#skill_dirs[@]} skills de engenharia/produtividade linkadas em $DEST_GEMINI e $DEST_AGENTS (symlinks criados/atualizados: $linked, ignorados: $skipped)."
+}
+
+cmd_off() {
+  local dest entry removed=0
+  for dest in "${DESTS[@]}"; do
+    [ -d "$dest" ] || continue
+    for entry in "$dest"/*; do
+      [ -e "$entry" ] || [ -L "$entry" ] || continue
+      if is_vault_symlink "$entry"; then
+        rm -f "$entry"
+        removed=$((removed + 1))
+      fi
+    done
+  done
+
+  local gemini_global agents_global
+  gemini_global="$(count_global_skills "$DEST_GEMINI")"
+  agents_global="$(count_global_skills "$DEST_AGENTS")"
+  echo "Modo Dev DESATIVADO (em repouso): $removed symlinks removidos. Skills globais intactas ($DEST_GEMINI: $gemini_global, $DEST_AGENTS: $agents_global)."
+}
+
+cmd_status() {
+  local json_mode="${1:-}"
+  mapfile -t skill_dirs < <(collect_vault_skills)
+  local vault_total="${#skill_dirs[@]}"
+  local gemini_links agents_links gemini_global agents_global
+  gemini_links="$(count_vault_links "$DEST_GEMINI")"
+  agents_links="$(count_vault_links "$DEST_AGENTS")"
+  gemini_global="$(count_global_skills "$DEST_GEMINI")"
+  agents_global="$(count_global_skills "$DEST_AGENTS")"
+
+  local active=false
+  local state="repouso"
+  if [ "$gemini_links" -gt 0 ] && [ "$agents_links" -gt 0 ]; then
+    active=true
+    state="ativo"
+  elif [ "$gemini_links" -gt 0 ] || [ "$agents_links" -gt 0 ]; then
+    active=true
+    state="parcial"
+  fi
+
+  if [ "$json_mode" = "--json" ]; then
+    printf '{"active":%s,"state":"%s","vault_dir":"%s","vault_total":%d,"linked_gemini":%d,"linked_agents":%d,"global_gemini":%d,"global_agents":%d}\n' \
+      "$active" "$state" "$VAULT_DIR" "$vault_total" "$gemini_links" "$agents_links" "$gemini_global" "$agents_global"
+    return
+  fi
+
+  if [ "$state" = "ativo" ]; then
+    echo "Modo Dev: ATIVO ($gemini_links/$vault_total skills linkadas em $DEST_GEMINI, $agents_links/$vault_total em $DEST_AGENTS)"
+  elif [ "$state" = "parcial" ]; then
+    echo "Modo Dev: PARCIAL (gemini: $gemini_links/$vault_total, agents: $agents_links/$vault_total)"
+  else
+    echo "Modo Dev: EM REPOUSO (0/$vault_total skills de engenharia ativas; economia máxima de tokens)"
+  fi
+  echo "Skills globais de mídia preservadas: $DEST_GEMINI ($gemini_global) | $DEST_AGENTS ($agents_global)"
+}
+
+case "${1:-status}" in
+  on)
+    cmd_on
+    ;;
+  off)
+    cmd_off
+    ;;
+  status)
+    cmd_status "${2:-}"
+    ;;
+  *)
+    echo "Uso: modo-dev {on|off|status [--json]}" >&2
+    exit 1
+    ;;
+esac

@@ -1,0 +1,22 @@
+[
+  {
+    "name": "agent-desktop",
+    "command": "/home/wbrendo/.local/bin/agent-desktop",
+    "args": ["mcp"],
+    "include_tools": [
+      "desktop_list_windows",
+      "desktop_snapshot",
+      "desktop_find",
+      "desktop_click",
+      "desktop_type",
+      "desktop_press",
+      "desktop_launch",
+      "desktop_wait"
+    ]
+  },
+  {
+    "name": "studio-controller",
+    "command": "/home/wbrendo/open-jarvis/.venv/bin/python",
+    "args": ["/home/wbrendo/open-jarvis/studio_controller_mcp.py"]
+  }
+]
