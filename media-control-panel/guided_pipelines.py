@@ -109,9 +109,105 @@ GUIDED_TEMPLATES: List[Dict[str, Any]] = [
             {"index": 0, "id": "videouse_express", "name": "Jump-Cut, Color Grading & Legenda Safe-Zone", "engine": "videouse", "docker_stack": None},
         ],
     },
+    {
+        "id": "novela_regional_studio",
+        "title": "🌵 Fábrica de Novelinhas & Humor Nordestino · Multi-Personagem",
+        "subtitle": "Gera roteiro cômico nordestino com IA, múltiplas vozes neurais PT-BR, Character Lock (3D Cartoon ou Novela TV), Dicionário Nordestino e Freeze-Frame final.",
+        "uses_docker": False,
+        "ram_profile": "Zero-RAM (NIM Flux + Edge-TTS + HyperFrames)",
+        "steps": [
+            {"index": 0, "id": "novela_script_ai", "name": "Roteiro Cômico & Dicionário Nordestino (Cascata IA)", "engine": "cascade_ai", "docker_stack": None},
+            {"index": 1, "id": "novela_render_ab", "name": "Atuação Multi-Voz, SFX & Freeze-Frame (HyperFrames Novela)", "engine": "novela", "docker_stack": None},
+        ],
+    },
 ]
 
 TEMPLATES_BY_ID: Dict[str, Dict[str, Any]] = {t["id"]: t for t in GUIDED_TEMPLATES}
+
+
+def _extract_json_block(raw_text: str) -> Optional[Dict[str, Any]]:
+    """Extract first valid JSON object from raw LLM text (fenced or inline)."""
+    txt = (raw_text or "").strip()
+    if not txt:
+        return None
+    fenced = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", txt, flags=re.DOTALL | re.IGNORECASE)
+    if fenced:
+        txt = fenced.group(1).strip()
+    start = txt.find("{")
+    end = txt.rfind("}")
+    if start != -1 and end > start:
+        try:
+            obj = json.loads(txt[start : end + 1])
+            if isinstance(obj, dict):
+                return obj
+        except Exception:
+            pass
+    try:
+        obj = json.loads(txt)
+        return obj if isinstance(obj, dict) else None
+    except Exception:
+        return None
+
+
+def build_fallback_novela_script(
+    theme: str = "Enzo da capital confundindo gírias nordestinas na bodega de Seu Bastião",
+    expressions: Optional[List[str]] = None,
+    tone: str = "Comédia Leve",
+) -> Dict[str, Any]:
+    """Deterministic multi-character Brazilian Northeast comedy script fallback."""
+    exprs = [e.strip() for e in (expressions or []) if e and e.strip()] or [
+        "Oxente",
+        "Morreu Maria Preá",
+        "Botar Boneco",
+        "Deixe de cunversa",
+    ]
+    main_expr = exprs[0]
+    second_expr = exprs[1] if len(exprs) > 1 else "Botar Boneco"
+    clean_theme = (theme or "Confusão na Bodega do Sertão").strip()
+    return {
+        "title": f"{clean_theme[:46]} — Ep. 01",
+        "episode_badge": "🌵 NOVELINHA DO SERTÃO • EP. 01",
+        "tone": tone,
+        "setting": "sunny cobblestone sidewalk outside a painted wooden countryside corner grocery shop in Northeast Brazil with festive colorful paper flags, golden hour",
+        "dictionary": [
+            {"term": main_expr.upper(), "meaning": "Gíria nordestina clássica de espanto, surpresa ou quebra de expectativa."},
+            {"term": second_expr.upper(), "meaning": "Expressão popular cheia de drama e humor usada no dia a dia do sertão."},
+        ],
+        "dialogue": [
+            {
+                "speaker": "Dona Socorro",
+                "tts_text": f"Oxêêênte, Enzo! Larga esse celular um segundo! {clean_theme[:70]}!",
+                "subtitle_text": f"Oxente, Enzo! Larga esse celular! {clean_theme[:70]}!",
+                "emotion": "shocked",
+                "camera_action": "shake",
+                "expression_highlight": main_expr,
+            },
+            {
+                "speaker": "Enzo",
+                "tts_text": f"Quê?! Tia Socorro, eu achei que {second_expr} era coisa séria de verdade! Tô passado!",
+                "subtitle_text": f"Quê?! Tia Socorro, achei que '{second_expr}' era coisa séria! Tô passado!",
+                "emotion": "confused",
+                "camera_action": "zoom_in",
+                "expression_highlight": second_expr,
+            },
+            {
+                "speaker": "Seu Bastião",
+                "tts_text": "Hahahaha! Deixe de cunversa, menino! Aqui no sertão isso é café pequeno, viu?!",
+                "subtitle_text": "Hahaha! Deixe de cunversa, menino! Aqui no sertão isso é café pequeno!",
+                "emotion": "laughing",
+                "camera_action": "whip_pan",
+                "expression_highlight": "Deixe de cunversa",
+            },
+            {
+                "speaker": "Dona Socorro",
+                "tts_text": "Vixe Maria, desse jeito eu vô botar boneco na praça inteira hoje! Aguenta coração!",
+                "subtitle_text": "Vixe Maria, desse jeito eu vou botar boneco na praça inteira hoje!",
+                "emotion": "dramatic",
+                "camera_action": "dramatic_push",
+                "expression_highlight": "Botar Boneco",
+            },
+        ],
+    }
 
 
 class GuidedPipelineOrchestrator:
@@ -128,6 +224,7 @@ class GuidedPipelineOrchestrator:
         count_containers_fn: Callable[[], Awaitable[int]],
         analyze_virals_fn: Callable[..., Awaitable[Dict[str, Any]]],
         run_hyperframes_cli_fn: Callable[..., Awaitable[Dict[str, Any]]],
+        run_novela_cli_fn: Optional[Callable[..., Awaitable[Dict[str, Any]]]] = None,
         run_videouse_cli_fn: Callable[..., Awaitable[Dict[str, Any]]],
         resolve_videouse_input_fn: Callable[[str, str, bool], Path],
         supoclip_dispatch_fn: Callable[[Dict[str, Any]], Awaitable[Dict[str, Any]]],
@@ -147,6 +244,7 @@ class GuidedPipelineOrchestrator:
         self._count_containers = count_containers_fn
         self._analyze_virals = analyze_virals_fn
         self._run_hyperframes_cli = run_hyperframes_cli_fn
+        self._run_novela_cli = run_novela_cli_fn
         self._run_videouse_cli = run_videouse_cli_fn
         self._resolve_videouse_input = resolve_videouse_input_fn
         self._supoclip_dispatch = supoclip_dispatch_fn
@@ -333,6 +431,8 @@ class GuidedPipelineOrchestrator:
                     cp = await self._step_pov_cinema_ad(s_idx, checkpoints, params, p_meta)
                 elif t_id == "express_jumpcut":
                     cp = await self._step_express_jumpcut(s_idx, checkpoints, params, p_meta)
+                elif t_id == "novela_regional_studio":
+                    cp = await self._step_novela_regional_studio(s_idx, checkpoints, params, p_meta)
                 else:
                     raise RuntimeError(f"Template sem executor: {t_id}")
 
@@ -789,5 +889,161 @@ class GuidedPipelineOrchestrator:
         }
         return {
             "summary": f"Edição expressa '{vu_meta['filename']}' ({vu_meta['size_human']}) salva em {p_meta['short_label']}!",
+            "final_output": final_out,
+        }
+
+    async def generate_novela_script(
+        self,
+        *,
+        theme: str,
+        expressions: Optional[List[str]] = None,
+        tone: str = "Comédia Leve",
+        episode_badge: str = "🌵 NOVELINHA DO SERTÃO • EP. 01",
+    ) -> Dict[str, Any]:
+        """Generate multi-character Northeast comedy dialogue via AI cascade with deterministic fallback."""
+        expr_list = [e.strip() for e in (expressions or []) if e and e.strip()]
+        if not expr_list:
+            expr_list = ["Oxente", "Morreu Maria Preá", "Botar Boneco", "Deixe de cunversa"]
+
+        sys_prompt = (
+            "Você é roteirista premiado de micro-séries de humor nordestino brasileiro para Reels/TikTok (20 a 30 segundos). "
+            "Personagens fixos disponíveis: 'Dona Socorro' (matriarca dramática), 'Seu Bastião' (comerciante sábio debochado), "
+            "'Enzo' (sobrinho da capital confuso), 'Narrador'. "
+            "Responda EXCLUSIVAMENTE um JSON válido com as chaves:\n"
+            "- title (string curta)\n"
+            "- episode_badge (string)\n"
+            "- setting (descrição curta em inglês do cenário externo para geração de imagem)\n"
+            "- dictionary (array de 2 objetos {term, meaning} explicando as gírias usadas em português claro e engraçado)\n"
+            "- dialogue (array com 4 a 6 falas curtas e ágeis alternando personagens; cada item com: "
+            "speaker, tts_text [grafia fonética expressiva nordestina para TTS], subtitle_text [grafia limpa legível na tela], "
+            "emotion [uma de: shocked, confused, laughing, proud, dramatic, warm], "
+            "camera_action [uma de: shake, whip_pan, zoom_in, dramatic_push], "
+            "expression_highlight [palavra-chave curta])."
+        )
+        user_prompt = (
+            f"Tema do episódio: {theme}\n"
+            f"Expressões obrigatórias: {', '.join(expr_list)}\n"
+            f"Tom de humor: {tone}\n"
+            f"Selo do episódio: {episode_badge}\n"
+            "Entregue falas curtas de 1 a 2 frases por personagem para fechar entre 18s e 26s antes do Freeze Frame final."
+        )
+        raw_ai = await self._cascade_text(sys_prompt, user_prompt, 3200)
+        parsed = _extract_json_block(raw_ai)
+        fallback = build_fallback_novela_script(theme=theme, expressions=expr_list, tone=tone)
+        if not parsed or not isinstance(parsed.get("dialogue"), list) or len(parsed["dialogue"]) < 2:
+            fallback["source"] = "fallback_deterministic"
+            return fallback
+
+        cleaned_dialogue: List[Dict[str, str]] = []
+        for row in parsed["dialogue"][:8]:
+            if not isinstance(row, dict):
+                continue
+            sub = str(row.get("subtitle_text") or row.get("text") or "").strip()
+            tts = str(row.get("tts_text") or sub).strip()
+            if not sub:
+                continue
+            cleaned_dialogue.append({
+                "speaker": str(row.get("speaker") or "Dona Socorro").strip(),
+                "tts_text": tts,
+                "subtitle_text": sub,
+                "emotion": str(row.get("emotion") or "warm").strip().lower(),
+                "camera_action": str(row.get("camera_action") or "zoom_in").strip().lower(),
+                "expression_highlight": str(row.get("expression_highlight") or "").strip(),
+            })
+        if len(cleaned_dialogue) < 2:
+            fallback["source"] = "fallback_deterministic"
+            return fallback
+
+        raw_dict = parsed.get("dictionary") if isinstance(parsed.get("dictionary"), list) else []
+        cleaned_dict = [
+            {"term": str(it.get("term") or "").strip(), "meaning": str(it.get("meaning") or "").strip()}
+            for it in raw_dict
+            if isinstance(it, dict) and str(it.get("term") or "").strip()
+        ] or fallback["dictionary"]
+
+        return {
+            "title": str(parsed.get("title") or fallback["title"]).strip()[:90],
+            "episode_badge": str(parsed.get("episode_badge") or episode_badge).strip()[:60],
+            "tone": tone,
+            "setting": str(parsed.get("setting") or fallback["setting"]).strip()[:240],
+            "dictionary": cleaned_dict[:3],
+            "dialogue": cleaned_dialogue,
+            "source": "cascade_ai",
+        }
+
+    async def _step_novela_regional_studio(
+        self,
+        step_idx: int,
+        checkpoints: Dict[str, Any],
+        params: Dict[str, Any],
+        p_meta: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        if step_idx == 0:
+            raw_dlg = params.get("dialogue")
+            theme = (params.get("theme") or "Enzo da capital confundindo gírias nordestinas na bodega").strip()
+            raw_exprs = params.get("expressions")
+            if isinstance(raw_exprs, str):
+                expr_list = [x.strip() for x in raw_exprs.split(",") if x.strip()]
+            elif isinstance(raw_exprs, list):
+                expr_list = [str(x).strip() for x in raw_exprs if str(x).strip()]
+            else:
+                expr_list = ["Oxente", "Morreu Maria Preá", "Botar Boneco"]
+            tone = (params.get("tone") or "Comédia Leve").strip()
+            ep_badge = (params.get("episode_badge") or "🌵 NOVELINHA DO SERTÃO • EP. 01").strip()
+
+            if isinstance(raw_dlg, list) and len(raw_dlg) >= 1:
+                script_obj = {
+                    "title": (params.get("title") or theme[:60]).strip(),
+                    "episode_badge": ep_badge,
+                    "tone": tone,
+                    "setting": (params.get("setting") or build_fallback_novela_script(theme, expr_list, tone)["setting"]),
+                    "dictionary": params.get("dictionary") or build_fallback_novela_script(theme, expr_list, tone)["dictionary"],
+                    "dialogue": raw_dlg,
+                    "source": "user_edited",
+                }
+            else:
+                script_obj = await self.generate_novela_script(
+                    theme=theme,
+                    expressions=expr_list,
+                    tone=tone,
+                    episode_badge=ep_badge,
+                )
+            return {
+                "summary": f"Roteiro '{script_obj['title']}' pronto ({len(script_obj['dialogue'])} falas, fonte: {script_obj.get('source', 'ai')}).",
+                **script_obj,
+            }
+
+        if not self._run_novela_cli:
+            raise RuntimeError("Executor run_novela_cli_fn não configurado no orquestrador")
+
+        cp0 = checkpoints.get("0") or {}
+        visual_style = str(params.get("visual_style") or "3d_cartoon").strip().lower()
+        if visual_style not in ("3d_cartoon", "cinematic_tv"):
+            visual_style = "3d_cartoon"
+
+        nov_meta = await self._run_novela_cli(
+            title=cp0.get("title") or params.get("title") or "Causos do Sertão — Ep. 01",
+            episode_badge=cp0.get("episode_badge") or params.get("episode_badge") or "🌵 NOVELINHA DO SERTÃO • EP. 01",
+            visual_style=visual_style,
+            platform_preset=p_meta["id"],
+            setting=cp0.get("setting") or "",
+            dictionary=cp0.get("dictionary") or [],
+            dialogue=cp0.get("dialogue") or [],
+            quality=str(params.get("quality") or "standard"),
+        )
+        final_out = {
+            **nov_meta,
+            "hard_mode_engine": "novela",
+            "hard_mode_payload": {
+                "title": cp0.get("title") or "",
+                "episode_badge": cp0.get("episode_badge") or "",
+                "visual_style": visual_style,
+                "platform_preset": p_meta["id"],
+                "dictionary": cp0.get("dictionary") or [],
+                "dialogue": cp0.get("dialogue") or [],
+            },
+        }
+        return {
+            "summary": f"Episódio '{nov_meta.get('filename')}' ({nov_meta.get('visual_style')}, {nov_meta.get('size_human')}) finalizado com Dicionário & Freeze-Frame!",
             "final_output": final_out,
         }

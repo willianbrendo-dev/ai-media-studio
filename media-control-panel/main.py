@@ -1028,6 +1028,10 @@ def _get_output_sources() -> Dict[str, Dict[str, Any]]:
             "name": "HyperFrames · Motion Ads",
             "roots": [STUDIO_BASE_DIR / "exports/hyperframes"],
         },
+        "novela": {
+            "name": "Novela Studio · Micro-Séries",
+            "roots": [STUDIO_BASE_DIR / "exports/novela"],
+        },
         "openfilm": {
             "name": "OpenFilm",
             "roots": [
@@ -2149,10 +2153,12 @@ VIDEOUSE_RUNNER = STUDIO_BASE_DIR / "tools/video-use/vps_zero_cost_runner.py"
 VIDEOUSE_PYTHON = STUDIO_BASE_DIR / "tools/video-use/.venv/bin/python"
 VIDEOUSE_EDGE_TTS = STUDIO_BASE_DIR / "tools/video-use/.venv/bin/edge-tts"
 HYPERFRAMES_RUNNER = STUDIO_BASE_DIR / "tools/hyperframes/vps_ad_runner.py"
+NOVELA_RUNNER = STUDIO_BASE_DIR / "tools/hyperframes/vps_novela_runner.py"
 VIRAL_ANALYZER_RUNNER = STUDIO_BASE_DIR / "tools/hyperframes/viral_reference_analyzer.py"
 VIDEOUSE_INPUTS_DIR = STUDIO_BASE_DIR / ".cache/videouse_inputs"
 VIDEOUSE_EXPORTS_DIR = STUDIO_BASE_DIR / "exports/videouse"
 HYPERFRAMES_EXPORTS_DIR = STUDIO_BASE_DIR / "exports/hyperframes"
+NOVELA_EXPORTS_DIR = STUDIO_BASE_DIR / "exports/novela"
 PIPELINES_EXPORTS_DIR = STUDIO_BASE_DIR / "exports/pipelines"
 CAMPAIGNS_DIR = Path(os.environ.get("STUDIO_CAMPAIGNS_DIR", str(STUDIO_BASE_DIR / "campaigns")))
 
@@ -2898,6 +2904,185 @@ async def api_quick_hyperframes_task(task_id: str):
 
 
 # ==============================================================================
+# Novela Studio Multi-Personagem (v2.4 — Trilha 6 Zero-RAM)
+# ==============================================================================
+
+class QuickNovelaScriptRequest(BaseModel):
+    theme: str = "Enzo da capital confundindo gírias nordestinas na bodega de Seu Bastião"
+    expressions: List[str] = ["Oxente", "Morreu Maria Preá", "Botar Boneco", "Deixe de cunversa"]
+    tone: str = "Comédia Leve"
+    episode_badge: str = "🌵 NOVELINHA DO SERTÃO • EP. 01"
+
+
+class QuickNovelaRequest(BaseModel):
+    title: str = "Causos do Sertão — Episódio 01"
+    episode_badge: str = "🌵 NOVELINHA DO SERTÃO • EP. 01"
+    visual_style: str = "3d_cartoon"
+    platform_preset: str = "tiktok_reels"
+    setting: str = ""
+    dictionary: List[Dict[str, str]] = []
+    dialogue: List[Dict[str, Any]] = []
+    theme: str = ""
+    expressions: List[str] = []
+    tone: str = "Comédia Leve"
+    quality: str = "standard"
+    output_filename: str = ""
+    wait: bool = False
+
+
+async def _invoke_novela_cli(out_path: Path, cfg_payload: Dict[str, Any]) -> Dict[str, Any]:
+    if not NOVELA_RUNNER.exists() or not VIDEOUSE_PYTHON.exists():
+        raise HTTPException(status_code=500, detail="Motor Novela Studio não configurado em /opt/ai-media-studio/tools/hyperframes/vps_novela_runner.py")
+
+    NOVELA_EXPORTS_DIR.mkdir(parents=True, exist_ok=True)
+    cfg_file = Path(f"/tmp/novela_job_{uuid.uuid4().hex[:10]}.json")
+    full_cfg = {**cfg_payload, "output": str(out_path)}
+    cfg_file.write_text(json.dumps(full_cfg, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            str(VIDEOUSE_PYTHON),
+            str(NOVELA_RUNNER),
+            "--config", str(cfg_file),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout_b, stderr_b = await asyncio.wait_for(proc.communicate(), timeout=600)
+        stdout_txt = stdout_b.decode("utf-8", errors="ignore").strip()
+        stderr_txt = stderr_b.decode("utf-8", errors="ignore").strip()
+
+        if proc.returncode != 0 or not out_path.exists():
+            raise RuntimeError((stderr_txt or stdout_txt or f"Exit code {proc.returncode}")[-600:])
+
+        meta = json.loads(stdout_txt.splitlines()[-1])
+        dl = _output_download_meta("novela", out_path)
+        return {**meta, **dl, "size_human": _human_size(out_path.stat().st_size)}
+    finally:
+        cfg_file.unlink(missing_ok=True)
+
+
+async def _pipeline_run_novela_cli(**kwargs: Any) -> Dict[str, Any]:
+    NOVELA_EXPORTS_DIR.mkdir(parents=True, exist_ok=True)
+    raw_name = str(kwargs.get("output_filename") or "").strip()
+    if raw_name:
+        safe_name = re.sub(r"[^a-zA-Z0-9_.-]+", "_", raw_name)
+        if not safe_name.endswith(".mp4"):
+            safe_name += ".mp4"
+    else:
+        slug = re.sub(r"[^a-zA-Z0-9_-]+", "-", str(kwargs.get("title") or "novela").lower()).strip("-")[:32] or "novela"
+        vstyle = str(kwargs.get("visual_style") or "3d_cartoon").strip().lower()
+        safe_name = f"novela_{slug}_{vstyle}_{int(time.time())}_{uuid.uuid4().hex[:6]}.mp4"
+    out_path = NOVELA_EXPORTS_DIR / safe_name
+    return await _invoke_novela_cli(out_path, kwargs)
+
+
+async def _execute_novela_job(task_id: str, out_path: Path, cfg_payload: Dict[str, Any]) -> None:
+    job = _LOCAL_MEDIA_JOBS[task_id]
+    try:
+        job["status"] = "processing"
+        job["progress"] = 20
+        job["message"] = "Sintetizando vozes dos personagens, retratos Character Lock e Freeze-Frame..."
+
+        if not cfg_payload.get("dialogue"):
+            generated = await PIPELINE_ORCHESTRATOR.generate_novela_script(
+                theme=cfg_payload.get("theme") or cfg_payload.get("title") or "Confusão na Bodega",
+                expressions=cfg_payload.get("expressions") or [],
+                tone=cfg_payload.get("tone") or "Comédia Leve",
+                episode_badge=cfg_payload.get("episode_badge") or "🌵 NOVELINHA DO SERTÃO • EP. 01",
+            )
+            cfg_payload["dialogue"] = generated["dialogue"]
+            if not cfg_payload.get("dictionary"):
+                cfg_payload["dictionary"] = generated["dictionary"]
+            if not cfg_payload.get("setting"):
+                cfg_payload["setting"] = generated["setting"]
+            if not cfg_payload.get("title"):
+                cfg_payload["title"] = generated["title"]
+
+        job["progress"] = 50
+        res = await _invoke_novela_cli(out_path, cfg_payload)
+        job.update(res)
+        job["dialogue"] = cfg_payload.get("dialogue")
+        job["dictionary"] = cfg_payload.get("dictionary")
+        job["status"] = "completed"
+        job["progress"] = 100
+        job["ready"] = True
+        job["message"] = f"Novelinha '{out_path.name}' renderizada em {cfg_payload.get('visual_style')}!"
+    except Exception as exc:
+        job["status"] = "error"
+        job["failed"] = True
+        job["error"] = str(exc)
+        job["message"] = f"Falha no Novela Studio: {exc}"
+
+
+@app.post("/api/quick/novela/generate-script")
+async def api_quick_novela_generate_script(req: QuickNovelaScriptRequest):
+    script_data = await PIPELINE_ORCHESTRATOR.generate_novela_script(
+        theme=req.theme,
+        expressions=req.expressions,
+        tone=req.tone,
+        episode_badge=req.episode_badge,
+    )
+    return {"ok": True, **script_data}
+
+
+@app.post("/api/quick/novela")
+async def api_quick_novela(req: QuickNovelaRequest):
+    if not NOVELA_RUNNER.exists() or not VIDEOUSE_PYTHON.exists():
+        raise HTTPException(status_code=500, detail="Motor Novela Studio não configurado em /opt/ai-media-studio/tools/hyperframes/vps_novela_runner.py")
+
+    NOVELA_EXPORTS_DIR.mkdir(parents=True, exist_ok=True)
+    vstyle = req.visual_style if req.visual_style in ("3d_cartoon", "cinematic_tv") else "3d_cartoon"
+    raw_name = (req.output_filename or "").strip()
+    if raw_name:
+        safe_name = re.sub(r"[^a-zA-Z0-9_.-]+", "_", raw_name)
+        if not safe_name.endswith(".mp4"):
+            safe_name += ".mp4"
+    else:
+        slug = re.sub(r"[^a-zA-Z0-9_-]+", "-", (req.title or "novela").lower()).strip("-")[:32] or "novela"
+        safe_name = f"novela_{slug}_{vstyle}_{int(time.time())}_{uuid.uuid4().hex[:6]}.mp4"
+    out_path = NOVELA_EXPORTS_DIR / safe_name
+
+    task_id = f"nov-{uuid.uuid4().hex[:10]}"
+    _trim_local_media_jobs()
+    cfg_payload = req.model_dump() if hasattr(req, "model_dump") else req.dict()
+    cfg_payload["visual_style"] = vstyle
+    _LOCAL_MEDIA_JOBS[task_id] = {
+        "ok": True,
+        "task_id": task_id,
+        "engine": "novela",
+        "status": "processing",
+        "progress": 10,
+        "ready": False,
+        "failed": False,
+        "title": req.title,
+        "visual_style": vstyle,
+        "platform_preset": req.platform_preset,
+        "filename": safe_name,
+        "created_at": time.time(),
+        "message": f"Iniciando produção multi-personagem ({vstyle})...",
+    }
+
+    task = asyncio.create_task(_execute_novela_job(task_id, out_path, cfg_payload))
+    _LOCAL_MEDIA_JOBS[task_id]["_task"] = task
+
+    if req.wait:
+        try:
+            await asyncio.wait_for(asyncio.shield(task), timeout=540.0)
+        except asyncio.TimeoutError:
+            pass
+
+    return {k: v for k, v in _LOCAL_MEDIA_JOBS[task_id].items() if k != "_task"}
+
+
+@app.get("/api/quick/novela/task/{task_id}")
+async def api_quick_novela_task(task_id: str):
+    job = _LOCAL_MEDIA_JOBS.get(task_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Tarefa do Novela Studio não encontrada")
+    return {k: v for k, v in job.items() if k != "_task"}
+
+
+# ==============================================================================
 # Guided Pipelines Orchestrator (v2.3 — RAM Relay, Checkpoints & 5 Templates)
 # ==============================================================================
 
@@ -2994,6 +3179,7 @@ PIPELINE_ORCHESTRATOR = GuidedPipelineOrchestrator(
     count_containers_fn=_pipeline_count_containers,
     analyze_virals_fn=_run_campaign_viral_analysis,
     run_hyperframes_cli_fn=_pipeline_run_hyperframes_cli,
+    run_novela_cli_fn=_pipeline_run_novela_cli,
     run_videouse_cli_fn=_pipeline_run_videouse_cli,
     resolve_videouse_input_fn=_resolve_videouse_input,
     supoclip_dispatch_fn=_pipeline_supoclip_dispatch,
@@ -3483,6 +3669,13 @@ _STUDIO_9_CAPABILITIES: Dict[str, Dict[str, str]] = {
         "best_for": "Anúncios Motion Graphics 5s–15s em HTML/Canvas/GSAP com cartela de preço, oferta/CTA Shopee e locução neural PT-BR (`Shopee Flash Sale`, `B2B Emerald`, `Cyber Neon`, `Minimal Luxury`).",
         "api": "POST /api/quick/hyperframes",
         "ui": "Aba Estúdio Rápido -> HyperFrames",
+    },
+    "novela": {
+        "name": "Novela Studio · Micro-Séries",
+        "kind": "Motor Nativo (0 MB RAM ociosa)",
+        "best_for": "Criar do zero micro-séries e novelinhas de humor/causos nordestinos multi-personagem (`Dona Socorro`, `Seu Bastião`, `Enzo`, `Narrador`) em `3d_cartoon` ou `cinematic_tv` com Dicionário Nordestino e Freeze-Frame final.",
+        "api": "POST /api/quick/novela + /api/quick/novela/generate-script (Trilha 6: novela_regional_studio)",
+        "ui": "Aba Estúdio Rápido -> Modo Guiado (Trilha 6) ou Modo Hard -> Novela Studio",
     },
     "moneyprinter": {
         "name": "MoneyPrinterTurbo",

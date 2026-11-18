@@ -691,26 +691,54 @@ _STUDIO_CAPABILITIES_CATALOG: dict[str, dict[str, str]] = {
         "execution_api": "Start stack via studio_control_stack('openseo', 'start')",
         "execution_ui": "/app/openseo/",
     },
+    "novela_studio": {
+        "name": "Novela Studio · Micro-Séries Multi-Personagem",
+        "kind": "Motor Nativo (0 MB RAM ociosa · Trilha 6)",
+        "best_for": "Criar do zero novelinhas e causos nordestinos multi-personagem (Dona Socorro, Seu Bastião, Enzo, Narrador) em `3d_cartoon` ou `cinematic_tv`, com Dicionário Nordestino e Freeze-Frame final.",
+        "execution_api": "POST /api/quick/novela + POST /api/pipelines/start ('novela_regional_studio') · MCP: studio_run_novela",
+        "execution_ui": "Aba Estúdio Rápido -> Modo Guiado (Trilha 6) ou Modo Hard -> Novela Studio",
+    },
 }
 
 
 def _recommend_studio_tracks(goal: str, format_hint: str = "") -> tuple[list[dict[str, Any]], list[str]]:
-    """Classify creative/production goals across all 9 Studio tools and build strategic recommendations + discovery questions."""
+    """Classify creative/production goals across all Studio tools and build strategic recommendations + discovery questions."""
     text = f"{goal} {format_hint}".lower()
     tracks: list[dict[str, Any]] = []
     questions: list[str] = []
 
+    is_novela_create = any(k in text for k in (
+        "novelinha", "causo", "nordest", "dona socorro", "bastião", "bastiao",
+        "enzo", "micro-série", "micro-serie", "personagem", "personagens",
+        "diálogo", "dialogo", "3d_cartoon", "cinematic_tv", "dicionário nordestino",
+    )) or (("novela" in text or "série" in text or "serie" in text) and not any(c in text for c in ("cortar", "fatiar", "vídeo longo", "video longo", "supoclip")))
     is_ad_promo = any(k in text for k in (
         "shopee", "anúncio", "anuncio", "vendas", "venda", "oferta", "promo",
         "desconto", "produto", "e-commerce", "ecommerce", "loja", "afiliado",
         "propaganda", "motion", "hyperframes", "faceless", "moneyprinter",
     ))
     is_long_cut = any(k in text for k in (
-        "novela", "série", "serie", "partes", "continuação", "continuacao",
-        "episódio", "episodio", "vídeo longo", "video longo", "longo",
-        "cortar", "corte", "cortes", "podcast", "live", "highlights",
-        "virais", "viral", "supoclip", "reels", "shorts", "tiktok",
+        "cortar", "corte", "cortes", "fatiar", "vídeo longo", "video longo", "longo",
+        "podcast", "live", "highlights", "virais", "viral", "supoclip", "partes",
     ))
+
+    if is_novela_create:
+        tracks.append({
+            "track": "Fábrica de Novelinhas & Micro-Séries Multi-Personagem (Trilha 6)",
+            "primary": {
+                **_STUDIO_CAPABILITIES_CATALOG["novela_studio"],
+                "why": "Cria episódios completos do zero sem ligar Docker (0 MB RAM ociosa), com vozes neurais distintas para cada personagem, Character Lock visual (`3d_cartoon` ou `cinematic_tv`), SFX de cena e Freeze-Frame com Dicionário Nordestino.",
+                "recommended_params": {"visual_style": "3d_cartoon", "platform_preset": "tiktok_reels", "tone": "Comédia Leve"},
+            },
+            "alternative_or_combo": {
+                **_STUDIO_CAPABILITIES_CATALOG["supoclip"],
+                "combo_note": "Se em vez de criar do zero você já tiver um vídeo longo gravado e quiser apenas fatiar em partes sequenciais, use o SupoClip no modo `novela`.",
+            },
+        })
+        questions.extend([
+            "Para a novelinha: qual estilo visual você prefere (`3d_cartoon` estilo animação expressiva ou `cinematic_tv` estilo novela de TV 35mm)?",
+            "Qual o tema do episódio, quais gírias/expressões regionais quer destacar e para qual rede (`tiktok_reels`, `yt_shorts` ou `shopee_20_9`)?",
+        ])
     is_cleanup_polish = any(k in text for k in (
         "silêncio", "silencio", "silêncios", "silencios", "limpar", "jump-cut",
         "hesitação", "hesitacoes", "cor", "color", "grading", "tratar cor",
@@ -1526,6 +1554,72 @@ def webcam_look(
 
     res = capture_and_describe(prompt=prompt)
     return json.dumps(res, ensure_ascii=False, indent=2)
+
+
+@mcp.tool()
+def studio_run_novela(
+    title: str = "Causos do Sertão — Episódio 01",
+    visual_style: str = "3d_cartoon",
+    platform_preset: str = "tiktok_reels",
+    theme: str = "Enzo da capital confundindo gírias nordestinas na bodega de Seu Bastião",
+    expressions_csv: str = "Oxente, Morreu Maria Preá, Botar Boneco, Deixe de cunversa",
+    tone: str = "Comédia Leve",
+    dialogue_json: str = "",
+    dictionary_json: str = "",
+    quality: str = "standard",
+    output_filename: str = "",
+    wait: bool = True,
+    poll_timeout_s: float = 480.0,
+) -> str:
+    """Produce a multi-character vertical mini-novela / regional comedy episode (Zero Idle Docker RAM) via POST /api/quick/novela.
+
+    Args:
+        title: Episode title shown in the top ribbon.
+        visual_style: Visual aesthetic: '3d_cartoon' (animated CG character art) or 'cinematic_tv' (35mm realistic Brazilian telenovela).
+        platform_preset: Target Safe-Zone: 'tiktok_reels' (default), 'yt_shorts', or 'shopee_20_9'.
+        theme: Storyline/theme used to generate the script if dialogue_json is omitted.
+        expressions_csv: Comma-separated regional expressions to feature and explain in the ending Dictionary card.
+        tone: Comedy/drama tone (e.g., 'Comédia Leve', 'Novela Mexicana Exagerada').
+        dialogue_json: Optional JSON array string of turns [{speaker, tts_text, subtitle_text, emotion, camera_action, expression_highlight}].
+        dictionary_json: Optional JSON array string of dictionary entries [{term, meaning}].
+        quality: Render quality: 'draft' or 'standard' (default).
+        output_filename: Optional target filename under /opt/ai-media-studio/exports/novela/.
+        wait: Poll until completion (True default) and return Gallery preview/download URLs.
+        poll_timeout_s: Max wait seconds (default 480s).
+    """
+    _, base_url, headers, auth = _resolve_target_conn("vps")
+    expr_list = [x.strip() for x in (expressions_csv or "").split(",") if x.strip()]
+    parsed_dialogue: list[dict[str, Any]] = []
+    if dialogue_json and dialogue_json.strip():
+        parsed_dialogue = json.loads(dialogue_json)
+    parsed_dict: list[dict[str, str]] = []
+    if dictionary_json and dictionary_json.strip():
+        parsed_dict = json.loads(dictionary_json)
+
+    body = {
+        "title": title,
+        "visual_style": visual_style if visual_style in ("3d_cartoon", "cinematic_tv") else "3d_cartoon",
+        "platform_preset": platform_preset,
+        "theme": theme,
+        "expressions": expr_list,
+        "tone": tone,
+        "dialogue": parsed_dialogue,
+        "dictionary": parsed_dict,
+        "quality": quality if quality in ("draft", "looks", "delivery", "standard", "high") else "standard",
+        "output_filename": output_filename,
+        "wait": False,
+    }
+    try:
+        with httpx.Client(timeout=30.0, headers=headers, auth=auth) as client:
+            resp = client.post(f"{base_url}/api/quick/novela", json=body)
+            if resp.status_code >= 400:
+                return json.dumps({"ok": False, "status_code": resp.status_code, "detail": resp.text[:400]}, ensure_ascii=False)
+            data = resp.json()
+            if wait and data.get("task_id"):
+                data = _poll_quick_task(client, f"{base_url}/api/quick/novela/task/{data['task_id']}", timeout_s=poll_timeout_s)
+            return json.dumps(data, ensure_ascii=False, indent=2)
+    except Exception as exc:
+        return json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False)
 
 
 if __name__ == "__main__":

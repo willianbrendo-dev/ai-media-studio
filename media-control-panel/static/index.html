@@ -828,6 +828,70 @@
                 </div>
               </div>
 
+              <!-- MISSAO 6: NOVELA REGIONAL STUDIO -->
+              <div id="gp-fields-novela_regional_studio" class="gp-mission-fields hidden space-y-3">
+                <input id="gp-nov-style" type="hidden" value="3d_cartoon" />
+                <div class="space-y-1.5">
+                  <label class="text-[11px] font-semibold text-slate-400">Estilo Visual da Micro-Série (Teste A/B)</label>
+                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <button id="gp-nov-style-3d_cartoon" type="button" onclick="setGuidedNovelaStyle('3d_cartoon')"
+                      class="touch-btn min-h-[48px] px-3 py-2 rounded-xl border text-left transition cursor-pointer bg-amber-500/20 border-amber-400/70 text-amber-200">
+                      <div class="text-xs font-extrabold">🎨 3D Cartoon (Animado Expressivo)</div>
+                      <div class="text-[10px] opacity-80">Traços 3D estilizados, cores vibrantes e humor exagerado</div>
+                    </button>
+                    <button id="gp-nov-style-cinematic_tv" type="button" onclick="setGuidedNovelaStyle('cinematic_tv')"
+                      class="touch-btn min-h-[48px] px-3 py-2 rounded-xl border text-left transition cursor-pointer bg-white/[0.03] border-white/10 text-slate-300 hover:bg-white/[0.07]">
+                      <div class="text-xs font-extrabold">🎬 Novela Cinematográfica (TV 35mm)</div>
+                      <div class="text-[10px] opacity-80">Dramaturgia realista de TV aberta com textura e bokeh 35mm</div>
+                    </button>
+                  </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div class="space-y-1">
+                    <label class="text-[11px] font-semibold text-slate-400">Tema do Causos / Episódio</label>
+                    <input id="gp-nov-theme" type="text" value="Enzo da capital confundindo gírias nordestinas na bodega de Seu Bastião"
+                      class="w-full min-h-[44px] bg-[#070a08] border border-white/10 focus:border-amber-400 rounded-xl px-3 text-xs text-white outline-none" />
+                  </div>
+                  <div class="space-y-1">
+                    <label class="text-[11px] font-semibold text-slate-400">Tom de Humor</label>
+                    <select id="gp-nov-tone" class="w-full min-h-[44px] bg-[#070a08] border border-white/10 rounded-xl px-2.5 text-xs text-white outline-none">
+                      <option value="Comédia Leve" selected>Comédia Leve Nordestina</option>
+                      <option value="Novela Mexicana Exagerada">Novela Dramática Exagerada</option>
+                      <option value="Fofoca de Calçada">Fofoca de Calçada / Bodega</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="space-y-1.5">
+                  <div class="flex flex-wrap items-center justify-between gap-2">
+                    <label class="text-[11px] font-semibold text-slate-400">Expressões Nordestinas no Roteiro</label>
+                    <div class="flex flex-wrap gap-1.5">
+                      <button type="button" onclick="addNovelaExprChip('Oxente')" class="px-2 py-1 rounded-lg text-[10px] font-bold bg-amber-500/15 hover:bg-amber-500/25 text-amber-200 border border-amber-500/30 cursor-pointer">+ Oxente</button>
+                      <button type="button" onclick="addNovelaExprChip('Morreu Maria Preá')" class="px-2 py-1 rounded-lg text-[10px] font-bold bg-amber-500/15 hover:bg-amber-500/25 text-amber-200 border border-amber-500/30 cursor-pointer">+ Morreu Maria Preá</button>
+                      <button type="button" onclick="addNovelaExprChip('Botar Boneco')" class="px-2 py-1 rounded-lg text-[10px] font-bold bg-amber-500/15 hover:bg-amber-500/25 text-amber-200 border border-amber-500/30 cursor-pointer">+ Botar Boneco</button>
+                      <button type="button" onclick="addNovelaExprChip('Deixe de cunversa')" class="px-2 py-1 rounded-lg text-[10px] font-bold bg-amber-500/15 hover:bg-amber-500/25 text-amber-200 border border-amber-500/30 cursor-pointer">+ Deixe de cunversa</button>
+                    </div>
+                  </div>
+                  <div class="flex flex-col sm:flex-row gap-2">
+                    <input id="gp-nov-expressions" type="text" value="Oxente, Morreu Maria Preá, Botar Boneco, Deixe de cunversa"
+                      class="w-full min-h-[44px] bg-[#070a08] border border-white/10 focus:border-amber-400 rounded-xl px-3 text-xs text-white outline-none" />
+                    <button id="btn-gp-nov-gen" type="button" onclick="generateGuidedNovelaDialogue()"
+                      class="touch-btn shrink-0 min-h-[44px] px-3.5 rounded-xl text-xs font-extrabold bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-400/40 transition cursor-pointer">
+                      ✨ Gerar Diálogo com IA
+                    </button>
+                  </div>
+                </div>
+
+                <div id="gp-nov-preview-box" class="hidden rounded-2xl bg-[#070a08] border border-amber-500/25 p-3 space-y-2">
+                  <div class="flex items-center justify-between text-[11px]">
+                    <span class="font-bold text-amber-300">📜 Prévia do Roteiro &amp; Dicionário</span>
+                    <span id="gp-nov-preview-count" class="font-mono text-slate-400"></span>
+                  </div>
+                  <div id="gp-nov-preview-lines" class="space-y-1.5 text-xs max-h-48 overflow-y-auto pr-1"></div>
+                </div>
+              </div>
+
               <button id="btn-gp-run" type="submit"
                 class="touch-btn w-full min-h-[48px] px-5 rounded-2xl text-sm font-extrabold bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2 transition cursor-pointer">
                 <span>🚀 Executar Trilha Completa</span>
@@ -1669,6 +1733,84 @@
               <div id="qhf-downloads" class="space-y-2"></div>
             </div>
           </div>
+
+          <!-- CARD 6: NOVELA STUDIO MULTI-PERSONAGEM (MODO HARD) -->
+          <div id="card-hard-novela" class="saas-card saas-card-interactive rounded-3xl p-4 sm:p-6 space-y-4 xl:col-span-2">
+            <div class="flex flex-wrap items-start justify-between gap-3 border-b border-white/[0.06] pb-3.5">
+              <div class="flex items-start gap-3 min-w-0">
+                <div class="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center shrink-0">
+                  <i data-lucide="drama" class="w-5 h-5 text-amber-400"></i>
+                </div>
+                <div class="min-w-0">
+                  <h3 class="text-sm sm:text-base font-bold text-white">Novela Studio · Editor de Diálogo Multi-Personagem</h3>
+                  <p class="text-[11px] text-slate-400 mt-0.5">0 MB RAM ociosa · Edite fala por fala (Fonética TTS vs Legenda Limpa), Caracterização 3D Cartoon ou TV 35mm e Dicionário Final</p>
+                </div>
+              </div>
+              <div class="flex flex-wrap gap-2">
+                <button id="btn-qnv-gen" type="button" onclick="generateHardNovelaScript()"
+                  class="touch-btn min-h-[40px] px-3 rounded-xl text-xs font-bold bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-400/40 cursor-pointer transition">
+                  ✨ Gerar Roteiro com IA
+                </button>
+                <button id="btn-qnv-add-line" type="button" onclick="addHardNovelaRow()"
+                  class="touch-btn min-h-[40px] px-3 rounded-xl text-xs font-bold bg-white/[0.05] hover:bg-white/[0.10] text-slate-200 border border-white/15 cursor-pointer transition">
+                  + Adicionar Fala
+                </button>
+              </div>
+            </div>
+
+            <form onsubmit="submitHardNovela(event)" class="space-y-3.5">
+              <div class="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
+                <div class="sm:col-span-2 space-y-1">
+                  <label class="text-[11px] font-semibold text-slate-400 block">Título do Episódio</label>
+                  <input id="qnv-title" type="text" value="Confusão na Bodega — Causos do Sertão Ep. 01" required
+                    class="w-full min-h-[44px] bg-[#070a08] border border-white/10 focus:border-amber-400 rounded-xl px-3 text-xs text-white outline-none" />
+                </div>
+                <div class="space-y-1">
+                  <label class="text-[11px] font-semibold text-slate-400 block">Estilo Visual</label>
+                  <select id="qnv-style" class="w-full min-h-[44px] bg-[#070a08] border border-white/10 rounded-xl px-2.5 text-xs text-slate-100 outline-none">
+                    <option value="3d_cartoon" selected>🎨 3D Cartoon (Animado)</option>
+                    <option value="cinematic_tv">🎬 Novela TV 35mm (Realista)</option>
+                  </select>
+                </div>
+                <div class="space-y-1">
+                  <label class="text-[11px] font-semibold text-slate-400 block">Safe-Zone Plataforma</label>
+                  <select id="qnv-platform" class="w-full min-h-[44px] bg-[#070a08] border border-white/10 rounded-xl px-2.5 text-xs text-slate-100 outline-none">
+                    <option value="tiktok_reels" selected>TikTok / Reels 9:16</option>
+                    <option value="yt_shorts">YouTube Shorts 9:16</option>
+                    <option value="shopee_20_9">Shopee Video 20:9</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="space-y-2">
+                <div class="text-[11px] font-semibold text-slate-400">Falas do Episódio (Camada Dupla: Texto Falado Fonético + Legenda Limpa)</div>
+                <div id="qnv-dialogue-list" class="space-y-2.5"></div>
+              </div>
+
+              <div class="space-y-1">
+                <label class="text-[11px] font-semibold text-slate-400 block">Dicionário Nordestino Final (JSON [{term, meaning}])</label>
+                <textarea id="qnv-dict-json" rows="2"
+                  class="w-full bg-[#070a08] border border-white/10 rounded-xl p-2.5 text-[11px] font-mono text-amber-200 outline-none">[{"term": "MORREU MARIA PREÁ", "meaning": "Expressão de que algo acabou ou não tem mais jeito!"}, {"term": "BOTAR BONECO", "meaning": "Fazer drama, escândalo ou manha exagerada."}]</textarea>
+              </div>
+
+              <button id="btn-qnv-submit" type="submit"
+                class="touch-btn w-full min-h-[48px] px-4 rounded-2xl text-sm font-extrabold bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2 transition cursor-pointer">
+                <i data-lucide="clapperboard" class="w-4 h-4"></i> Renderizar Episódio MP4 (Novela Studio)
+              </button>
+            </form>
+
+            <div id="qnv-status-box" class="hidden rounded-2xl bg-[#070a08] border border-amber-500/30 p-4 space-y-3">
+              <div class="flex items-center justify-between gap-2 text-xs">
+                <span id="qnv-status-title" class="font-bold text-amber-300">Produzindo episódio...</span>
+                <span id="qnv-progress-pct" class="font-mono text-slate-300 num-tabular">10%</span>
+              </div>
+              <div class="h-2 rounded-full bg-white/10 overflow-hidden">
+                <div id="qnv-progress-bar" class="h-full bg-gradient-to-r from-amber-500 to-orange-400 transition-all duration-300" style="width:10%"></div>
+              </div>
+              <div id="qnv-status-text" class="text-[11px] text-slate-400"></div>
+              <div id="qnv-downloads" class="space-y-2"></div>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -1704,6 +1846,7 @@
             <button onclick="setOutputsFilter('agenttube')" id="ofilter-agenttube" class="px-3 py-1.5 rounded-lg font-medium text-slate-400 hover:text-white cursor-pointer transition whitespace-nowrap">AgentTube</button>
             <button onclick="setOutputsFilter('videouse')" id="ofilter-videouse" class="px-3 py-1.5 rounded-lg font-medium text-slate-400 hover:text-white cursor-pointer transition whitespace-nowrap">Video Use</button>
             <button onclick="setOutputsFilter('hyperframes')" id="ofilter-hyperframes" class="px-3 py-1.5 rounded-lg font-medium text-slate-400 hover:text-white cursor-pointer transition whitespace-nowrap">HyperFrames</button>
+            <button onclick="setOutputsFilter('novela')" id="ofilter-novela" class="px-3 py-1.5 rounded-lg font-medium text-slate-400 hover:text-white cursor-pointer transition whitespace-nowrap">Novela Studio</button>
           </div>
 
           <div id="outputs-grid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -3416,7 +3559,7 @@
 
     function setOutputsFilter(filter) {
       currentOutputsFilter = filter;
-      ['all', 'moneyprinter', 'voicestudio', 'supoclip', 'openfilm', 'agenttube'].forEach(f => {
+      ['all', 'moneyprinter', 'voicestudio', 'supoclip', 'openfilm', 'agenttube', 'videouse', 'hyperframes', 'novela'].forEach(f => {
         const b = document.getElementById(`ofilter-${f}`);
         if (!b) return;
         b.className = f === filter
@@ -4214,6 +4357,16 @@
         steps: [
           { index: 0, name: 'Jump-Cut, Color Grading & Legenda Safe-Zone', docker_stack: null }
         ]
+      },
+      {
+        id: 'novela_regional_studio',
+        title: '🌵 Fábrica de Novelinhas & Humor Nordestino · Multi-Personagem',
+        uses_docker: false,
+        ram_profile: 'Zero-RAM (NIM Flux + Edge-TTS + HyperFrames)',
+        steps: [
+          { index: 0, name: 'Roteiro Cômico & Dicionário Nordestino (Cascata IA)', docker_stack: null },
+          { index: 1, name: 'Atuação Multi-Voz, SFX & Freeze-Frame (HyperFrames Novela)', docker_stack: null }
+        ]
       }
     ];
     let guidedPlatformsMap = { ...FALLBACK_PLATFORMS };
@@ -4550,6 +4703,22 @@
           offer: document.getElementById('gp-pov-offer')?.value || '',
         };
       }
+      if (guidedTemplateId === 'novela_regional_studio') {
+        const out = {
+          visual_style: document.getElementById('gp-nov-style')?.value || '3d_cartoon',
+          theme: document.getElementById('gp-nov-theme')?.value || 'Enzo da capital confundindo gírias nordestinas na bodega de Seu Bastião',
+          expressions: document.getElementById('gp-nov-expressions')?.value || 'Oxente, Morreu Maria Preá, Botar Boneco',
+          tone: document.getElementById('gp-nov-tone')?.value || 'Comédia Leve',
+        };
+        if (Array.isArray(gpNovGeneratedDialogue) && gpNovGeneratedDialogue.length) {
+          out.dialogue = gpNovGeneratedDialogue;
+          out.dictionary = gpNovGeneratedDict;
+          if (gpNovGeneratedMeta.title) out.title = gpNovGeneratedMeta.title;
+          if (gpNovGeneratedMeta.setting) out.setting = gpNovGeneratedMeta.setting;
+          if (gpNovGeneratedMeta.episode_badge) out.episode_badge = gpNovGeneratedMeta.episode_badge;
+        }
+        return out;
+      }
       return {
         output_id: document.getElementById('gp-exp-source')?.value || '',
         grade_preset: document.getElementById('gp-exp-grade')?.value || 'E-Commerce Vibrant',
@@ -4718,8 +4887,278 @@
         if (hm.video_subject && document.getElementById('qm-subject')) document.getElementById('qm-subject').value = hm.video_subject;
         if (hm.video_script && document.getElementById('qm-script')) document.getElementById('qm-script').value = hm.video_script;
         document.getElementById('btn-qm-submit')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      } else if (engine === 'novela') {
+        if (hm.title && document.getElementById('qnv-title')) document.getElementById('qnv-title').value = hm.title;
+        if (hm.visual_style && document.getElementById('qnv-style')) document.getElementById('qnv-style').value = hm.visual_style;
+        if (hm.platform_preset && document.getElementById('qnv-platform')) document.getElementById('qnv-platform').value = hm.platform_preset;
+        if (Array.isArray(hm.dictionary) && document.getElementById('qnv-dict-json')) {
+          document.getElementById('qnv-dict-json').value = JSON.stringify(hm.dictionary, null, 2);
+        }
+        if (Array.isArray(hm.dialogue) && hm.dialogue.length) {
+          qnvDialogueRows = hm.dialogue.map(d => ({ ...d }));
+          renderHardNovelaRows();
+        }
+        document.getElementById('card-hard-novela')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
       showToast('Parâmetros transferidos para o Modo Hard! Ajuste e re-renderize quando quiser.', 'success');
+    }
+
+    let gpNovGeneratedDialogue = [];
+    let gpNovGeneratedDict = [];
+    let gpNovGeneratedMeta = {};
+    let qnvDialogueRows = [
+      {
+        speaker: 'Dona Socorro',
+        tts_text: 'Oxêêênte, Enzo! Vem cá minino! Disseram que morreu Maria Preá lá na roça!',
+        subtitle_text: 'Oxente, Enzo! Vem cá! Disseram que morreu Maria Preá lá na roça!',
+        emotion: 'shocked',
+        expression_highlight: 'Morreu Maria Preá'
+      },
+      {
+        speaker: 'Enzo',
+        tts_text: 'Meu Deus, Tia Socorro! Que horas vai ser o velório da Dona Maria?! Tô comprando terno preto na Shopee!',
+        subtitle_text: 'Meu Deus, Tia! Que horas é o velório da Dona Maria?! Tô comprando terno!',
+        emotion: 'confused',
+        expression_highlight: 'velório'
+      },
+      {
+        speaker: 'Seu Bastião',
+        tts_text: 'Hahahaha! Deixe de cunversa, Enzo! Morreu Maria Preá quer dizer que acabou tudo, ô cabra leso!',
+        subtitle_text: 'Hahaha! Deixe de cunversa, Enzo! Morreu Maria Preá quer dizer que acabou tudo!',
+        emotion: 'laughing',
+        expression_highlight: 'Deixe de cunversa'
+      },
+      {
+        speaker: 'Dona Socorro',
+        tts_text: 'E vê se num começa a botar boneco aqui na calçada não viu, meu fí!',
+        subtitle_text: 'E vê se não começa a botar boneco aqui na calçada não, viu meu filho!',
+        emotion: 'dramatic',
+        expression_highlight: 'Botar Boneco'
+      }
+    ];
+
+    function setGuidedNovelaStyle(styleId) {
+      const val = styleId === 'cinematic_tv' ? 'cinematic_tv' : '3d_cartoon';
+      const hidden = document.getElementById('gp-nov-style');
+      if (hidden) hidden.value = val;
+      ['3d_cartoon', 'cinematic_tv'].forEach(s => {
+        const btn = document.getElementById(`gp-nov-style-${s}`);
+        if (!btn) return;
+        const active = s === val;
+        btn.className = active
+          ? 'touch-btn min-h-[48px] px-3 py-2 rounded-xl border text-left transition cursor-pointer bg-amber-500/20 border-amber-400/70 text-amber-200'
+          : 'touch-btn min-h-[48px] px-3 py-2 rounded-xl border text-left transition cursor-pointer bg-white/[0.03] border-white/10 text-slate-300 hover:bg-white/[0.07]';
+      });
+    }
+
+    function addNovelaExprChip(expr) {
+      const inp = document.getElementById('gp-nov-expressions');
+      if (!inp) return;
+      const parts = inp.value.split(',').map(x => x.trim()).filter(Boolean);
+      if (!parts.some(p => p.toLowerCase() === expr.toLowerCase())) {
+        parts.push(expr);
+        inp.value = parts.join(', ');
+      }
+    }
+
+    async function generateGuidedNovelaDialogue() {
+      const btn = document.getElementById('btn-gp-nov-gen');
+      const box = document.getElementById('gp-nov-preview-box');
+      const linesEl = document.getElementById('gp-nov-preview-lines');
+      const cntEl = document.getElementById('gp-nov-preview-count');
+      if (btn) { btn.disabled = true; btn.textContent = '⏳ Gerando com IA...'; }
+      try {
+        const exprRaw = document.getElementById('gp-nov-expressions')?.value || '';
+        const res = await fetch('/api/quick/novela/generate-script', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            theme: document.getElementById('gp-nov-theme')?.value || '',
+            expressions: exprRaw.split(',').map(s => s.trim()).filter(Boolean),
+            tone: document.getElementById('gp-nov-tone')?.value || 'Comédia Leve',
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.dialogue) throw new Error(data.detail || 'Erro ao gerar roteiro');
+        gpNovGeneratedDialogue = data.dialogue;
+        gpNovGeneratedDict = data.dictionary || [];
+        gpNovGeneratedMeta = {
+          title: data.title || '',
+          setting: data.setting || '',
+          episode_badge: data.episode_badge || '',
+        };
+        if (box) box.classList.remove('hidden');
+        if (cntEl) cntEl.textContent = `${data.dialogue.length} falas (${data.source || 'ai'})`;
+        if (linesEl) {
+          linesEl.innerHTML = data.dialogue.map(d => `
+            <div class="p-2 rounded-xl bg-white/[0.03] border border-white/10">
+              <span class="font-extrabold text-amber-300">${escapeHtml(d.speaker)}:</span>
+              <span class="text-slate-200">${escapeHtml(d.subtitle_text)}</span>
+            </div>
+          `).join('');
+        }
+        showToast(`Diálogo gerado com ${data.dialogue.length} falas!`, 'success');
+      } catch (err) {
+        showToast(`Erro ao gerar diálogo: ${err.message}`, 'error');
+      } finally {
+        if (btn) { btn.disabled = false; btn.textContent = '✨ Gerar Diálogo com IA'; }
+      }
+    }
+
+    function renderHardNovelaRows() {
+      const container = document.getElementById('qnv-dialogue-list');
+      if (!container) return;
+      container.innerHTML = qnvDialogueRows.map((row, idx) => `
+        <div class="p-3 rounded-2xl bg-[#070a08] border border-white/10 space-y-2">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="text-[11px] font-mono text-amber-300 font-bold">Fala #${idx + 1}</span>
+              <select onchange="qnvDialogueRows[${idx}].speaker = this.value"
+                class="min-h-[38px] bg-[#0d1210] border border-white/10 rounded-lg px-2 text-xs text-white outline-none">
+                ${['Dona Socorro', 'Seu Bastião', 'Enzo', 'Narrador'].map(sp => `<option value="${sp}" ${row.speaker === sp ? 'selected' : ''}>${sp}</option>`).join('')}
+              </select>
+              <select onchange="qnvDialogueRows[${idx}].emotion = this.value"
+                class="min-h-[38px] bg-[#0d1210] border border-white/10 rounded-lg px-2 text-xs text-slate-200 outline-none">
+                ${['shocked', 'confused', 'laughing', 'proud', 'dramatic', 'warm'].map(em => `<option value="${em}" ${(row.emotion || 'warm') === em ? 'selected' : ''}>${em}</option>`).join('')}
+              </select>
+              <input type="text" value="${escapeHtml(row.expression_highlight || '')}" placeholder="Palavra destaque"
+                onchange="qnvDialogueRows[${idx}].expression_highlight = this.value"
+                class="min-h-[38px] w-36 bg-[#0d1210] border border-white/10 rounded-lg px-2 text-xs text-amber-200 outline-none" />
+            </div>
+            <button type="button" onclick="removeHardNovelaRow(${idx})"
+              class="px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 cursor-pointer">
+              Remover
+            </button>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <input type="text" value="${escapeHtml(row.tts_text || '')}" placeholder="Texto Falado Fonético (edge-tts)"
+              onchange="qnvDialogueRows[${idx}].tts_text = this.value"
+              class="w-full min-h-[38px] bg-[#0d1210] border border-white/10 rounded-xl px-2.5 text-xs text-slate-200 outline-none" />
+            <input type="text" value="${escapeHtml(row.subtitle_text || '')}" placeholder="Legenda Limpa na Tela"
+              onchange="qnvDialogueRows[${idx}].subtitle_text = this.value"
+              class="w-full min-h-[38px] bg-[#0d1210] border border-white/10 rounded-xl px-2.5 text-xs text-white outline-none" />
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function addHardNovelaRow() {
+      qnvDialogueRows.push({
+        speaker: 'Dona Socorro',
+        tts_text: 'Vixe Maria, desse jeito eu vô botar boneco!',
+        subtitle_text: 'Vixe Maria, desse jeito eu vou botar boneco!',
+        emotion: 'shocked',
+        expression_highlight: 'Botar Boneco',
+      });
+      renderHardNovelaRows();
+    }
+
+    function removeHardNovelaRow(idx) {
+      if (qnvDialogueRows.length <= 1) {
+        showToast('Mantenha pelo menos 1 fala no episódio.', 'error');
+        return;
+      }
+      qnvDialogueRows.splice(idx, 1);
+      renderHardNovelaRows();
+    }
+
+    async function generateHardNovelaScript() {
+      const btn = document.getElementById('btn-qnv-gen');
+      if (btn) { btn.disabled = true; btn.textContent = '⏳ Gerando...'; }
+      try {
+        const res = await fetch('/api/quick/novela/generate-script', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            theme: document.getElementById('qnv-title')?.value || 'Confusão na Bodega do Sertão',
+            expressions: ['Oxente', 'Morreu Maria Preá', 'Botar Boneco'],
+            tone: 'Comédia Leve',
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok || !Array.isArray(data.dialogue)) throw new Error(data.detail || 'Erro IA');
+        if (document.getElementById('qnv-title') && data.title) document.getElementById('qnv-title').value = data.title;
+        if (document.getElementById('qnv-dict-json') && Array.isArray(data.dictionary)) {
+          document.getElementById('qnv-dict-json').value = JSON.stringify(data.dictionary, null, 2);
+        }
+        qnvDialogueRows = data.dialogue;
+        renderHardNovelaRows();
+        showToast('Roteiro preenchido no editor do Modo Hard!', 'success');
+      } catch (err) {
+        showToast(`Erro ao gerar roteiro: ${err.message}`, 'error');
+      } finally {
+        if (btn) { btn.disabled = false; btn.textContent = '✨ Gerar Roteiro com IA'; }
+      }
+    }
+
+    let qnvPollTimer = null;
+    async function submitHardNovela(e) {
+      e.preventDefault();
+      if (qnvPollTimer) clearTimeout(qnvPollTimer);
+      const btn = document.getElementById('btn-qnv-submit');
+      const box = document.getElementById('qnv-status-box');
+      const dlEl = document.getElementById('qnv-downloads');
+      if (box) box.classList.remove('hidden');
+      if (dlEl) dlEl.innerHTML = '';
+      if (btn) { btn.disabled = true; btn.textContent = '⏳ Renderizando Novela Studio...'; }
+
+      let parsedDict = [];
+      try {
+        parsedDict = JSON.parse(document.getElementById('qnv-dict-json')?.value || '[]');
+      } catch (_) {}
+
+      try {
+        const res = await fetch('/api/quick/novela', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: document.getElementById('qnv-title')?.value || 'Causos do Sertão — Ep. 01',
+            visual_style: document.getElementById('qnv-style')?.value || '3d_cartoon',
+            platform_preset: document.getElementById('qnv-platform')?.value || 'tiktok_reels',
+            dictionary: Array.isArray(parsedDict) ? parsedDict : [],
+            dialogue: qnvDialogueRows,
+            quality: 'standard',
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.task_id) throw new Error(data.detail || 'Erro ao iniciar render');
+
+        const poll = async () => {
+          const stRes = await fetch(`/api/quick/novela/task/${data.task_id}`);
+          const st = await stRes.json();
+          const bar = document.getElementById('qnv-progress-bar');
+          const pct = document.getElementById('qnv-progress-pct');
+          const txt = document.getElementById('qnv-status-text');
+          const ttl = document.getElementById('qnv-status-title');
+          if (bar) bar.style.width = `${st.progress || 25}%`;
+          if (pct) pct.textContent = `${st.progress || 25}%`;
+          if (txt) txt.textContent = st.message || '';
+          if (st.ready && st.download_url) {
+            if (ttl) ttl.textContent = `Concluído! (${st.duration || ''}s)`;
+            if (dlEl) {
+              dlEl.innerHTML = `
+                <video src="${escapeHtml(st.preview_url)}" controls preload="metadata" class="w-full rounded-xl border border-white/10 bg-black max-h-64"></video>
+                <a href="${escapeHtml(st.download_url)}" download class="touch-btn min-h-[44px] px-4 rounded-xl text-xs font-bold bg-amber-500/20 text-amber-200 border border-amber-400/40 flex items-center justify-center gap-2">Baixar Episódio MP4 (${escapeHtml(st.size_human || '')})</a>
+              `;
+            }
+            if (btn) { btn.disabled = false; btn.textContent = '🎬 Renderizar Episódio MP4 (Novela Studio)'; }
+            fetchOutputs();
+            showToast('Episódio do Novela Studio pronto!', 'success');
+            return;
+          }
+          if (st.failed) {
+            if (ttl) ttl.textContent = 'Falha na renderização';
+            if (btn) { btn.disabled = false; btn.textContent = '🎬 Renderizar Episódio MP4 (Novela Studio)'; }
+            showToast(st.error || 'Falha no render', 'error');
+            return;
+          }
+          qnvPollTimer = setTimeout(poll, 3500);
+        };
+        qnvPollTimer = setTimeout(poll, 2500);
+      } catch (err) {
+        if (btn) { btn.disabled = false; btn.textContent = '🎬 Renderizar Episódio MP4 (Novela Studio)'; }
+        showToast(err.message, 'error');
+      }
     }
 
     async function fetchCampaigns() {
@@ -4822,6 +5261,8 @@
       renderGuidedTemplates();
       setGuidedTemplate('shopee_viral_clone');
       setGuidedPlatform('shopee_20_9');
+      setGuidedNovelaStyle('3d_cartoon');
+      renderHardNovelaRows();
       setQuickStudioMode('guided');
       safeCreateIcons();
       refreshAll();

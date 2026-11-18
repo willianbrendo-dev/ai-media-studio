@@ -104,3 +104,8 @@ Ao planejar ou roteirizar **qualquer vídeo de produto para Shopee Video, TikTok
    - Ao anunciar um kit específico (ex.: **Kit 2 Óleos Extraordinário Elseve 100ml**), **filtre obrigatoriamente fotos que mostram a linha inteira de 4 ou 6 produtos** (shampoo, condicionador, máscara, creme — ex.: `5181401464922901708.jpg`, `5181401464922901707.jpg` ou print interno de afiliado `5181401464922901714.jpg`), garantindo que o comprador veja apenas o óleo e os resultados reais do óleo.
 7. **Motor Recomendado para Campanhas com Fotos Reais:**
    - Utilize **`HyperFrames Multi-Imagem POV`** (`studio_run_hyperframes` com `campaign` ou `image_paths`, estilo `L'Oréal Gold Luxury` ou `Shopee Flash Sale`, duração `16s` ajustada dinamicamente ao áudio completo `pt-BR-FranciscaNeural` / `pt-BR-ThalitaMultilingualNeural` a `+12%` em **48kHz Estéreo SoXR** — 0 MB RAM ociosa).
+
+## FÁBRICA DE NOVELINHAS & MICRO-SÉRIES MULTI-PERSONAGEM (Trilha 6 · `novela_regional_studio`)
+- Use **`studio_run_novela`** (`POST /api/quick/novela` · 0 MB RAM ociosa) quando o usuário pedir para **criar do zero** uma novelinha, esquete de humor nordestino, causo de bodega ou micro-série multi-personagem (`Dona Socorro`, `Seu Bastião`, `Enzo`, `Narrador`), **diferente** do SupoClip (que fatia vídeos longos já gravados).
+- Sempre pergunte/confirme o **estilo visual** (`3d_cartoon` animado expressivo vs. `cinematic_tv` realista 35mm de TV), **tema**, **gírias/expressões** e **plataforma** (`tiktok_reels`, `yt_shorts` ou `shopee_20_9`).
+- O motor entrega camada dupla (`tts_text` fonético -> `edge-tts` multi-voz + `subtitle_text` limpo na tela), SFX cômicos, 48kHz Estéreo SoXR e **Freeze-Frame final de 3.5s** com Card **"📖 Dicionário Nordestino"** e *"Continua no próximo episódio..."*.
