@@ -1,0 +1,90 @@
+{
+  "language": "pt",
+  "text": "Olá, bem-vindo ao Intergência Artificial Media Studio. Edição automática sem pausas na nuvem.",
+  "words": [
+    {
+      "text": "Olá,",
+      "start": 0.0,
+      "end": 0.42,
+      "is_filler": false
+    },
+    {
+      "text": "bem",
+      "start": 0.8,
+      "end": 0.98,
+      "is_filler": false
+    },
+    {
+      "text": "-vindo",
+      "start": 0.98,
+      "end": 1.36,
+      "is_filler": false
+    },
+    {
+      "text": "ao",
+      "start": 1.36,
+      "end": 1.48,
+      "is_filler": false
+    },
+    {
+      "text": "Intergência",
+      "start": 1.48,
+      "end": 2.04,
+      "is_filler": false
+    },
+    {
+      "text": "Artificial",
+      "start": 2.04,
+      "end": 2.62,
+      "is_filler": false
+    },
+    {
+      "text": "Media",
+      "start": 2.62,
+      "end": 2.94,
+      "is_filler": false
+    },
+    {
+      "text": "Studio.",
+      "start": 2.94,
+      "end": 3.38,
+      "is_filler": false
+    },
+    {
+      "text": "Edição",
+      "start": 5.94,
+      "end": 6.52,
+      "is_filler": false
+    },
+    {
+      "text": "automática",
+      "start": 6.52,
+      "end": 7.18,
+      "is_filler": false
+    },
+    {
+      "text": "sem",
+      "start": 7.18,
+      "end": 7.46,
+      "is_filler": false
+    },
+    {
+      "text": "pausas",
+      "start": 7.46,
+      "end": 7.88,
+      "is_filler": false
+    },
+    {
+      "text": "na",
+      "start": 7.88,
+      "end": 8.04,
+      "is_filler": false
+    },
+    {
+      "text": "nuvem.",
+      "start": 8.04,
+      "end": 8.36,
+      "is_filler": false
+    }
+  ]
+}

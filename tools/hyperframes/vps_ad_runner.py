@@ -182,6 +182,31 @@ def _build_ad_script(
     return deterministic
 
 
+def _filter_duplicate_cta_cues(
+    cues: List[Dict[str, Any]],
+    t_cta_start: float,
+    cart_cta_text: str,
+) -> List[Dict[str, Any]]:
+    """Avoid showing simultaneous identical CTA captions right above the pulsing Scene 4 orange CTA pill."""
+    cta_words = {
+        w for w in re.findall(r"[a-zà-ÿ0-9]+", (cart_cta_text or "").lower())
+        if len(w) >= 4
+    }
+    filtered: List[Dict[str, Any]] = []
+    for c in cues:
+        txt = str(c.get("text", "")).strip()
+        low = txt.lower()
+        c_end = float(c.get("end", 0.0))
+        if c_end >= t_cta_start - 0.1:
+            if any(p in low for p in ("carrinho laranja", "garanta no carrinho", "toque no carrinho", "toque em comprar")):
+                continue
+            cue_words = {w for w in re.findall(r"[a-zà-ÿ0-9]+", low) if len(w) >= 4}
+            if cta_words and len(cue_words & cta_words) >= 3:
+                continue
+        filtered.append(c)
+    return filtered
+
+
 def _parse_srt_time(ts: str) -> float:
     m = re.match(r"(\d+):(\d+):(\d+)[,.](\d+)", ts.strip())
     if not m:
@@ -395,6 +420,7 @@ def _render_single_card_html(
     duration: float,
     has_voice: bool,
     voice_dur: float,
+    platform_preset: str = "shopee_20_9",
 ) -> str:
     is_vertical = height > width
     old_offer, main_offer = _split_offer(offer)
@@ -404,9 +430,18 @@ def _render_single_card_html(
     cta_esc = html.escape(cta or "Garanta Agora")
     badge_esc = html.escape(theme["badge_label"])
 
-    title_size = "74px" if is_vertical else "68px"
-    offer_size = "88px" if is_vertical else "80px"
-    cta_size = "36px" if is_vertical else "32px"
+    is_shopee = is_vertical and (platform_preset or "shopee_20_9") == "shopee_20_9"
+    title_size = "54px" if is_shopee else ("68px" if is_vertical else "64px")
+    offer_size = "68px" if is_shopee else ("84px" if is_vertical else "78px")
+    cta_size = "28px" if is_shopee else ("34px" if is_vertical else "32px")
+    stage_pad = "250px 196px 725px 96px" if is_shopee else ("180px 160px 420px 80px" if is_vertical else "64px 96px")
+    stage_justify = "flex-start" if is_vertical else "center"
+    stage_gap = "26px" if is_shopee else ("34px" if is_vertical else "28px")
+    hero_w = "100%" if is_shopee else ("92%" if is_vertical else "82%")
+    clip_x = 96 if is_shopee else (80 if is_vertical else 0)
+    clip_y = 235 if is_shopee else (160 if is_vertical else 0)
+    clip_w = 788 if is_shopee else (840 if is_vertical else width)
+    clip_h = 965 if is_shopee else (1300 if is_vertical else height)
 
     audio_tag = ""
     if has_voice:
@@ -438,7 +473,7 @@ def _render_single_card_html(
       height: {height}px;
       overflow: hidden;
       background: var(--bg);
-      font-family: "DejaVu Sans", "Liberation Sans", Arial, sans-serif;
+      font-family: "DejaVu Sans", "Noto Color Emoji", "Liberation Sans", Arial, sans-serif;
       color: var(--ink);
     }}
     #root {{
@@ -459,33 +494,33 @@ def _render_single_card_html(
       z-index: 2;
       width: 100%;
       height: 100%;
-      padding: {"110px 64px" if is_vertical else "64px 96px"};
+      padding: {stage_pad};
       display: flex;
       flex-direction: column;
-      justify-content: center;
+      justify-content: {stage_justify};
       align-items: center;
       text-align: center;
-      gap: {"42px" if is_vertical else "28px"};
+      gap: {stage_gap};
     }}
     .badge {{
       display: inline-flex;
       align-items: center;
       gap: 12px;
-      padding: 14px 32px;
+      padding: 12px 26px;
       border-radius: 999px;
       background: linear-gradient(135deg, var(--primary), var(--secondary));
       color: var(--badge-text);
-      font-size: 24px;
+      font-size: 20px;
       font-weight: 800;
-      letter-spacing: 0.12em;
+      letter-spacing: 0.10em;
       box-shadow: 0 12px 38px rgba(0,0,0,0.45);
     }}
     .hero-card {{
-      width: {"92%" if is_vertical else "82%"};
+      width: {hero_w};
       background: var(--card);
       border: 2px solid var(--primary);
-      border-radius: 36px;
-      padding: {"58px 44px" if is_vertical else "44px 60px"};
+      border-radius: 32px;
+      padding: {"40px 32px" if is_vertical else "44px 60px"};
       box-shadow: 0 32px 90px rgba(0,0,0,0.65);
     }}
     .title {{
@@ -494,20 +529,20 @@ def _render_single_card_html(
       line-height: 1.08;
       letter-spacing: -0.02em;
       color: var(--ink);
-      margin-bottom: {"34px" if is_vertical else "22px"};
+      margin-bottom: {"24px" if is_vertical else "22px"};
     }}
     .offer-box {{
-      padding: {"32px 26px" if is_vertical else "24px 40px"};
-      border-radius: 26px;
+      padding: {"26px 22px" if is_vertical else "24px 40px"};
+      border-radius: 24px;
       background: rgba(0, 0, 0, 0.45);
       border: 1.5px solid var(--secondary);
     }}
     #offer-old {{
-      font-size: 32px;
+      font-size: 28px;
       font-weight: 600;
       color: var(--muted);
       text-decoration: line-through;
-      margin-bottom: 10px;
+      margin-bottom: 8px;
     }}
     #offer-main {{
       font-size: {offer_size};
@@ -520,8 +555,9 @@ def _render_single_card_html(
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      padding: {"26px 56px" if is_vertical else "22px 54px"};
-      border-radius: 24px;
+      max-width: 100%;
+      padding: {"20px 36px" if is_vertical else "22px 54px"};
+      border-radius: 20px;
       background: linear-gradient(135deg, var(--primary), var(--secondary));
       color: var(--badge-text);
       font-size: {cta_size};
@@ -530,7 +566,7 @@ def _render_single_card_html(
       box-shadow: 0 18px 46px rgba(0,0,0,0.55);
     }}
     .urgency-track {{
-      width: {"78%" if is_vertical else "56%"};
+      width: {"84%" if is_vertical else "56%"};
       height: 10px;
       border-radius: 999px;
       background: rgba(255,255,255,0.12);
@@ -574,6 +610,10 @@ def _render_single_card_html(
     const ctx = canvas.getContext("2d");
     const W = {width};
     const H = {height};
+    const CLIP_X = {clip_x};
+    const CLIP_Y = {clip_y};
+    const CLIP_W = {clip_w};
+    const CLIP_H = {clip_h};
     const PRIMARY = "{theme["primary"]}";
     const SECONDARY = "{theme["secondary"]}";
     const orbs = [];
@@ -591,6 +631,9 @@ def _render_single_card_html(
     function drawBg(p) {{
       ctx.clearRect(0, 0, W, H);
       ctx.save();
+      ctx.beginPath();
+      ctx.rect(CLIP_X, CLIP_Y, CLIP_W, CLIP_H);
+      ctx.clip();
       ctx.strokeStyle = PRIMARY;
       ctx.globalAlpha = 0.08;
       ctx.lineWidth = 1.5;
@@ -607,7 +650,7 @@ def _render_single_card_html(
         ctx.globalAlpha = 0.14;
         ctx.fillStyle = o.c;
         ctx.beginPath();
-        ctx.arc(o.bx * W + Math.sin(p * Math.PI * 2 + i) * o.dx, o.by * H + Math.cos(p * Math.PI * 2 + i * 0.7) * o.dy, o.r, 0, Math.PI * 2);
+        ctx.arc(CLIP_X + o.bx * CLIP_W + Math.sin(p * Math.PI * 2 + i) * o.dx, CLIP_Y + o.by * CLIP_H + Math.cos(p * Math.PI * 2 + i * 0.7) * o.dy, o.r, 0, Math.PI * 2);
         ctx.fill();
       }}
       ctx.restore();
@@ -646,8 +689,9 @@ def _render_multi_image_html(
     extra_price_note: str = "",
     orange_cart_cta: str = "",
     subtitles: bool = True,
+    platform_preset: str = "shopee_20_9",
 ) -> str:
-    """Render 4-Scene Multi-Image POV + Shopee Flash Sale + L'Oreal Gold Luxury 9:16 HTML composition."""
+    """Render 4-Scene Multi-Image POV + Shopee 20:9 Anti-Crop Safe-Zone HTML composition."""
     n = len(assets)
     # Pick indices safely regardless of asset count (1..N)
     img_hook = f"assets/{assets[0]['asset_name']}"
@@ -657,7 +701,7 @@ def _render_multi_image_html(
     img_s2 = f"assets/{assets[min(4, n - 1)]['asset_name']}"
     img_kit = f"assets/{assets[n - 1]['asset_name']}"
 
-    # 4-Beat timings matched cleanly to 15s-18s Shopee POV rhythm (0s-3.3s, 3.3s-8.2s, 8.2s-11.6s, 11.6s-end)
+    # 4-Beat timings matched cleanly to 15s-18s Shopee POV rhythm
     t1_end = min(3.4, round(duration * 0.20, 2))
     t2_mid = round(t1_end + (duration * 0.15), 2)
     t2_end = min(8.2, round(duration * 0.47, 2))
@@ -669,12 +713,47 @@ def _render_multi_image_html(
     offer_main_esc = html.escape(offer or "KIT LEVE 2 (200ml) · R$ 69,99")
     pricing = campaign_meta.get("pricing") or {}
     unit_note = extra_price_note.strip() or (
-        f"Sai {pricing.get('unit_price', 'R$ 34,99')} cada frasco original!"
+        f"Sai {pricing.get('unit_price', 'R$ 34,99')} cada frasco original L'Oréal!"
         if pricing.get("unit_price") or "69,99" in (offer or "")
         else html.escape(cta or "Oferta Relâmpago Shopee")
     )
     unit_esc = html.escape(unit_note)
-    cart_cta_esc = html.escape(orange_cart_cta.strip() or "Toque em Comprar Abaixo com Desconto!")
+    cart_cta_raw = orange_cart_cta.strip() or "👇 GARANTA NO CARRINHO LARANJA ABAIXO 👇"
+    cart_cta_esc = html.escape(cart_cta_raw)
+
+    is_vertical = height > width
+    preset = (platform_preset or "shopee_20_9").strip().lower()
+    if is_vertical:
+        if preset in ("tiktok_reels", "yt_shorts"):
+            sx, sw = 96, 788
+            pill_y, prog_y = 200, 256
+            stage_y, stage_h = 268, 560
+            info_y, info_h = 842, 74
+            price_y, price_h = 842, 150
+            sub_y, sub_h = 1020, 92
+            cta_y, cta_h = 1130, 58
+        else:
+            # Strict Shopee 20:9 Anti-Crop (X: 96..884, Y_top: 235, Y_stage: 300..850, Y_price: 865..1015, Y_sub: 1040..1132, Y_cta: 1145..1203; Y: 1210..1920 empty)
+            sx, sw = 96, 788
+            pill_y, prog_y = 235, 290
+            stage_y, stage_h = 300, 550
+            info_y, info_h = 865, 74
+            price_y, price_h = 865, 150
+            sub_y, sub_h = 1040, 92
+            cta_y, cta_h = 1145, 58
+        clip_y = pill_y
+        clip_h = (cta_y + cta_h) - pill_y
+    else:
+        sx, sw = 120, 1680
+        pill_y, prog_y = 40, 98
+        stage_y, stage_h = 112, 620
+        info_y, info_h = 746, 68
+        price_y, price_h = 746, 136
+        sub_y, sub_h = 896, 86
+        cta_y, cta_h = 994, 58
+        clip_y, clip_h = 24, 1032
+
+    filtered_cues = _filter_duplicate_cta_cues(cues, t3_end, cart_cta_raw)
 
     audio_tag = ""
     if has_voice:
@@ -682,11 +761,11 @@ def _render_multi_image_html(
         audio_tag = f'<audio id="ad-voice" class="clip" src="assets/voiceover.mp3" data-start="0.15" data-duration="{v_dur:.2f}" data-track-index="1"></audio>'
 
     cues_divs = []
-    if subtitles and cues:
-        for i, c in enumerate(cues):
+    if subtitles and filtered_cues:
+        for i, c in enumerate(filtered_cues):
             cues_divs.append(f'<div id="cue-{i}" class="caption-cue">{html.escape(c["text"])}</div>')
     cues_html = "\n          ".join(cues_divs)
-    cues_json = json.dumps(cues, ensure_ascii=False)
+    cues_json = json.dumps(filtered_cues, ensure_ascii=False)
 
     return f"""<!doctype html>
 <html lang="pt-BR">
@@ -709,7 +788,7 @@ def _render_multi_image_html(
       height: {height}px;
       overflow: hidden;
       background: var(--bg);
-      font-family: "DejaVu Sans", "Liberation Sans", Arial, sans-serif;
+      font-family: "DejaVu Sans", "Noto Color Emoji", "Liberation Sans", Arial, sans-serif;
       color: var(--ink);
     }}
     #root {{
@@ -717,7 +796,7 @@ def _render_multi_image_html(
       width: 100%;
       height: 100%;
       overflow: hidden;
-      background: radial-gradient(circle at 50% 25%, rgba(245, 158, 11, 0.20), transparent 60%), var(--bg);
+      background: radial-gradient(circle at 50% 30%, rgba(245, 158, 11, 0.16), transparent 55%), var(--bg);
     }}
     #fx-canvas {{
       position: absolute;
@@ -748,16 +827,16 @@ def _render_multi_image_html(
       width: calc(100% + 80px);
       height: calc(100% + 80px);
       object-fit: cover;
-      filter: blur(38px) brightness(0.35) saturate(1.35);
+      filter: blur(46px) brightness(0.30) saturate(1.25);
       transform: scale(1.08);
     }}
-    /* Gabarito Oficial Shopee Video: Y=0..215px livre (busca + status bar) */
+    /* Progresso em Y={prog_y}px, X={sx}..{sx+sw}px (Y=0..235px livre) */
     .top-progress {{
       position: absolute;
-      top: 210px;
-      left: 60px;
-      width: 850px;
-      height: 5px;
+      top: {prog_y}px;
+      left: {sx}px;
+      width: {sw}px;
+      height: 4px;
       border-radius: 999px;
       background: rgba(255,255,255,0.16);
       overflow: hidden;
@@ -769,23 +848,26 @@ def _render_multi_image_html(
       background: linear-gradient(90deg, #fbbf24, #ee4d2d);
       transform-origin: left center;
     }}
-    /* Badge superior em Y=220..274px */
+    /* Badge superior em Y={pill_y}px, X={sx}..{sx+sw}px */
     .top-pill {{
       position: absolute;
-      top: 220px;
-      left: 60px;
-      max-width: 850px;
-      height: 52px;
+      top: {pill_y}px;
+      left: {sx}px;
+      max-width: {sw}px;
+      height: 50px;
       display: inline-flex;
       align-items: center;
       gap: 10px;
-      padding: 10px 24px;
+      padding: 8px 20px;
       border-radius: 999px;
-      font-size: 22px;
+      font-size: 20px;
       font-weight: 900;
-      letter-spacing: 0.05em;
+      letter-spacing: 0.04em;
       text-transform: uppercase;
-      box-shadow: 0 12px 32px rgba(0,0,0,0.55);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      box-shadow: 0 10px 28px rgba(0,0,0,0.55);
       z-index: 5;
     }}
     .pill-hook {{
@@ -803,18 +885,18 @@ def _render_multi_image_html(
       color: #fde68a;
       border: 2px solid #f59e0b;
     }}
-    /* Palco Principal [Y: 285px -> 960px, X: 60px -> 910px] */
+    /* Palco Principal [Y: {stage_y}px -> {stage_y+stage_h}px, X: {sx}px -> {sx+sw}px] */
     .hero-frame {{
       position: absolute;
-      top: 285px;
-      left: 60px;
-      width: 850px;
-      height: 590px;
-      border-radius: 32px;
+      top: {stage_y}px;
+      left: {sx}px;
+      width: {sw}px;
+      height: {stage_h}px;
+      border-radius: 28px;
       overflow: hidden;
       border: 3px solid rgba(245, 158, 11, 0.85);
       background: radial-gradient(circle at 50% 45%, #231607 0%, #0d0803 100%);
-      box-shadow: 0 24px 70px rgba(0, 0, 0, 0.72), 0 0 36px rgba(245, 158, 11, 0.22);
+      box-shadow: 0 22px 60px rgba(0, 0, 0, 0.72), 0 0 32px rgba(245, 158, 11, 0.22);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -826,79 +908,84 @@ def _render_multi_image_html(
       display: block;
       transform-origin: center center;
     }}
-    /* Cena 4: Card Unificado 2 Frascos + Banner de Preço integrado (Y: 285..960px) */
+    /* Cena 4 Foto Container Travado em [Y: {stage_y}..{stage_y+stage_h}px, X: {sx}..{sx+sw}px] */
     .hero-frame-kit4 {{
       position: absolute;
-      top: 285px;
-      left: 60px;
-      width: 850px;
-      height: 675px;
-      border-radius: 32px;
+      top: {stage_y}px;
+      left: {sx}px;
+      width: {sw}px;
+      height: {stage_h}px;
+      border-radius: 28px;
       overflow: hidden;
       border: 3.5px solid #f59e0b;
-      background: radial-gradient(circle at 50% 35%, #ffffff 55%, #fef3c7 100%);
-      box-shadow: 0 28px 80px rgba(0, 0, 0, 0.75), 0 0 48px rgba(245, 158, 11, 0.36);
-      display: flex;
-      flex-direction: column;
-    }}
-    .kit4-photo-box {{
-      flex: 1;
-      min-height: 0;
-      width: 100%;
+      background: radial-gradient(circle at 50% 45%, #ffffff 60%, #fef3c7 100%);
+      box-shadow: 0 24px 66px rgba(0, 0, 0, 0.75), 0 0 42px rgba(245, 158, 11, 0.36);
       display: flex;
       align-items: center;
       justify-content: center;
       padding: 14px 20px;
     }}
-    .price-banner-inline {{
-      height: 152px;
-      flex-shrink: 0;
-      padding: 14px 26px;
+    /* Card de Oferta/Preco da Cena 4 [Y: {price_y}px -> {price_y+price_h}px, X: {sx}px -> {sx+sw}px] */
+    .price-banner-card {{
+      position: absolute;
+      top: {price_y}px;
+      left: {sx}px;
+      width: {sw}px;
+      height: {price_h}px;
+      border-radius: 24px;
+      padding: 12px 22px;
       background: linear-gradient(135deg, rgba(238, 77, 45, 0.98), rgba(180, 48, 12, 0.98));
-      border-top: 3px solid #fde047;
+      border: 3px solid #fde047;
+      box-shadow: 0 18px 46px rgba(0, 0, 0, 0.65);
       display: flex;
       flex-direction: column;
       justify-content: center;
+      overflow: hidden;
+      z-index: 6;
     }}
     .price-title {{
-      font-size: 20px;
+      font-size: 18px;
       font-weight: 800;
       color: #fed7aa;
-      letter-spacing: 0.04em;
+      letter-spacing: 0.03em;
       text-transform: uppercase;
-      margin-bottom: 4px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-bottom: 3px;
     }}
     .price-main {{
-      font-size: 38px;
+      font-size: 32px;
       font-weight: 900;
-      line-height: 1.06;
+      line-height: 1.08;
       color: #ffffff;
     }}
     .price-sub {{
       margin-top: 4px;
-      font-size: 25px;
+      font-size: 21px;
       font-weight: 900;
       color: #fde047;
     }}
-    /* Split layout Cena 3 (Y: 285..895px) */
+    /* Split layout Cena 3 [Y: {stage_y}..{stage_y+stage_h}px, X: {sx}..{sx+sw}px] */
     .split-frame {{
       position: absolute;
-      top: 285px;
-      left: 60px;
-      width: 850px;
-      height: 610px;
+      top: {stage_y}px;
+      left: {sx}px;
+      width: {sw}px;
+      height: {stage_h}px;
       display: flex;
       flex-direction: column;
       gap: 12px;
+      overflow: hidden;
     }}
     .split-panel {{
       position: relative;
       flex: 1;
-      border-radius: 26px;
+      border-radius: 24px;
       overflow: hidden;
       border: 2.5px solid #f59e0b;
       background: #140c04;
-      box-shadow: 0 18px 44px rgba(0,0,0,0.65);
+      box-shadow: 0 16px 40px rgba(0,0,0,0.65);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -921,61 +1008,65 @@ def _render_multi_image_html(
     }}
     .split-tag {{
       position: absolute;
-      left: 16px;
-      bottom: 12px;
-      padding: 7px 16px;
-      border-radius: 12px;
+      left: 14px;
+      bottom: 10px;
+      padding: 6px 14px;
+      border-radius: 10px;
       background: rgba(12, 7, 2, 0.90);
       border: 1.5px solid #fbbf24;
       color: #fde68a;
-      font-size: 20px;
+      font-size: 18px;
       font-weight: 800;
     }}
-    /* Chips/Info na base do Palco (Y: 885..960px — estritamente <= 960px!) */
+    /* Chips Cenas 1-3 [Y: {info_y}px -> {info_y+info_h}px, X: {sx}px -> {sx+sw}px] */
     .info-zone {{
       position: absolute;
-      top: 885px;
-      left: 60px;
-      width: 850px;
-      height: 75px;
+      top: {info_y}px;
+      left: {sx}px;
+      width: {sw}px;
+      height: {info_h}px;
       display: flex;
       align-items: center;
+      overflow: hidden;
       z-index: 4;
     }}
     .info-zone-s3 {{
-      top: 904px;
-      height: 56px;
+      top: {info_y}px;
+      height: {info_h}px;
     }}
     .benefit-row {{
       width: 100%;
       display: flex;
       flex-wrap: nowrap;
-      gap: 10px;
+      gap: 8px;
       align-items: center;
+      justify-content: space-between;
     }}
     .b-chip {{
-      padding: 12px 18px;
-      border-radius: 16px;
+      padding: 10px 14px;
+      border-radius: 14px;
       background: rgba(18, 11, 3, 0.92);
       border: 2px solid #f59e0b;
       color: #fffbeb;
-      font-size: 22px;
+      font-size: 19px;
       font-weight: 800;
-      box-shadow: 0 8px 22px rgba(0,0,0,0.45);
+      box-shadow: 0 8px 20px rgba(0,0,0,0.45);
       white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }}
     .b-chip-orange {{
       background: linear-gradient(135deg, #ee4d2d, #f97316);
       border-color: #fde68a;
       color: #fff;
     }}
-    /* Corredor Exclusivo de Legenda Shopee Safe-Zone [Y: 985px -> 1095px, X: 60px -> 880px] */
+    /* Corredor Unico de Legenda [Y: {sub_y}px -> {sub_y+sub_h}px, X: {sx}px -> {sx+sw}px] */
     #sub-box, #captions-layer {{
       position: absolute;
-      top: 985px;
-      left: 60px;
-      width: 820px;
-      height: 110px;
+      top: {sub_y}px;
+      left: {sx}px;
+      width: {sw}px;
+      height: {sub_h}px;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -984,50 +1075,56 @@ def _render_multi_image_html(
     }}
     .caption-cue {{
       position: absolute;
-      max-width: 820px;
-      max-height: 108px;
-      padding: 12px 22px;
-      border-radius: 18px;
-      background: rgba(11, 7, 2, 0.90);
-      border: 2px solid rgba(251, 191, 36, 0.80);
-      box-shadow: 0 12px 30px rgba(0,0,0,0.65);
+      max-width: {sw - 8}px;
+      max-height: {sub_h - 4}px;
+      padding: 10px 18px;
+      border-radius: 16px;
+      background: rgba(11, 7, 2, 0.92);
+      border: 2px solid rgba(251, 191, 36, 0.85);
+      box-shadow: 0 10px 26px rgba(0,0,0,0.65);
       color: #fffbeb;
-      font-size: 32px;
+      font-size: 29px;
       font-weight: 900;
-      line-height: 1.2;
+      line-height: 1.18;
       text-align: center;
       overflow: hidden;
       opacity: 0;
       transform: translateY(8px) scale(0.96);
     }}
-    /* CTA Apontando para o Card Branco Flutuante da Shopee [Y: 1110px -> 1165px, X: 60px] */
+    /* Badge CTA Compacto Cena 4 [Y: {cta_y}px -> {cta_y+cta_h}px, X: {sx}px -> {sx+sw}px] */
     #cart-cta-zone {{
       position: absolute;
-      top: 1110px;
-      left: 60px;
-      width: 820px;
-      height: 55px;
+      top: {cta_y}px;
+      left: {sx}px;
+      width: {sw}px;
+      height: {cta_h}px;
       z-index: 10;
       opacity: 0;
       display: flex;
       align-items: center;
+      justify-content: center;
+      overflow: hidden;
     }}
     .cart-pill {{
+      width: {sw - 36}px;
+      max-width: 100%;
+      height: {max(44, cta_h - 6)}px;
       display: inline-flex;
       align-items: center;
-      gap: 12px;
-      height: 54px;
-      padding: 10px 22px;
+      justify-content: center;
+      gap: 10px;
+      padding: 8px 18px;
       border-radius: 16px;
       background: linear-gradient(135deg, #ee4d2d, #ff7337);
       border: 2.5px solid #fde047;
-      box-shadow: 0 12px 32px rgba(238, 77, 45, 0.65);
       color: #ffffff;
-      font-size: 24px;
+      font-size: 22px;
       font-weight: 900;
       white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }}
-    /* Y: 1175px -> 1920px e X: 910px -> 1080px ficam 100% livres para o app da Shopee */
+    /* Y: 1210px -> 1920px e X: 0..96px / 884..1080px ficam 100% VAZIOS */
   </style>
 </head>
 <body>
@@ -1044,7 +1141,7 @@ def _render_multi_image_html(
           <img id="s1-img" class="hero-img" src="{img_hook}" alt="Antes e Depois Elseve" />
         </div>
         <div class="info-zone">
-          <div id="s1-card" class="b-chip b-chip-orange" style="width:100%;text-align:center;font-size:25px;">
+          <div id="s1-card" class="b-chip b-chip-orange" style="width:100%;text-align:center;font-size:20px;">
             Cabelo armado e com frizz? Olha essa mudança real!
           </div>
         </div>
@@ -1102,31 +1199,28 @@ def _render_multi_image_html(
         </div>
       </section>
 
-      <!-- CENA 4: KIT 2 FRASCOS + PREÇO INTEGRADO NA BASE DO CARD ({t3_end:.2f}s - {duration:.2f}s) -->
+      <!-- CENA 4: FOTO TRAVADA (300..850) + CARD DE OFERTA/PREÇO (865..1015) ({t3_end:.2f}s - {duration:.2f}s) -->
       <section id="scene-4" class="scene">
         <img class="ambient-bg" src="{img_kit}" alt="" />
         <div id="s4-pill" class="top-pill pill-hook">KIT COM 2 FRASCOS DE 100ML · L'ORÉAL</div>
         <div class="hero-frame-kit4">
-          <div class="kit4-photo-box">
-            <img id="s4-img" class="hero-img" src="{img_kit}" alt="Kit 2 Óleos Elseve 100ml" />
-          </div>
-          <div id="s4-price" class="price-banner-inline">
-            <div class="price-title">{title_esc}</div>
-            <div class="price-main">{offer_main_esc}</div>
-            <div class="price-sub">{unit_esc}</div>
-          </div>
+          <img id="s4-img" class="hero-img" src="{img_kit}" alt="Kit 2 Óleos Elseve 100ml" />
+        </div>
+        <div id="s4-price" class="price-banner-card">
+          <div class="price-title">{title_esc}</div>
+          <div class="price-main">{offer_main_esc}</div>
+          <div class="price-sub">{unit_esc}</div>
         </div>
       </section>
 
-      <!-- CORREDOR EXCLUSIVO DE LEGENDA SHOPEE SAFE-ZONE (Y: 985..1095px) -->
+      <!-- CORREDOR EXCLUSIVO DE LEGENDA SHOPEE 20:9 (Y: {sub_y}..{sub_y+sub_h}px, X: {sx}..{sx+sw}px) -->
       <div id="sub-box">
         {cues_html}
       </div>
 
-      <!-- CTA EM Y: 1110..1165px APONTANDO PARA O CARD BRANCO DA SHOPEE (Y=1180px) -->
+      <!-- BADGE CTA COMPACTO PULSANTE CENA 4 (Y: {cta_y}..{cta_y+cta_h}px, X: {sx}..{sx+sw}px) -->
       <div id="cart-cta-zone">
         <div id="cart-pill" class="cart-pill">
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></svg>
           <span>{cart_cta_esc}</span>
         </div>
       </div>
@@ -1138,27 +1232,34 @@ def _render_multi_image_html(
     const ctx = canvas.getContext("2d");
     const W = {width};
     const H = {height};
+    const CLIP_X = {sx};
+    const CLIP_Y = {clip_y};
+    const CLIP_W = {sw};
+    const CLIP_H = {clip_h};
     const cues = {cues_json};
 
     const goldMotes = [];
-    for (let i = 0; i < 24; i++) {{
+    for (let i = 0; i < 20; i++) {{
       goldMotes.push({{
         bx: ((i * 53) % 100) / 100,
         by: ((i * 37) % 100) / 100,
-        r: 4 + (i % 6) * 5,
-        dx: ((i % 2 === 0 ? 1 : -1) * (35 + (i % 5) * 18)),
-        dy: -120 - (i % 4) * 45,
+        r: 4 + (i % 5) * 4,
+        dx: ((i % 2 === 0 ? 1 : -1) * (25 + (i % 4) * 14)),
+        dy: -90 - (i % 4) * 35,
       }});
     }}
 
     function drawGoldCanvas(p) {{
       ctx.clearRect(0, 0, W, H);
       ctx.save();
+      ctx.beginPath();
+      ctx.rect(CLIP_X, CLIP_Y, CLIP_W, CLIP_H);
+      ctx.clip();
       for (let i = 0; i < goldMotes.length; i++) {{
         const m = goldMotes[i];
-        const x = m.bx * W + Math.sin(p * Math.PI * 3 + i) * m.dx;
-        const y = ((m.by * H + p * m.dy * 2) % H + H) % H;
-        ctx.globalAlpha = 0.22 + (i % 3) * 0.08;
+        const x = CLIP_X + m.bx * CLIP_W + Math.sin(p * Math.PI * 3 + i) * m.dx;
+        const y = CLIP_Y + (((m.by * CLIP_H + p * m.dy * 2) % CLIP_H + CLIP_H) % CLIP_H);
+        ctx.globalAlpha = 0.20 + (i % 3) * 0.08;
         ctx.fillStyle = i % 3 === 0 ? "#ee4d2d" : "#fbbf24";
         ctx.beginPath();
         ctx.arc(x, y, m.r, 0, Math.PI * 2);
@@ -1205,8 +1306,8 @@ def _render_multi_image_html(
     tl.to("#scene-4", {{ opacity: 1, duration: 0.30, ease: "power2.out" }}, t3End - 0.20)
       .fromTo("#s4-img", {{ scale: 0.94 }}, {{ scale: 1.03, duration: s4Dur, ease: "power1.out" }}, t3End - 0.10)
       .fromTo("#s4-price", {{ y: 18, opacity: 0.2 }}, {{ y: 0, opacity: 1, duration: 0.40, ease: "power3.out" }}, t3End + 0.05)
-      .fromTo("#cart-cta-zone", {{ x: -24, opacity: 0, scale: 0.94 }}, {{ x: 0, opacity: 1, scale: 1, duration: 0.38, ease: "back.out(1.7)" }}, t3End - 0.05)
-      .to("#cart-pill", {{ scale: 1.035, duration: 0.38, yoyo: true, repeat: Math.max(2, Math.floor(s4Dur / 0.55)), ease: "sine.inOut" }}, t3End + 0.35);
+      .fromTo("#cart-cta-zone", {{ y: 12, opacity: 0, scale: 0.96 }}, {{ y: 0, opacity: 1, scale: 1, duration: 0.36, ease: "back.out(1.6)" }}, t3End - 0.05)
+      .to("#cart-pill", {{ scale: 1.018, duration: 0.38, yoyo: true, repeat: Math.max(2, Math.floor(s4Dur / 0.55)), ease: "sine.inOut" }}, t3End + 0.35);
 
     for (let i = 0; i < cues.length; i++) {{
       const c = cues[i];
@@ -1243,6 +1344,7 @@ def render_ad(
     orange_cart_cta: str = "",
     subtitles: bool = True,
     quality: str = "draft",
+    platform_preset: str = "shopee_20_9",
 ) -> Dict[str, Any]:
     t0 = time.monotonic()
     req_dur = max(5.0, min(30.0, float(duration)))
@@ -1253,6 +1355,9 @@ def render_ad(
         style = "L'Oréal Gold Luxury"
     _, theme = _resolve_theme(style)
 
+    preset_norm = (platform_preset or "shopee_20_9").strip().lower()
+    if preset_norm == "yt_16_9":
+        aspect = "16:9"
     is_vertical = (aspect or "9:16").strip() != "16:9"
     width, height = (1080, 1920) if is_vertical else (1920, 1080)
 
@@ -1320,6 +1425,7 @@ def render_ad(
                 extra_price_note=extra_price_note,
                 orange_cart_cta=orange_cart_cta,
                 subtitles=subtitles,
+                platform_preset=preset_norm,
             )
         else:
             html_doc = _render_single_card_html(
@@ -1332,6 +1438,7 @@ def render_ad(
                 duration=dur,
                 has_voice=has_voice,
                 voice_dur=voice_dur,
+                platform_preset=preset_norm,
             )
 
         (comp_dir / "index.html").write_text(html_doc, encoding="utf-8")
@@ -1393,6 +1500,7 @@ def render_ad(
         "images_used": [x["orig_name"] for x in assets],
         "style": theme["name"],
         "aspect": "9:16" if is_vertical else "16:9",
+        "platform_preset": preset_norm,
         "resolution": f"{width}x{height}",
         "duration": round(out_dur, 2),
         "audio_duration": round(voice_dur, 2),
@@ -1422,6 +1530,7 @@ def main() -> None:
     ap.add_argument("--orange-cart-cta", default="")
     ap.add_argument("--no-subtitles", action="store_true")
     ap.add_argument("--quality", default="draft")
+    ap.add_argument("--platform-preset", default="shopee_20_9")
     ap.add_argument("-o", "--output", type=Path, required=True)
     args = ap.parse_args()
 
@@ -1451,6 +1560,7 @@ def main() -> None:
         orange_cart_cta=args.orange_cart_cta,
         subtitles=not args.no_subtitles,
         quality=args.quality,
+        platform_preset=args.platform_preset,
     )
     print(json.dumps(res, ensure_ascii=False))
 

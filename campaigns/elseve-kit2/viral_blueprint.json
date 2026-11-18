@@ -1,0 +1,77 @@
+{
+  "ok": true,
+  "campaign_id": "elseve-kit2",
+  "product_title": "Kit 2 Óleos Extraordinário Elseve L'Oréal 100ml",
+  "product_price": "KIT LEVE 2 (200ml) · R$ 69,99",
+  "product_description": "Sai R$ 34,99 cada frasco original L'Oréal!",
+  "analyzed_at": "2026-11-18T01:59:00Z",
+  "references_count": 2,
+  "references": [
+    {
+      "filename": "ref_viral_1.mp4",
+      "path": "/opt/ai-media-studio/campaigns/elseve-kit2/virals/ref_viral_1.mp4",
+      "duration_s": 11.0,
+      "resolution": "540x960",
+      "scene_cuts_count": 2,
+      "cut_timestamps": [
+        3.0,
+        6.0
+      ],
+      "pacing_seconds": 3.67,
+      "audio_energy": {
+        "mean_volume_db": -18.8,
+        "max_volume_db": -3.4,
+        "energy_score": 75,
+        "energy_label": "media"
+      },
+      "word_count": 38,
+      "wpm": 207.3,
+      "hook_0_3s": "Seu cabelo está armado, opaco e cheio de fris. Olha só",
+      "transcript": "Seu cabelo está armado, opaco e cheio de fris. Olha só o segredo que está viralizando na chopeia. Esse óleo tem seis flores preciosas. Controla o fris na hora e protege do secador até dos lentos e trin...",
+      "language": "pt"
+    },
+    {
+      "filename": "ref_viral_2.mp4",
+      "path": "/opt/ai-media-studio/campaigns/elseve-kit2/virals/ref_viral_2.mp4",
+      "duration_s": 11.0,
+      "resolution": "540x960",
+      "scene_cuts_count": 2,
+      "cut_timestamps": [
+        3.0,
+        6.0
+      ],
+      "pacing_seconds": 3.67,
+      "audio_energy": {
+        "mean_volume_db": -18.2,
+        "max_volume_db": -3.5,
+        "energy_score": 77,
+        "energy_label": "media"
+      },
+      "word_count": 35,
+      "wpm": 190.9,
+      "hook_0_3s": "Para tudo, achei o kit com dois olhos originais ao SEV",
+      "transcript": "Para tudo, achei o kit com dois olhos originais ao SEV por 69,99. Ele não pesa nos fios da brilho em uma semana e já vem com a embalagem nova original. Aproveita antes que...",
+      "language": "pt"
+    }
+  ],
+  "cascade_used": true,
+  "cascade_model": "nvidia/nemotron-3.5-lightning-30b-a3b",
+  "elapsed_seconds": 7.79,
+  "hook_0_3s": "Seu cabelo está armado, opaco e cheio de fris. Olha só o segredo viralizando na chopeia",
+  "pacing_seconds": 3.67,
+  "wpm": 199.1,
+  "audio_energy_db": -18.5,
+  "argument_order": [
+    "Benefícios Close POV",
+    "Resultado 1 Semana de Brilho",
+    "Fórmula 6 Óleos Preciosos",
+    "Quebra de Objeção"
+  ],
+  "objection_breaker": "Nova embalagem, mesma fórmula original L'Oréal",
+  "cta_trigger": "Aproveita antes que acabe o estoque",
+  "recommended_script": "Seu cabelo está armado opaco e cheio de fris olha só o segredo viralizando na chopeia esse óleo tem seis flores preciosas controla o fris na hora e protege do secador até dos lentos e trinheiros sai r$ 34,99 cada frasco original leve o kit dois por sessenta e nove noventa e nove",
+  "recommended_duration": 16.5,
+  "cut_cadence": "hard",
+  "direction_notes": "Mantenha ritmo acelerado (wpm ~200), destaque o preço baixo nos primeiros 5 segundos e use cortes nítidos nas transições entre benefícios e objeção. Evite menção final a 'carrinho laranja'.",
+  "source_transcript_excerpt": "Seu cabelo está armado, opaco e cheio de fris. Olha só o segredo que está viralizando na chopeia. Esse óleo tem seis flores preciosas. Controla o fris na hora e protege do secador até dos lentos e trin... Para tudo, achei o kit com dois olhos originais ao SEV por 69,99. Ele não pesa nos fios da brilho em uma semana e já vem com a embalagem nova original. Aproveita antes que..."
+}

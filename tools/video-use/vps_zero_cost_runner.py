@@ -272,6 +272,7 @@ def _build_output_ass(
     ass_path: Path,
     width: int,
     height: int,
+    platform_preset: str = "shopee_20_9",
 ) -> int:
     """Build clean ASS subtitles mapped onto post-cut output timeline (Hard Rule #5)."""
     mapped: List[Dict[str, Any]] = []
@@ -306,11 +307,20 @@ def _build_output_ass(
         idx += 3
 
     is_vertical = height > width
-    # Shopee / TikTok 9:16 Safe-Zone: Y ~ 985-1095px in 1920p -> MarginV ~ 826 (43%), MarginL=60, MarginR=180
-    font_size = max(32, int(round(min(width, height) * (0.037 if is_vertical else 0.050))))
-    margin_v = int(round(height * 0.43)) if is_vertical else int(round(height * 0.10))
-    margin_l = 60 if is_vertical else 48
-    margin_r = 180 if is_vertical else 48
+    preset = (platform_preset or "shopee_20_9").strip().lower()
+    # Shopee 20:9 Anti-Crop Safe-Zone on 1080x1920: MarginL=96, MarginR=196, MarginV=826
+    font_size = max(32, int(round(min(width, height) * (0.035 if is_vertical else 0.050))))
+    if is_vertical:
+        if preset in ("tiktok_reels", "yt_shorts"):
+            margin_v = int(round(height * 0.30))
+        else:
+            margin_v = 826 if height == 1920 else int(round(height * 826 / 1920))
+        margin_l = 96 if width == 1080 else max(48, int(round(width * 96 / 1080)))
+        margin_r = 196 if width == 1080 else max(80, int(round(width * 196 / 1080)))
+    else:
+        margin_v = int(round(height * 0.10))
+        margin_l = 48
+        margin_r = 48
     header = "\n".join([
         "[Script Info]",
         "ScriptType: v4.00+",
@@ -343,6 +353,7 @@ def process_video(
     burn_subtitles: bool = True,
     language: Optional[str] = "pt",
     use_ai_director: bool = True,
+    platform_preset: str = "shopee_20_9",
 ) -> Dict[str, Any]:
     if not input_path.exists():
         raise FileNotFoundError(f"Arquivo de entrada não encontrado: {input_path}")
@@ -430,7 +441,7 @@ def process_video(
         )
 
         ass_path = tmp / "master.ass"
-        sub_count = _build_output_ass(words, segments, ass_path, width, height) if burn_subtitles else 0
+        sub_count = _build_output_ass(words, segments, ass_path, width, height, platform_preset=platform_preset) if burn_subtitles else 0
 
         if burn_subtitles and sub_count > 0:
             esc_ass = str(ass_path).replace("\\", "/").replace(":", "\\:")
@@ -472,6 +483,7 @@ def process_video(
         "subtitles_chunks": sub_count,
         "subtitles_burned": bool(burn_subtitles and sub_count > 0),
         "grade_preset": grade_preset,
+        "platform_preset": platform_preset,
         "language": detected_lang,
         "ai_note": ai_note,
         "elapsed_seconds": elapsed_s,
@@ -487,6 +499,7 @@ def main() -> None:
     ap.add_argument("--max-gap", type=float, default=0.45)
     ap.add_argument("--no-subtitles", action="store_true")
     ap.add_argument("--language", type=str, default="pt")
+    ap.add_argument("--platform-preset", type=str, default="shopee_20_9")
     args = ap.parse_args()
 
     res = process_video(
@@ -497,6 +510,7 @@ def main() -> None:
         max_gap_s=args.max_gap,
         burn_subtitles=not args.no_subtitles,
         language=args.language,
+        platform_preset=args.platform_preset,
     )
     print(json.dumps(res, ensure_ascii=False))
 

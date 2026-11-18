@@ -2149,9 +2149,11 @@ VIDEOUSE_RUNNER = STUDIO_BASE_DIR / "tools/video-use/vps_zero_cost_runner.py"
 VIDEOUSE_PYTHON = STUDIO_BASE_DIR / "tools/video-use/.venv/bin/python"
 VIDEOUSE_EDGE_TTS = STUDIO_BASE_DIR / "tools/video-use/.venv/bin/edge-tts"
 HYPERFRAMES_RUNNER = STUDIO_BASE_DIR / "tools/hyperframes/vps_ad_runner.py"
+VIRAL_ANALYZER_RUNNER = STUDIO_BASE_DIR / "tools/hyperframes/viral_reference_analyzer.py"
 VIDEOUSE_INPUTS_DIR = STUDIO_BASE_DIR / ".cache/videouse_inputs"
 VIDEOUSE_EXPORTS_DIR = STUDIO_BASE_DIR / "exports/videouse"
 HYPERFRAMES_EXPORTS_DIR = STUDIO_BASE_DIR / "exports/hyperframes"
+PIPELINES_EXPORTS_DIR = STUDIO_BASE_DIR / "exports/pipelines"
 CAMPAIGNS_DIR = Path(os.environ.get("STUDIO_CAMPAIGNS_DIR", str(STUDIO_BASE_DIR / "campaigns")))
 
 _LOCAL_MEDIA_JOBS: Dict[str, Dict[str, Any]] = {}
@@ -2307,8 +2309,42 @@ class QuickVideoUseRequest(BaseModel):
     max_gap_s: float = 0.45
     burn_subtitles: bool = True
     language: str = "pt"
+    platform_preset: str = "shopee_20_9"
     use_ai_director: bool = True
     wait: bool = False
+
+
+async def _invoke_videouse_cli(input_path: Path, out_path: Path, req: QuickVideoUseRequest) -> Dict[str, Any]:
+    cmd = [
+        str(VIDEOUSE_PYTHON),
+        str(VIDEOUSE_RUNNER),
+        str(input_path),
+        "-o", str(out_path),
+        "--grade", req.grade_preset or "Neutral Clean",
+        "--max-gap", f"{max(0.2, min(2.0, float(req.max_gap_s or 0.45))):.2f}",
+        "--language", (req.language or "pt").strip() or "pt",
+        "--platform-preset", (req.platform_preset or "shopee_20_9").strip() or "shopee_20_9",
+    ]
+    if not req.remove_silences:
+        cmd.append("--no-silence-cut")
+    if not req.burn_subtitles:
+        cmd.append("--no-subtitles")
+
+    proc = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    stdout_b, stderr_b = await asyncio.wait_for(proc.communicate(), timeout=600)
+    stdout_txt = stdout_b.decode("utf-8", errors="ignore").strip()
+    stderr_txt = stderr_b.decode("utf-8", errors="ignore").strip()
+
+    if proc.returncode != 0 or not out_path.exists():
+        raise RuntimeError((stderr_txt or stdout_txt or f"Exit code {proc.returncode}")[-500:])
+
+    meta = json.loads(stdout_txt.splitlines()[-1])
+    dl = _output_download_meta("videouse", out_path)
+    return {**meta, **dl, "size_human": _human_size(out_path.stat().st_size)}
 
 
 async def _execute_videouse_job(task_id: str, input_path: Path, out_path: Path, req: QuickVideoUseRequest) -> None:
@@ -2318,37 +2354,8 @@ async def _execute_videouse_job(task_id: str, input_path: Path, out_path: Path, 
         job["progress"] = 25
         job["message"] = "Transcrevendo áudio com faster-whisper INT8 e preparando cortes..."
 
-        cmd = [
-            str(VIDEOUSE_PYTHON),
-            str(VIDEOUSE_RUNNER),
-            str(input_path),
-            "-o", str(out_path),
-            "--grade", req.grade_preset or "Neutral Clean",
-            "--max-gap", f"{max(0.2, min(2.0, float(req.max_gap_s or 0.45))):.2f}",
-            "--language", (req.language or "pt").strip() or "pt",
-        ]
-        if not req.remove_silences:
-            cmd.append("--no-silence-cut")
-        if not req.burn_subtitles:
-            cmd.append("--no-subtitles")
-
-        proc = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        stdout_b, stderr_b = await asyncio.wait_for(proc.communicate(), timeout=600)
-        stdout_txt = stdout_b.decode("utf-8", errors="ignore").strip()
-        stderr_txt = stderr_b.decode("utf-8", errors="ignore").strip()
-
-        if proc.returncode != 0 or not out_path.exists():
-            raise RuntimeError((stderr_txt or stdout_txt or f"Exit code {proc.returncode}")[-500:])
-
-        meta = json.loads(stdout_txt.splitlines()[-1])
-        dl = _output_download_meta("videouse", out_path)
-        job.update(meta)
-        job.update(dl)
-        job["size_human"] = _human_size(out_path.stat().st_size)
+        res = await _invoke_videouse_cli(input_path, out_path, req)
+        job.update(res)
         job["status"] = "completed"
         job["progress"] = 100
         job["ready"] = True
@@ -2410,6 +2417,23 @@ async def api_quick_videouse_task(task_id: str):
 
 
 _CAMPAIGN_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
+_CAMPAIGN_VIDEO_EXTS = {".mp4", ".mov", ".mkv", ".webm", ".m4v"}
+
+
+def _resolve_campaign_dir(campaign_id: str, create: bool = False) -> Path:
+    slug = re.sub(r"[^a-zA-Z0-9._-]+", "-", (campaign_id or "").strip()).strip("-.")
+    if not slug:
+        raise HTTPException(status_code=400, detail="Identificador de campanha inválido.")
+    CAMPAIGNS_DIR.mkdir(parents=True, exist_ok=True)
+    root = CAMPAIGNS_DIR.resolve()
+    c_dir = (CAMPAIGNS_DIR / slug).resolve()
+    if not c_dir.is_relative_to(root):
+        raise HTTPException(status_code=403, detail="Acesso negado fora de campaigns")
+    if create:
+        c_dir.mkdir(parents=True, exist_ok=True)
+    elif not c_dir.is_dir():
+        raise HTTPException(status_code=404, detail=f"Campanha '{slug}' não encontrada.")
+    return c_dir
 
 
 def _scan_campaigns() -> List[Dict[str, Any]]:
@@ -2461,6 +2485,25 @@ def _scan_campaigns() -> List[Dict[str, Any]]:
         if not rec_paths:
             rec_paths = [a["path"] for a in assets_info if not a["excluded"]]
 
+        virals_dir = c_dir / "virals"
+        viral_videos: List[Dict[str, Any]] = []
+        if virals_dir.is_dir():
+            for vp in sorted(virals_dir.iterdir()):
+                if vp.is_file() and vp.suffix.lower() in _CAMPAIGN_VIDEO_EXTS:
+                    viral_videos.append({
+                        "filename": vp.name,
+                        "path": str(vp),
+                        "size_human": _human_size(vp.stat().st_size),
+                    })
+
+        bp_file = c_dir / "viral_blueprint.json"
+        viral_blueprint: Optional[Dict[str, Any]] = None
+        if bp_file.is_file():
+            try:
+                viral_blueprint = json.loads(bp_file.read_text(encoding="utf-8"))
+            except Exception:
+                viral_blueprint = None
+
         campaigns.append({
             "id": c_dir.name,
             "name": meta.get("name") or c_dir.name,
@@ -2472,6 +2515,10 @@ def _scan_campaigns() -> List[Dict[str, Any]]:
             "excluded_count": len([a for a in assets_info if a["excluded"]]),
             "recommended_image_paths": rec_paths,
             "assets": assets_info,
+            "viral_videos_count": len(viral_videos),
+            "viral_videos": viral_videos,
+            "has_viral_blueprint": viral_blueprint is not None,
+            "viral_blueprint": viral_blueprint,
         })
     return campaigns
 
@@ -2527,12 +2574,183 @@ async def api_quick_hyperframes_upload(files: List[UploadFile] = File(...)):
     }
 
 
+class AnalyzeViralsRequest(BaseModel):
+    product_title: str = ""
+    product_price: str = ""
+    product_description: str = ""
+    viral_paths: List[str] = []
+
+
+class QuickAnalyzeViralsRequest(AnalyzeViralsRequest):
+    campaign_id: str = ""
+    campaign: str = ""
+
+
+async def _run_campaign_viral_analysis(
+    campaign_id: str,
+    product_title: str = "",
+    product_price: str = "",
+    product_description: str = "",
+    viral_paths: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    if not VIRAL_ANALYZER_RUNNER.exists() or not VIDEOUSE_PYTHON.exists():
+        raise HTTPException(status_code=500, detail="Analisador Viral não configurado em /opt/ai-media-studio/tools/hyperframes")
+    c_dir = _resolve_campaign_dir(campaign_id, create=False)
+    v_dir = c_dir / "virals"
+
+    base_allowed = CAMPAIGNS_DIR.resolve()
+    resolved_virals: List[str] = []
+    for raw_v in (viral_paths or []):
+        try:
+            cand = Path(str(raw_v).strip()).resolve()
+            if cand.is_relative_to(base_allowed) and cand.is_file() and cand.suffix.lower() in _CAMPAIGN_VIDEO_EXTS:
+                resolved_virals.append(str(cand))
+        except Exception:
+            continue
+
+    if not resolved_virals:
+        if not v_dir.is_dir() or not any(
+            p.is_file() and p.suffix.lower() in _CAMPAIGN_VIDEO_EXTS for p in v_dir.iterdir()
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Nenhum vídeo viral .mp4 encontrado em '{c_dir.name}/virals/'. Faça upload primeiro.",
+            )
+
+    bp_path = c_dir / "viral_blueprint.json"
+    cmd = [
+        str(VIDEOUSE_PYTHON),
+        str(VIRAL_ANALYZER_RUNNER),
+        "--campaign", c_dir.name,
+        "--product-title", (product_title or "").strip()[:160],
+        "--product-price", (product_price or "").strip()[:80],
+        "--product-description", (product_description or "").strip()[:600],
+        "-o", str(bp_path),
+    ]
+    for vp in resolved_virals:
+        cmd.extend(["--viral", vp])
+
+    proc = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    stdout_b, stderr_b = await asyncio.wait_for(proc.communicate(), timeout=240)
+    stdout_txt = stdout_b.decode("utf-8", errors="ignore").strip()
+    stderr_txt = stderr_b.decode("utf-8", errors="ignore").strip()
+    if proc.returncode != 0 or not bp_path.is_file():
+        raise HTTPException(
+            status_code=500,
+            detail=f"Falha ao analisar referências virais: {(stderr_txt or stdout_txt)[-500:]}",
+        )
+    blueprint = json.loads(bp_path.read_text(encoding="utf-8"))
+    return {
+        "ok": True,
+        "campaign_id": c_dir.name,
+        "blueprint_path": str(bp_path),
+        "viral_blueprint": blueprint,
+        "hook_0_3s": blueprint.get("hook_0_3s", ""),
+        "pacing_seconds": blueprint.get("pacing_seconds", 0),
+        "wpm": blueprint.get("wpm", 0),
+        "recommended_script": blueprint.get("recommended_script", ""),
+        "recommended_duration": blueprint.get("recommended_duration", 18.0),
+    }
+
+
+@app.post("/api/campaigns/{campaign_id}/upload-virals")
+async def api_campaign_upload_virals(
+    campaign_id: str,
+    files: Optional[List[UploadFile]] = File(default=None),
+    videos: Optional[List[UploadFile]] = File(default=None),
+    file: Optional[UploadFile] = File(default=None),
+):
+    """Upload one or more viral reference MP4 videos into /opt/ai-media-studio/campaigns/{campaign_id}/virals/."""
+    uploads: List[UploadFile] = []
+    if files:
+        uploads.extend(files)
+    if videos:
+        uploads.extend(videos)
+    if file is not None:
+        uploads.append(file)
+    if not uploads:
+        raise HTTPException(status_code=400, detail="Envie ao menos um vídeo viral (.mp4/.mov/.webm).")
+
+    c_dir = _resolve_campaign_dir(campaign_id, create=True)
+    virals_dir = c_dir / "virals"
+    virals_dir.mkdir(parents=True, exist_ok=True)
+
+    saved_paths: List[str] = []
+    saved_names: List[str] = []
+    for up in uploads:
+        orig = Path(up.filename or "viral.mp4").name
+        ext = Path(orig).suffix.lower() or ".mp4"
+        if ext not in _CAMPAIGN_VIDEO_EXTS:
+            continue
+        safe_name = re.sub(r"[^a-zA-Z0-9._-]+", "_", orig)
+        dst = virals_dir / safe_name
+        data = await up.read()
+        if data:
+            dst.write_bytes(data)
+            saved_paths.append(str(dst))
+            saved_names.append(dst.name)
+
+    if not saved_paths:
+        raise HTTPException(status_code=400, detail="Nenhum arquivo de vídeo válido (.mp4/.mov/.mkv/.webm) encontrado no upload.")
+
+    return {
+        "ok": True,
+        "campaign_id": c_dir.name,
+        "virals_dir": str(virals_dir),
+        "count": len(saved_paths),
+        "filenames": saved_names,
+        "viral_paths": saved_paths,
+        "message": f"{len(saved_paths)} vídeo(s) viral(is) de referência salvo(s) em '{c_dir.name}/virals/'!",
+    }
+
+
+@app.get("/api/campaigns/{campaign_id}/viral-blueprint")
+async def api_campaign_get_viral_blueprint(campaign_id: str):
+    c_dir = _resolve_campaign_dir(campaign_id, create=False)
+    bp_path = c_dir / "viral_blueprint.json"
+    if not bp_path.is_file():
+        return {"ok": True, "campaign_id": c_dir.name, "exists": False, "viral_blueprint": None}
+    bp = json.loads(bp_path.read_text(encoding="utf-8"))
+    return {"ok": True, "campaign_id": c_dir.name, "exists": True, "blueprint_path": str(bp_path), "viral_blueprint": bp}
+
+
+@app.post("/api/campaigns/{campaign_id}/analyze-virals")
+async def api_campaign_analyze_virals(campaign_id: str, req: Optional[AnalyzeViralsRequest] = None):
+    r = req or AnalyzeViralsRequest()
+    return await _run_campaign_viral_analysis(
+        campaign_id=campaign_id,
+        product_title=r.product_title,
+        product_price=r.product_price,
+        product_description=r.product_description,
+        viral_paths=r.viral_paths,
+    )
+
+
+@app.post("/api/quick/hyperframes/analyze-virals")
+async def api_quick_hyperframes_analyze_virals(req: QuickAnalyzeViralsRequest):
+    cid = (req.campaign_id or req.campaign or "").strip()
+    if not cid:
+        raise HTTPException(status_code=400, detail="Informe campaign_id ou campaign para análise viral.")
+    return await _run_campaign_viral_analysis(
+        campaign_id=cid,
+        product_title=req.product_title,
+        product_price=req.product_price,
+        product_description=req.product_description,
+        viral_paths=req.viral_paths,
+    )
+
+
 class QuickHyperFramesRequest(BaseModel):
     title: str
     offer: str = ""
     cta: str = "Garanta Agora"
     style: str = "B2B Emerald"
     aspect: str = "9:16"
+    platform_preset: str = "shopee_20_9"
     duration: float = 8.0
     voice_enabled: bool = True
     voice_name: str = "pt-BR-AntonioNeural"
@@ -2546,6 +2764,66 @@ class QuickHyperFramesRequest(BaseModel):
     wait: bool = False
 
 
+async def _invoke_hyperframes_cli(out_path: Path, req: QuickHyperFramesRequest) -> Dict[str, Any]:
+    dur = max(5.0, min(30.0, float(req.duration or 8.0)))
+    resolved_imgs: List[str] = []
+    base_allowed = STUDIO_BASE_DIR.resolve()
+    for raw_p in (req.image_paths or []):
+        try:
+            cand = Path(str(raw_p).strip()).resolve()
+            if cand.is_relative_to(base_allowed) and cand.is_file() and cand.suffix.lower() in _CAMPAIGN_IMAGE_EXTS:
+                resolved_imgs.append(str(cand))
+        except Exception:
+            continue
+
+    eff_preset = (req.platform_preset or "shopee_20_9").strip() or "shopee_20_9"
+    eff_aspect = "16:9" if (req.aspect or "").strip() == "16:9" or eff_preset == "yt_16_9" else "9:16"
+    cmd = [
+        str(VIDEOUSE_PYTHON),
+        str(HYPERFRAMES_RUNNER),
+        "--title", req.title.strip()[:140],
+        "--offer", (req.offer or "").strip()[:140],
+        "--cta", (req.cta or "Garanta Agora").strip()[:90],
+        "--style", req.style or "B2B Emerald",
+        "--aspect", eff_aspect,
+        "--platform-preset", eff_preset,
+        "--duration", f"{dur:.1f}",
+        "--voice-name", (req.voice_name or "pt-BR-FranciscaNeural").strip(),
+        "--quality", req.quality if req.quality in ("draft", "looks", "delivery") else "draft",
+        "-o", str(out_path),
+    ]
+    if req.voice_enabled:
+        cmd.append("--voice-enabled")
+    if (req.voice_script or "").strip():
+        cmd.extend(["--voice-script", req.voice_script.strip()[:800]])
+    if resolved_imgs:
+        cmd.extend(["--images-json", json.dumps(resolved_imgs, ensure_ascii=False)])
+    if (req.campaign or "").strip():
+        cmd.extend(["--campaign", req.campaign.strip()[:80]])
+    if (req.extra_price_note or "").strip():
+        cmd.extend(["--extra-price-note", req.extra_price_note.strip()[:120]])
+    if (req.orange_cart_cta or "").strip():
+        cmd.extend(["--orange-cart-cta", req.orange_cart_cta.strip()[:100]])
+    if not req.subtitles:
+        cmd.append("--no-subtitles")
+
+    proc = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    stdout_b, stderr_b = await asyncio.wait_for(proc.communicate(), timeout=420)
+    stdout_txt = stdout_b.decode("utf-8", errors="ignore").strip()
+    stderr_txt = stderr_b.decode("utf-8", errors="ignore").strip()
+
+    if proc.returncode != 0 or not out_path.exists():
+        raise RuntimeError((stderr_txt or stdout_txt or f"Exit code {proc.returncode}")[-500:])
+
+    meta = json.loads(stdout_txt.splitlines()[-1])
+    dl = _output_download_meta("hyperframes", out_path)
+    return {**meta, **dl, "size_human": _human_size(out_path.stat().st_size)}
+
+
 async def _execute_hyperframes_job(task_id: str, out_path: Path, req: QuickHyperFramesRequest) -> None:
     job = _LOCAL_MEDIA_JOBS[task_id]
     try:
@@ -2553,62 +2831,8 @@ async def _execute_hyperframes_job(task_id: str, out_path: Path, req: QuickHyper
         job["progress"] = 25
         job["message"] = "Gerando cena HTML/Canvas + GSAP e renderizando frames via Chromium..."
 
-        dur = max(5.0, min(30.0, float(req.duration or 8.0)))
-        resolved_imgs: List[str] = []
-        base_allowed = STUDIO_BASE_DIR.resolve()
-        for raw_p in (req.image_paths or []):
-            try:
-                cand = Path(str(raw_p).strip()).resolve()
-                if cand.is_relative_to(base_allowed) and cand.is_file() and cand.suffix.lower() in _CAMPAIGN_IMAGE_EXTS:
-                    resolved_imgs.append(str(cand))
-            except Exception:
-                continue
-
-        cmd = [
-            str(VIDEOUSE_PYTHON),
-            str(HYPERFRAMES_RUNNER),
-            "--title", req.title.strip()[:140],
-            "--offer", (req.offer or "").strip()[:140],
-            "--cta", (req.cta or "Garanta Agora").strip()[:90],
-            "--style", req.style or "B2B Emerald",
-            "--aspect", "16:9" if (req.aspect or "").strip() == "16:9" else "9:16",
-            "--duration", f"{dur:.1f}",
-            "--voice-name", (req.voice_name or "pt-BR-FranciscaNeural").strip(),
-            "--quality", req.quality if req.quality in ("draft", "looks", "delivery") else "draft",
-            "-o", str(out_path),
-        ]
-        if req.voice_enabled:
-            cmd.append("--voice-enabled")
-        if (req.voice_script or "").strip():
-            cmd.extend(["--voice-script", req.voice_script.strip()[:800]])
-        if resolved_imgs:
-            cmd.extend(["--images-json", json.dumps(resolved_imgs, ensure_ascii=False)])
-        if (req.campaign or "").strip():
-            cmd.extend(["--campaign", req.campaign.strip()[:80]])
-        if (req.extra_price_note or "").strip():
-            cmd.extend(["--extra-price-note", req.extra_price_note.strip()[:120]])
-        if (req.orange_cart_cta or "").strip():
-            cmd.extend(["--orange-cart-cta", req.orange_cart_cta.strip()[:100]])
-        if not req.subtitles:
-            cmd.append("--no-subtitles")
-
-        proc = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        stdout_b, stderr_b = await asyncio.wait_for(proc.communicate(), timeout=420)
-        stdout_txt = stdout_b.decode("utf-8", errors="ignore").strip()
-        stderr_txt = stderr_b.decode("utf-8", errors="ignore").strip()
-
-        if proc.returncode != 0 or not out_path.exists():
-            raise RuntimeError((stderr_txt or stdout_txt or f"Exit code {proc.returncode}")[-500:])
-
-        meta = json.loads(stdout_txt.splitlines()[-1])
-        dl = _output_download_meta("hyperframes", out_path)
-        job.update(meta)
-        job.update(dl)
-        job["size_human"] = _human_size(out_path.stat().st_size)
+        res = await _invoke_hyperframes_cli(out_path, req)
+        job.update(res)
         job["status"] = "completed"
         job["progress"] = 100
         job["ready"] = True
@@ -2671,6 +2895,171 @@ async def api_quick_hyperframes_task(task_id: str):
     if not job:
         raise HTTPException(status_code=404, detail="Tarefa do HyperFrames não encontrada")
     return {k: v for k, v in job.items() if k != "_task"}
+
+
+# ==============================================================================
+# Guided Pipelines Orchestrator (v2.3 — RAM Relay, Checkpoints & 5 Templates)
+# ==============================================================================
+
+from guided_pipelines import (  # noqa: E402
+    GUIDED_TEMPLATES,
+    PLATFORM_PRESETS,
+    GuidedPipelineOrchestrator,
+)
+
+
+class PipelineStartRequest(BaseModel):
+    template_id: str
+    platform_preset: str = "shopee_20_9"
+    params: Dict[str, Any] = {}
+    wait: bool = False
+
+
+class PipelineResumeRequest(BaseModel):
+    wait: bool = False
+
+
+async def _pipeline_count_containers() -> int:
+    res = await run_cmd(["docker", "ps", "-q"], timeout=5)
+    return len([ln for ln in res["stdout"].splitlines() if ln.strip()]) if res["returncode"] == 0 else 0
+
+
+async def _pipeline_stop_all() -> int:
+    await api_stop_all_projects()
+    return await _pipeline_count_containers()
+
+
+async def _pipeline_run_hyperframes_cli(**kwargs: Any) -> Dict[str, Any]:
+    HYPERFRAMES_EXPORTS_DIR.mkdir(parents=True, exist_ok=True)
+    raw_title = str(kwargs.get("title") or "promo").strip()
+    slug = re.sub(r"[^a-zA-Z0-9_-]+", "-", raw_title.lower()).strip("-")[:32] or "promo"
+    out_path = HYPERFRAMES_EXPORTS_DIR / f"hyperframes_{slug}_{int(time.time())}_{uuid.uuid4().hex[:6]}.mp4"
+    req = QuickHyperFramesRequest(**kwargs)
+    return await _invoke_hyperframes_cli(out_path, req)
+
+
+async def _pipeline_run_videouse_cli(
+    input_path: Path,
+    grade_preset: str = "Cinema Warm",
+    remove_silences: bool = True,
+    burn_subtitles: bool = True,
+    language: str = "pt",
+    platform_preset: str = "shopee_20_9",
+) -> Dict[str, Any]:
+    VIDEOUSE_EXPORTS_DIR.mkdir(parents=True, exist_ok=True)
+    slug = re.sub(r"[^a-zA-Z0-9_-]+", "-", input_path.stem.lower()).strip("-")[:32] or "clip"
+    out_path = VIDEOUSE_EXPORTS_DIR / f"videouse_{slug}_{int(time.time())}_{uuid.uuid4().hex[:6]}.mp4"
+    req = QuickVideoUseRequest(
+        grade_preset=grade_preset,
+        remove_silences=remove_silences,
+        burn_subtitles=burn_subtitles,
+        language=language,
+        platform_preset=platform_preset,
+    )
+    return await _invoke_videouse_cli(input_path, out_path, req)
+
+
+async def _pipeline_supoclip_dispatch(payload: Dict[str, Any]) -> Dict[str, Any]:
+    return await api_quick_supoclip(QuickSupoClipRequest(**payload))
+
+
+async def _pipeline_moneyprinter_dispatch(payload: Dict[str, Any]) -> Dict[str, Any]:
+    return await api_quick_moneyprinter(QuickMoneyPrinterRequest(**payload))
+
+
+async def _pipeline_cascade_text(sys_prompt: str, user_prompt: str, max_tokens: int = 240) -> str:
+    try:
+        data = await call_ai_cascade(
+            ChatCompletionRequest(
+                model="cascade-auto",
+                messages=[
+                    {"role": "system", "content": sys_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                max_tokens=max_tokens,
+                temperature=0.35,
+            )
+        )
+        return str(((data.get("choices") or [{}])[0].get("message") or {}).get("content") or "").strip()
+    except Exception:
+        return ""
+
+
+PIPELINE_ORCHESTRATOR = GuidedPipelineOrchestrator(
+    pipelines_dir=PIPELINES_EXPORTS_DIR,
+    campaigns_dir=CAMPAIGNS_DIR,
+    studio_base_dir=STUDIO_BASE_DIR,
+    stop_all_fn=_pipeline_stop_all,
+    ensure_stack_fn=_ensure_stack_http,
+    count_containers_fn=_pipeline_count_containers,
+    analyze_virals_fn=_run_campaign_viral_analysis,
+    run_hyperframes_cli_fn=_pipeline_run_hyperframes_cli,
+    run_videouse_cli_fn=_pipeline_run_videouse_cli,
+    resolve_videouse_input_fn=_resolve_videouse_input,
+    supoclip_dispatch_fn=_pipeline_supoclip_dispatch,
+    supoclip_poll_fn=api_quick_supoclip_task,
+    moneyprinter_dispatch_fn=_pipeline_moneyprinter_dispatch,
+    moneyprinter_poll_fn=api_quick_moneyprinter_task,
+    scan_outputs_fn=_scan_output_files,
+    output_dl_meta_fn=_output_download_meta,
+    human_size_fn=_human_size,
+    cascade_text_fn=_pipeline_cascade_text,
+)
+
+
+@app.get("/api/pipelines/templates")
+async def api_pipelines_templates():
+    return {
+        "ok": True,
+        "count": len(GUIDED_TEMPLATES),
+        "templates": GUIDED_TEMPLATES,
+        "platforms": list(PLATFORM_PRESETS.values()),
+        "platform_presets": PLATFORM_PRESETS,
+    }
+
+
+@app.post("/api/pipelines/start")
+async def api_pipelines_start(req: PipelineStartRequest):
+    try:
+        state = await PIPELINE_ORCHESTRATOR.start(
+            template_id=req.template_id,
+            platform_preset=req.platform_preset,
+            params=req.params,
+            wait=req.wait,
+        )
+        return state
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Falha ao iniciar trilha guiada: {exc}")
+
+
+@app.get("/api/pipelines/status/{run_id}")
+async def api_pipelines_status(run_id: str):
+    try:
+        state = PIPELINE_ORCHESTRATOR.load_state(run_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    if not state:
+        raise HTTPException(status_code=404, detail=f"Execução '{run_id}' não encontrada")
+    state["active_containers"] = await _pipeline_count_containers()
+    return state
+
+
+@app.get("/api/pipelines/runs")
+async def api_pipelines_runs(limit: int = 25):
+    runs = await asyncio.to_thread(PIPELINE_ORCHESTRATOR.list_runs, limit)
+    return {"ok": True, "count": len(runs), "runs": runs}
+
+
+@app.post("/api/pipelines/resume/{run_id}")
+async def api_pipelines_resume(run_id: str, req: Optional[PipelineResumeRequest] = None):
+    try:
+        return await PIPELINE_ORCHESTRATOR.resume(run_id, wait=bool(req and req.wait))
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 @app.get("/app/supoclip/api/v1/clips")

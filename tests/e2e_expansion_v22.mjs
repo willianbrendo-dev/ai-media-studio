@@ -126,10 +126,13 @@ async function runDesktop(browser) {
   await checkLayoutAndScroll(page, 'Desktop Skills', { requireVerticalScroll: true });
   console.log('[PASS] Central de Skills Desktop: 12 Skills Globais verificadas (video-use + manim-video + hyperframes)');
 
-  // 2. Estúdio Rápido -> Card 5 (Video Use) & Card 6 (HyperFrames)
+  // 2. Estúdio Rápido -> Modo Hard -> Card 5 (Video Use) & Card 6 (HyperFrames)
   await page.locator('#tab-quick').click();
-  await page.waitForSelector('#qvu-source-select');
-  await page.waitForSelector('#qhf-title');
+  if (await page.locator('#btn-quick-mode-hard').isVisible()) {
+    await page.locator('#btn-quick-mode-hard').click();
+  }
+  await page.waitForSelector('#qvu-source-select', { state: 'visible' });
+  await page.waitForSelector('#qhf-title', { state: 'visible' });
   await checkLayoutAndScroll(page, 'Desktop Estúdio Rápido', { requireVerticalScroll: true });
 
   // Disparo real Card 5: Video Use
@@ -202,10 +205,13 @@ async function runMobile(browser) {
   await mPage.goto(`${BASE_URL}/`, { waitUntil: 'networkidle', timeout: 30000 });
   await mPage.waitForTimeout(800);
 
-  // Abrir Estúdio Rápido via navegação
-  await mPage.evaluate(() => switchTab('quick'));
-  await mPage.waitForSelector('#btn-qvu-submit');
-  await mPage.waitForSelector('#btn-qhf-submit');
+  // Abrir Estúdio Rápido -> Modo Hard via navegação
+  await mPage.evaluate(() => {
+    switchTab('quick');
+    if (typeof setQuickStudioMode === 'function') setQuickStudioMode('hard');
+  });
+  await mPage.waitForSelector('#btn-qvu-submit', { state: 'visible' });
+  await mPage.waitForSelector('#btn-qhf-submit', { state: 'visible' });
   const vuBox = await mPage.locator('#btn-qvu-submit').boundingBox();
   const hfBox = await mPage.locator('#btn-qhf-submit').boundingBox();
   assert(vuBox && vuBox.height >= 44, `Botão Video Use mobile altura < 44px: ${vuBox?.height}`);

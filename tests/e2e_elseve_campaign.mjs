@@ -76,9 +76,12 @@ async function verifyCampaignsAndGallery(page, label, isMobile = false) {
   assert(elseve.curated_count === 6, `${label}: esperado 6 fotos curadas, obtido ${elseve.curated_count}`);
   assert(elseve.excluded_count === 3, `${label}: esperado 3 fotos filtradas, obtido ${elseve.excluded_count}`);
 
-  // Select campaign in Estúdio Rápido -> HyperFrames and confirm thumbnails load cleanly
+  // Select campaign in Estúdio Rápido -> Modo Hard -> HyperFrames and confirm thumbnails load cleanly
   await page.locator(isMobile ? '#mnav-quick' : '#tab-quick').click();
-  await page.waitForSelector('#qhf-campaign');
+  if (await page.locator('#btn-quick-mode-hard').isVisible()) {
+    await page.locator('#btn-quick-mode-hard').click();
+  }
+  await page.waitForSelector('#qhf-campaign', { state: 'visible' });
   await page.waitForFunction(
     () => Array.from(document.querySelectorAll('#qhf-campaign option')).some((o) => o.value === 'elseve-kit2'),
     null,

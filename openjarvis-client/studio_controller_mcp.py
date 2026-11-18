@@ -1400,6 +1400,121 @@ def studio_run_hyperframes(
 
 
 @mcp.tool()
+def studio_analyze_viral_references(
+    campaign_id: str,
+    product_title: str = "",
+    product_price: str = "",
+    product_description: str = "",
+    viral_video_paths: str = "",
+    target: str = "vps",
+) -> str:
+    """Reverse-engineer 1 or more Shopee viral reference MP4 videos (faster-whisper INT8 + scene cuts + WPM + audio energy + AI Cascade) into viral_blueprint.json.
+
+    Args:
+        campaign_id: Campaign slug under /opt/ai-media-studio/campaigns/ (e.g. 'elseve-kit2').
+        product_title: Title of our product to tailor the viral blueprint.
+        product_price: Price/offer string (e.g. 'R$ 69,99 (R$ 34,99 cada)').
+        product_description: Key benefits or description of our product.
+        viral_video_paths: Optional local path(s) (comma-separated) to upload to campaigns/{campaign_id}/virals/ before analyzing.
+        target: 'vps' (default) or 'local'.
+    """
+    _, base_url, headers, auth = _resolve_target_conn(target)
+    cid = (campaign_id or "").strip()
+    if not cid:
+        return json.dumps({"ok": False, "error": "Informe campaign_id"}, ensure_ascii=False)
+    try:
+        with httpx.Client(timeout=240.0, headers=headers, auth=auth) as client:
+            if viral_video_paths and viral_video_paths.strip():
+                raw_paths = [p.strip() for p in viral_video_paths.split(",") if p.strip()]
+                local_files = [Path(os.path.expanduser(p)) for p in raw_paths if Path(os.path.expanduser(p)).is_file()]
+                if local_files:
+                    open_handles = []
+                    try:
+                        multi_files = []
+                        for lf in local_files:
+                            fh = lf.open("rb")
+                            open_handles.append(fh)
+                            multi_files.append(("files", (lf.name, fh, "video/mp4")))
+                        up = client.post(f"{base_url}/api/campaigns/{cid}/upload-virals", files=multi_files)
+                        up.raise_for_status()
+                    finally:
+                        for fh in open_handles:
+                            try:
+                                fh.close()
+                            except Exception:
+                                pass
+            resp = client.post(
+                f"{base_url}/api/campaigns/{cid}/analyze-virals",
+                json={
+                    "product_title": product_title,
+                    "product_price": product_price,
+                    "product_description": product_description,
+                },
+            )
+            data = resp.json()
+            if resp.status_code >= 400:
+                return json.dumps({"ok": False, "status_code": resp.status_code, "detail": data}, ensure_ascii=False, indent=2)
+            return json.dumps(data, ensure_ascii=False, indent=2)
+    except Exception as exc:
+        return json.dumps({"ok": False, "error": f"Falha ao analisar referências virais: {exc}"}, ensure_ascii=False)
+
+
+@mcp.tool()
+def studio_run_guided_pipeline(
+    template_id: str,
+    platform_preset: str = "shopee_20_9",
+    params_json: str = "{}",
+    wait_for_completion: bool = True,
+    target: str = "vps",
+) -> str:
+    """Run one of the 5 Guided Pipelines with automatic 1-stack-at-a-time Docker RAM relay and checkpoints.
+
+    Args:
+        template_id: 'shopee_viral_clone', 'novela_shorts_polish', 'dark_channel_full', 'pov_cinema_ad', or 'express_jumpcut'.
+        platform_preset: 'shopee_20_9' (default), 'tiktok_reels', 'yt_shorts', or 'yt_16_9'.
+        params_json: JSON object string of mission parameters (e.g. '{"campaign_id":"elseve-kit2","title":"...","offer":"..."}').
+        wait_for_completion: True to poll /api/pipelines/status/{run_id} until completed or error.
+        target: 'vps' (default) or 'local'.
+    """
+    _, base_url, headers, auth = _resolve_target_conn(target)
+    try:
+        parsed_params = json.loads(params_json or "{}")
+        if not isinstance(parsed_params, dict):
+            parsed_params = {}
+    except Exception:
+        parsed_params = {}
+
+    try:
+        with httpx.Client(timeout=120.0, headers=headers, auth=auth) as client:
+            resp = client.post(
+                f"{base_url}/api/pipelines/start",
+                json={
+                    "template_id": template_id,
+                    "platform_preset": platform_preset,
+                    "params": parsed_params,
+                    "wait": False,
+                },
+            )
+            data = resp.json()
+            if resp.status_code >= 400:
+                return json.dumps({"ok": False, "status_code": resp.status_code, "detail": data}, ensure_ascii=False, indent=2)
+            run_id = data.get("run_id") or ""
+            if wait_for_completion and run_id:
+                import time as _time
+                deadline = _time.monotonic() + 300.0
+                while _time.monotonic() < deadline:
+                    st = client.get(f"{base_url}/api/pipelines/status/{run_id}")
+                    if st.status_code < 400:
+                        data = st.json()
+                        if data.get("ready") or data.get("failed"):
+                            break
+                    _time.sleep(3.0)
+            return json.dumps(data, ensure_ascii=False, indent=2)
+    except Exception as exc:
+        return json.dumps({"ok": False, "error": f"Falha na trilha guiada: {exc}"}, ensure_ascii=False)
+
+
+@mcp.tool()
 def webcam_look(
     prompt: str = "Descreva detalhadamente o objeto, produto ou cena que estou segurando na câmera."
 ) -> str:

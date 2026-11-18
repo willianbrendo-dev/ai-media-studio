@@ -69,6 +69,8 @@ Ao receber **qualquer pedido criativo, de produção, edição, corte ou planeja
 - `studio_scan_media(query, target)` — busca vídeos locais no PC + Galeria da VPS com comandos `scp`.
 - `studio_stage_or_upload_video(local_path, stack_name, use_vps_demo_if_missing)` — envia arquivo local via HTTPS/SCP para a VPS.
 - `studio_run_hyperframes(title, offer, cta, style, aspect, duration, voice_enabled, voice_name, voice_script, image_paths, campaign, subtitles, orange_cart_cta, wait_for_completion, target)` — gera anúncio motion HTML/GSAP (inclusive Multi-Imagem POV com fotos reais em `/opt/ai-media-studio/campaigns/`) + locução PT-BR sincronizada 48kHz SoXR na VPS.
+- `studio_analyze_viral_references(campaign_id, product_title, product_price, product_description, viral_video_paths, target)` — faz engenharia reversa de vídeos `.mp4` virais da Shopee (`faster-whisper` INT8 + contagem de cortes + energia de áudio + Cascata IA) e gera `viral_blueprint.json` com hook 0-3s, WPM, pacing e roteiro pronto.
+- `studio_run_guided_pipeline(template_id, platform_preset, params_json, wait_for_completion, target)` — executa as 5 Trilhas Guiadas (`shopee_viral_clone`, `novela_shorts_polish`, `dark_channel_full`, `pov_cinema_ad`, `express_jumpcut`) com revezamento automático de RAM (`stop-all` entre stacks Docker) e checkpoints em disco.
 - `studio_run_moneyprinter(...)` — gera vídeo faceless narrado com B-roll e legendas no MoneyPrinterTurbo.
 - `studio_run_supoclip(...)` — dispara corte `novela`/`highlights`/`viral` no SupoClip.
 - `studio_run_videouse(...)` — limpa silêncios, normaliza 48kHz SoXR, faz color grading e legenda no Video Use.
@@ -90,12 +92,14 @@ Ao planejar ou roteirizar **qualquer vídeo de produto para Shopee Video, TikTok
 4. **11s–16s+ · Ancoragem de Preço (Psicologia da Divisão) & CTA Carrinho Laranja:**
    - Divida o preço do kit para aumentar a percepção de barganha (ex.: **Kit com 2 unidades de 100ml por R$ 69,99 → "Menos de R$ 35 cada frasco original L'Oréal!" / R$ 34,99 cada**).
    - Inclua seta/indicador animado apontando para o **canto inferior esquerdo da tela** (*"Toque no Carrinho Laranja abaixo!"*).
-5. **Gabarito Oficial de Safe-Zone Shopee Video (`1080×1920`, 9:16):**
-   - `Y: 0–215px` (**Zona Morta Superior**): Barra de busca `< Pesquisar` e status bar Android — manter apenas fundo atmosférico/bokeh (zero títulos ou fotos principais).
-   - `Y: 220–960px`, `X: 60–910px` (**Palco Visual do Produto**): `#top-pill` em `top: 220px`; fotos/cenas (Antes/Depois, Benefícios, Split 2 fotos e Cena 4 com banner de preço `R$ 69,99 / R$ 34,99 cada` integrado na base do card em `Y ≈ 810–960px`).
-   - `Y: 985–1100px`, `X: 60–900px` (**Corredor Exclusivo de Legenda**): Caixa de legenda sincronizada em `top: 985px`, largura máx. `820px` (margem direita `180px` livre da coluna de ícones sociais em `X > 900px`) e no máximo **5 a 6 palavras por bloco** (`32px`), garantindo que jamais ultrapasse `Y = 1100px`. Video Use (`.ass` em 9:16) usa `MarginV ≈ 826` (`43%`), `MarginL = 60`, `MarginR = 180`. MoneyPrinterTurbo usa preset `shopee_safe` (`custom_position = 53.5%`).
-   - `Y: 1110–1165px` (**CTA Apontando para o Card Real**): Badge pulsante em `top: 1110px, left: 60px` (`👇 Toque em Comprar Abaixo com Desconto!`) posicionado logo acima do topo do Card Branco Flutuante da Shopee (`Y = 1180px`).
-   - `Y: 1175–1920px` e coluna `X: 910–1080px, Y >= 1020px` (**Zona Reservada do App Shopee**): Deixar **100% livre** de textos, cards ou botões (reservada ao Card Branco de Compra `R$ 69,99`, Carrinho Laranja, descrição `@arroba`, comentários e ícones direitos).
+5. **Gabarito Oficial Shopee 20:9 Anti-Crop & Dual-State Safe-Zone (`1080×1920`, 9:16):**
+   - **Margens Laterais Anti-Crop `20:9`:** Todos os elementos visuais ficam estritamente em **`X: 96–884px`** (`left: 96px`, `width: 788px`), mantendo `96px` livre à esquerda e `196px` livre à direita (`X >= 890px`).
+   - **Teto Livre da Barra de Pesquisa (`Y: 0–235px`):** A `#top-pill` começa em `top: 235px`, `left: 96px`, `max-width: 788px`.
+   - **Palco das Fotos do Produto (`Y: 300–850px`, `X: 96–884px`):** Containers de imagem das 4 cenas travados em `top: 300px`, `height: 550px`, `width: 788px`.
+   - **Card de Oferta/Preço Cena 4 (`Y: 865–1015px`, `X: 96–884px`):** Banner integrado acima do avatar lateral.
+   - **Corredor Único de Legenda (`Y: 1035–1135px`, `X: 96–884px`):** `#sub-box` em `top: 1040px`, `left: 96px`, `width: 788px`. Video Use `.ass` em 9:16 usa `MarginL=96`, `MarginR=196`, `MarginV=826`. MoneyPrinterTurbo usa preset `shopee_safe` (`custom_position = 53.5%`).
+   - **CTA Compacto Cena 4 (`Y: 1145–1203px`, `X: 96–884px`):** Badge pulsante compacto (`👇 GARANTA NO CARRINHO LARANJA ABAIXO 👇`) sem repetir o mesmo texto simultaneamente na legenda.
+   - **Rodapé `Y: 1210–1920px` (`710px` inferiores) e Coluna `X >= 890px`:** **100% VAZIOS** para `@autor`, descrição, Card Branco de Produto, Carrinho Laranja e ícones sociais.
 6. **Regra de Ouro Anti-Confusão de Kits:**
    - Ao anunciar um kit específico (ex.: **Kit 2 Óleos Extraordinário Elseve 100ml**), **filtre obrigatoriamente fotos que mostram a linha inteira de 4 ou 6 produtos** (shampoo, condicionador, máscara, creme — ex.: `5181401464922901708.jpg`, `5181401464922901707.jpg` ou print interno de afiliado `5181401464922901714.jpg`), garantindo que o comprador veja apenas o óleo e os resultados reais do óleo.
 7. **Motor Recomendado para Campanhas com Fotos Reais:**

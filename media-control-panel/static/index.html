@@ -559,9 +559,327 @@
               </button>
             </div>
           </div>
+
+          <!-- DUAL-MODE SWITCHER (v2.3) -->
+          <div id="quick-mode-switcher" class="mt-4 pt-4 border-t border-white/[0.06] grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <button id="btn-quick-mode-guided" type="button" onclick="setQuickStudioMode('guided')"
+              class="touch-btn min-h-[48px] px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-extrabold flex items-center justify-center gap-2 transition cursor-pointer bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 shadow-lg shadow-emerald-500/20 border border-emerald-300/40">
+              <span>🎯 Modo Guiado (Trilhas Inteligentes)</span>
+            </button>
+            <button id="btn-quick-mode-hard" type="button" onclick="setQuickStudioMode('hard')"
+              class="touch-btn min-h-[48px] px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition cursor-pointer bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 border border-white/10">
+              <span>🛠️ Modo Hard (Bancada Avançada · 6 Motores)</span>
+            </button>
+          </div>
         </div>
 
-        <div class="grid grid-cols-1 xl:grid-cols-2 gap-5">
+        <!-- =============================================================== -->
+        <!-- MODO GUIADO (TRILHAS INTELIGENTES & REVEZAMENTO DE RAM)         -->
+        <!-- =============================================================== -->
+        <div id="quick-guided-panel" class="space-y-5">
+          <!-- 1. SELETOR DE PLATAFORMA / SAFE-ZONE -->
+          <div class="saas-card rounded-3xl p-4 sm:p-5 border border-emerald-500/20 space-y-3">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div class="text-xs font-extrabold uppercase tracking-wider text-emerald-300 flex items-center gap-2">
+                <i data-lucide="smartphone" class="w-4 h-4"></i> 1. Plataforma-Alvo &amp; Safe-Zone Automática
+              </div>
+              <span id="gp-platform-hint" class="text-[11px] font-mono text-amber-300 break-words">X: 96–884px · Y_sub: 1040px · Rodapé 1210–1920px vazio</span>
+            </div>
+            <div id="gp-platform-selector" class="grid grid-cols-2 lg:grid-cols-4 gap-2">
+              <button type="button" data-platform="shopee_20_9" onclick="setGuidedPlatform('shopee_20_9')"
+                class="gp-plat-btn touch-btn min-h-[44px] px-3 py-2 rounded-xl text-xs font-bold text-left border transition cursor-pointer bg-amber-500/20 text-amber-200 border-amber-400/60">
+                🛒 Shopee Video (20:9 Anti-Crop)
+              </button>
+              <button type="button" data-platform="tiktok_reels" onclick="setGuidedPlatform('tiktok_reels')"
+                class="gp-plat-btn touch-btn min-h-[44px] px-3 py-2 rounded-xl text-xs font-semibold text-left border transition cursor-pointer bg-white/[0.03] text-slate-300 border-white/10 hover:bg-white/[0.07]">
+                🎵 TikTok / Reels
+              </button>
+              <button type="button" data-platform="yt_shorts" onclick="setGuidedPlatform('yt_shorts')"
+                class="gp-plat-btn touch-btn min-h-[44px] px-3 py-2 rounded-xl text-xs font-semibold text-left border transition cursor-pointer bg-white/[0.03] text-slate-300 border-white/10 hover:bg-white/[0.07]">
+                ▶️ YouTube Shorts
+              </button>
+              <button type="button" data-platform="yt_16_9" onclick="setGuidedPlatform('yt_16_9')"
+                class="gp-plat-btn touch-btn min-h-[44px] px-3 py-2 rounded-xl text-xs font-semibold text-left border transition cursor-pointer bg-white/[0.03] text-slate-300 border-white/10 hover:bg-white/[0.07]">
+                🖥️ YouTube 16:9
+              </button>
+            </div>
+          </div>
+
+          <!-- 2. SELETOR DAS 5 MISSÕES (CARDS DE TRILHA) -->
+          <div class="saas-card rounded-3xl p-4 sm:p-5 border border-white/10 space-y-3">
+            <div class="text-xs font-extrabold uppercase tracking-wider text-cyan-300 flex items-center gap-2">
+              <i data-lucide="layers" class="w-4 h-4"></i> 2. Escolha a Missão (Trilha Guiada)
+            </div>
+            <div id="gp-templates-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
+              <!-- Preenchido via JS renderGuidedTemplates() com 5 missões oficiais -->
+            </div>
+            <!-- Mapa Visual das Etapas -->
+            <div id="gp-steps-map" class="rounded-2xl bg-[#070a08] border border-emerald-500/20 p-3 text-xs space-y-2"></div>
+          </div>
+
+          <!-- 3. FORMULÁRIO ENXUTO DINÂMICO + STEPPER EM TEMPO REAL -->
+          <div class="grid grid-cols-1 xl:grid-cols-12 gap-5">
+            <form id="gp-guided-form" onsubmit="submitGuidedPipeline(event)" class="xl:col-span-7 saas-card rounded-3xl p-4 sm:p-6 border border-emerald-500/25 space-y-4 min-w-0">
+              <div class="flex items-center justify-between gap-2 border-b border-white/[0.06] pb-3">
+                <h3 id="gp-active-title" class="text-sm sm:text-base font-extrabold text-white truncate">🛒 Máquina de Vendas Shopee · Fotos + Clone Viral</h3>
+                <span id="gp-active-ram-badge" class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 shrink-0">Zero-RAM</span>
+              </div>
+
+              <!-- MISSAO 1: SHOPEE VIRAL CLONE -->
+              <div id="gp-fields-shopee_viral_clone" class="gp-mission-fields space-y-3.5">
+                <div class="space-y-1.5">
+                  <div class="flex items-center justify-between gap-2">
+                    <label class="text-xs font-semibold text-slate-200">Campanha &amp; Fotos do Produto</label>
+                    <label for="gp-upload-photos" class="text-[11px] font-semibold text-amber-300 hover:text-amber-200 cursor-pointer underline">+ Subir Fotos</label>
+                    <input id="gp-upload-photos" type="file" accept="image/*" multiple class="hidden" onchange="uploadGuidedPhotos(event)" />
+                  </div>
+                  <select id="gp-campaign" onchange="onGuidedCampaignChange()" class="w-full min-h-[44px] bg-[#070a08] border border-white/10 rounded-xl px-3 text-xs text-white outline-none">
+                    <option value="elseve-kit2">Kit 2 Óleos Extraordinário Elseve L'Oréal 100ml</option>
+                  </select>
+                  <div id="gp-campaign-preview" class="hidden flex flex-wrap gap-1.5 p-2 rounded-xl bg-[#070a08] border border-amber-500/20"></div>
+                </div>
+
+                <!-- DNA Viral Reference Upload & Analysis -->
+                <div id="gp-viral-box" class="rounded-2xl bg-[#070a08] border border-fuchsia-500/25 p-3.5 space-y-2.5">
+                  <div class="flex flex-wrap items-center justify-between gap-2">
+                    <span class="text-xs font-bold text-fuchsia-300">🧬 Referências Virais da Shopee (.mp4 dos top criadores)</span>
+                    <span id="gp-viral-count" class="text-[11px] font-mono text-slate-400">0 vídeo(s)</span>
+                  </div>
+                  <div class="flex flex-col sm:flex-row gap-2">
+                    <input id="gp-viral-files" type="file" accept="video/*" multiple onchange="uploadGuidedVirals(event)"
+                      class="w-full min-h-[44px] bg-[#0d1210] border border-white/10 rounded-xl px-3 py-2 text-xs text-slate-300 file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:bg-fuchsia-500/20 file:text-fuchsia-200" />
+                    <button id="btn-gp-analyze-virals" type="button" onclick="analyzeGuidedVirals()"
+                      class="touch-btn shrink-0 min-h-[44px] px-4 rounded-xl text-xs font-extrabold bg-fuchsia-500/25 hover:bg-fuchsia-500/35 text-fuchsia-100 border border-fuchsia-400/40 transition cursor-pointer">
+                      🔍 Analisar DNA Viral
+                    </button>
+                  </div>
+                  <div id="gp-viral-blueprint-card" class="hidden rounded-xl bg-fuchsia-500/10 border border-fuchsia-500/30 p-2.5 text-[11px] text-slate-200 space-y-1"></div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div class="space-y-1">
+                    <label class="text-[11px] font-semibold text-slate-400">Produto / Título *</label>
+                    <input id="gp-title" type="text" value="Kit 2 Óleos Extraordinário Elseve L'Oréal 100ml"
+                      class="w-full min-h-[44px] bg-[#070a08] border border-white/10 focus:border-emerald-400 rounded-xl px-3 text-xs text-white outline-none" />
+                  </div>
+                  <div class="space-y-1">
+                    <label class="text-[11px] font-semibold text-slate-400">Preço / Ancoragem</label>
+                    <input id="gp-offer" type="text" value="KIT LEVE 2 (200ml) · R$ 69,99"
+                      class="w-full min-h-[44px] bg-[#070a08] border border-white/10 focus:border-emerald-400 rounded-xl px-3 text-xs text-white outline-none" />
+                  </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div class="space-y-1">
+                    <label class="text-[11px] font-semibold text-slate-400">Nota / Benefício Chave</label>
+                    <input id="gp-desc" type="text" value="Sai R$ 34,99 cada frasco original L'Oréal!"
+                      class="w-full min-h-[44px] bg-[#070a08] border border-white/10 rounded-xl px-3 text-xs text-white outline-none" />
+                  </div>
+                  <div class="space-y-1">
+                    <label class="text-[11px] font-semibold text-slate-400">Locução Neural &amp; Duração</label>
+                    <div class="flex gap-2">
+                      <select id="gp-voice-name" class="w-full min-h-[44px] bg-[#070a08] border border-white/10 rounded-xl px-2.5 text-xs text-slate-100 outline-none">
+                        <option value="pt-BR-FranciscaNeural">Francisca PT-BR</option>
+                        <option value="pt-BR-ThalitaMultilingualNeural">Thalita PT-BR</option>
+                        <option value="pt-BR-AntonioNeural">Antonio PT-BR</option>
+                      </select>
+                      <input id="gp-duration" type="number" min="5" max="30" step="0.5" value="18"
+                        class="w-20 min-h-[44px] bg-[#070a08] border border-white/10 rounded-xl px-2 text-xs text-center text-white outline-none" title="Duração (s)" />
+                    </div>
+                  </div>
+                </div>
+
+                <div class="space-y-1">
+                  <label class="text-[11px] font-semibold text-slate-400">Roteiro Falado (preenchido pelo DNA Viral ou editável)</label>
+                  <textarea id="gp-script" rows="3" placeholder="Deixe vazio para a Trilha gerar automaticamente a partir do DNA Viral ou Cascata IA..."
+                    class="w-full bg-[#070a08] border border-white/10 focus:border-emerald-400 rounded-xl p-3 text-xs text-white placeholder-slate-500 outline-none"></textarea>
+                </div>
+              </div>
+
+              <!-- MISSAO 2: NOVELA SHORTS POLISH -->
+              <div id="gp-fields-novela_shorts_polish" class="gp-mission-fields hidden space-y-3">
+                <div class="space-y-1">
+                  <label class="text-xs font-semibold text-slate-200">Vídeo Fonte (URL, caminho ou 'sample')</label>
+                  <input id="gp-novela-source" type="text" value="sample" placeholder="sample ou https://... ou upload://..."
+                    class="w-full min-h-[44px] bg-[#070a08] border border-white/10 rounded-xl px-3 text-xs text-white outline-none" />
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  <div class="space-y-1">
+                    <label class="text-[11px] font-semibold text-slate-400">Modo de Corte</label>
+                    <select id="gp-novela-cutmode" class="w-full min-h-[44px] bg-[#070a08] border border-white/10 rounded-xl px-2.5 text-xs text-white outline-none">
+                      <option value="novela" selected>🎬 Série Novela (Sequencial)</option>
+                      <option value="highlights">⭐ Highlights / Momentos</option>
+                      <option value="viral">🔥 Shorts Virais</option>
+                    </select>
+                  </div>
+                  <div class="space-y-1">
+                    <label class="text-[11px] font-semibold text-slate-400">Qtd. Partes</label>
+                    <input id="gp-novela-parts" type="number" min="2" max="10" value="3"
+                      class="w-full min-h-[44px] bg-[#070a08] border border-white/10 rounded-xl px-3 text-xs text-white outline-none" />
+                  </div>
+                  <div class="space-y-1">
+                    <label class="text-[11px] font-semibold text-slate-400">Acabamento Video Use</label>
+                    <select id="gp-novela-grade" class="w-full min-h-[44px] bg-[#070a08] border border-white/10 rounded-xl px-2.5 text-xs text-white outline-none">
+                      <option value="Cinema Warm" selected>Cinema Warm</option>
+                      <option value="E-Commerce Vibrant">E-Commerce Vibrant</option>
+                      <option value="Neutral Clean">Neutral Clean</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <!-- MISSAO 3: DARK CHANNEL FULL -->
+              <div id="gp-fields-dark_channel_full" class="gp-mission-fields hidden space-y-3">
+                <div class="space-y-1">
+                  <label class="text-xs font-semibold text-slate-200">Tema / Nicho do Vídeo Dark *</label>
+                  <input id="gp-dark-subject" type="text" placeholder="Ex: 5 Hábitos Silenciosos Que Multiplicam Sua Produtividade"
+                    value="Segredos de Alta Conversão em Vídeos Curtos"
+                    class="w-full min-h-[44px] bg-[#070a08] border border-white/10 rounded-xl px-3 text-xs text-white outline-none" />
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  <div class="space-y-1">
+                    <label class="text-[11px] font-semibold text-slate-400">B-Roll Visual</label>
+                    <select id="gp-dark-broll" class="w-full min-h-[44px] bg-[#070a08] border border-white/10 rounded-xl px-2.5 text-xs text-white outline-none">
+                      <option value="cinema_dark" selected>Cinema Dark</option>
+                      <option value="grid_emerald">Grid Emerald</option>
+                      <option value="cyber_cyan">Cyber Cyan</option>
+                      <option value="warm_amber">Warm Amber</option>
+                    </select>
+                  </div>
+                  <div class="space-y-1">
+                    <label class="text-[11px] font-semibold text-slate-400">Voz Neural</label>
+                    <select id="gp-dark-voice" class="w-full min-h-[44px] bg-[#070a08] border border-white/10 rounded-xl px-2.5 text-xs text-white outline-none">
+                      <option value="pt-BR-AntonioNeural-Male">Antonio PT-BR</option>
+                      <option value="pt-BR-FranciscaNeural-Female">Francisca PT-BR</option>
+                    </select>
+                  </div>
+                  <div class="space-y-1">
+                    <label class="text-[11px] font-semibold text-slate-400">Fonte B-Roll</label>
+                    <select id="gp-dark-source" class="w-full min-h-[44px] bg-[#070a08] border border-white/10 rounded-xl px-2.5 text-xs text-white outline-none">
+                      <option value="local" selected>Local VPS (Rápido)</option>
+                      <option value="auto">Auto (Pexels/Local)</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="space-y-1">
+                  <label class="text-[11px] font-semibold text-slate-400">Roteiro Base (opcional)</label>
+                  <textarea id="gp-dark-script" rows="2" placeholder="Opcional — se vazio, a Cascata IA cria roteiro + termos SEO."
+                    class="w-full bg-[#070a08] border border-white/10 rounded-xl p-2.5 text-xs text-white outline-none"></textarea>
+                </div>
+              </div>
+
+              <!-- MISSAO 4: POV CINEMA AD -->
+              <div id="gp-fields-pov_cinema_ad" class="gp-mission-fields hidden space-y-3">
+                <div class="space-y-1">
+                  <label class="text-xs font-semibold text-slate-200">Campanha / Foto Base para Movimento POV</label>
+                  <select id="gp-pov-campaign" class="w-full min-h-[44px] bg-[#070a08] border border-white/10 rounded-xl px-3 text-xs text-white outline-none">
+                    <option value="elseve-kit2">Kit 2 Óleos Extraordinário Elseve L'Oréal 100ml</option>
+                  </select>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div class="space-y-1">
+                    <label class="text-[11px] font-semibold text-slate-400">Título do Comercial</label>
+                    <input id="gp-pov-title" type="text" value="Óleo Extraordinário Elseve · Experiência POV"
+                      class="w-full min-h-[44px] bg-[#070a08] border border-white/10 rounded-xl px-3 text-xs text-white outline-none" />
+                  </div>
+                  <div class="space-y-1">
+                    <label class="text-[11px] font-semibold text-slate-400">Oferta / Preço</label>
+                    <input id="gp-pov-offer" type="text" value="KIT LEVE 2 · R$ 69,99"
+                      class="w-full min-h-[44px] bg-[#070a08] border border-white/10 rounded-xl px-3 text-xs text-white outline-none" />
+                  </div>
+                </div>
+              </div>
+
+              <!-- MISSAO 5: EXPRESS JUMPCUT -->
+              <div id="gp-fields-express_jumpcut" class="gp-mission-fields hidden space-y-3">
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  <div class="space-y-1">
+                    <label class="text-[11px] font-semibold text-slate-400">Vídeo Fonte (Galeria ou Demo)</label>
+                    <select id="gp-exp-source" class="w-full min-h-[44px] bg-[#070a08] border border-white/10 rounded-xl px-2.5 text-xs text-white outline-none">
+                      <option value="">Vídeo Demo PT-BR (VPS)</option>
+                    </select>
+                  </div>
+                  <div class="space-y-1">
+                    <label class="text-[11px] font-semibold text-slate-400">Cor / Grade FFmpeg</label>
+                    <select id="gp-exp-grade" class="w-full min-h-[44px] bg-[#070a08] border border-white/10 rounded-xl px-2.5 text-xs text-white outline-none">
+                      <option value="E-Commerce Vibrant" selected>E-Commerce Vibrant</option>
+                      <option value="Cinema Warm">Cinema Warm</option>
+                      <option value="Neutral Clean">Neutral Clean</option>
+                    </select>
+                  </div>
+                  <div class="space-y-1">
+                    <label class="text-[11px] font-semibold text-slate-400">Idioma ASR</label>
+                    <select id="gp-exp-lang" class="w-full min-h-[44px] bg-[#070a08] border border-white/10 rounded-xl px-2.5 text-xs text-white outline-none">
+                      <option value="pt" selected>Português (PT-BR)</option>
+                      <option value="en">Inglês</option>
+                      <option value="auto">Auto</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="flex flex-wrap gap-4">
+                  <label class="inline-flex items-center gap-2 text-xs text-slate-300 cursor-pointer min-h-[44px]">
+                    <input id="gp-exp-silence" type="checkbox" checked class="w-4 h-4 accent-emerald-500 rounded" />
+                    <span>Jump-Cut (Remover silêncios &amp; hesitações)</span>
+                  </label>
+                  <label class="inline-flex items-center gap-2 text-xs text-slate-300 cursor-pointer min-h-[44px]">
+                    <input id="gp-exp-subtitles" type="checkbox" checked class="w-4 h-4 accent-emerald-500 rounded" />
+                    <span>Queimar Legendas na Safe-Zone</span>
+                  </label>
+                </div>
+              </div>
+
+              <button id="btn-gp-run" type="submit"
+                class="touch-btn w-full min-h-[48px] px-5 rounded-2xl text-sm font-extrabold bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2 transition cursor-pointer">
+                <span>🚀 Executar Trilha Completa</span>
+              </button>
+            </form>
+
+            <!-- STEPPER & RESULT MONITOR -->
+            <div id="gp-monitor-box" class="xl:col-span-5 saas-card rounded-3xl p-4 sm:p-6 border border-white/10 space-y-4 min-w-0">
+              <div class="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.06] pb-3">
+                <div>
+                  <div class="text-xs font-extrabold uppercase tracking-wider text-slate-300">Monitor &amp; Checkpoints</div>
+                  <div id="gp-status-title" class="text-xs text-emerald-300 font-semibold mt-0.5">Pronto para disparar trilha</div>
+                </div>
+                <span id="gp-ram-badge" class="px-2.5 py-1 rounded-full text-[10px] font-mono bg-white/[0.05] text-slate-300 border border-white/10">0/7 Dockers</span>
+              </div>
+
+              <div class="space-y-1.5">
+                <div class="flex justify-between text-[11px] font-mono text-slate-400">
+                  <span id="gp-run-id-label">run_id: —</span>
+                  <span id="gp-progress-pct">0%</span>
+                </div>
+                <div class="h-2.5 rounded-full bg-white/10 overflow-hidden">
+                  <div id="gp-progress-bar" class="h-full bg-gradient-to-r from-emerald-500 to-cyan-400 transition-all duration-300" style="width:0%"></div>
+                </div>
+              </div>
+
+              <div id="gp-stepper-list" class="space-y-2 text-xs"></div>
+
+              <div id="gp-result-box" class="hidden space-y-2.5 pt-2 border-t border-white/[0.06]">
+                <video id="gp-preview-video" controls preload="metadata" class="w-full rounded-xl border border-white/10 bg-black max-h-64"></video>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <a id="gp-download-link" href="#" download
+                    class="touch-btn min-h-[44px] px-3 rounded-xl text-xs font-bold bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200 border border-emerald-500/35 flex items-center justify-center gap-1.5">
+                    <i data-lucide="download" class="w-4 h-4"></i> Baixar MP4
+                  </a>
+                  <button id="btn-gp-open-hard" type="button" onclick="openGuidedResultInHardMode()"
+                    class="touch-btn min-h-[44px] px-3 rounded-xl text-xs font-bold bg-fuchsia-500/20 hover:bg-fuchsia-500/30 text-fuchsia-200 border border-fuchsia-500/35 flex items-center justify-center gap-1.5 cursor-pointer">
+                    <span>🛠️ Abrir no Modo Hard</span>
+                  </button>
+                </div>
+              </div>
+
+              <button id="btn-gp-resume" type="button" onclick="resumeLastGuidedPipeline()"
+                class="hidden touch-btn w-full min-h-[44px] rounded-xl text-xs font-bold bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-500/35 cursor-pointer">
+                ↻ Retomar do Último Checkpoint
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- MODO HARD (BANCADA AVANÇADA COM OS 6 MOTORES INTACTOS) -->
+        <div id="quick-hard-grid" class="hidden grid grid-cols-1 xl:grid-cols-2 gap-5">
           <!-- CARD 1: SUPOCLIP AVANÇADO (NOVELA / HIGHLIGHTS / VIRAIS + UPLOAD) -->
           <div x-data="{
             sourceMode: 'url',
@@ -1314,6 +1632,23 @@
                   <option value="pt-BR-ThalitaMultilingualNeural">Voz: Thalita PT-BR (Fem. Jovem)</option>
                   <option value="pt-BR-AntonioNeural">Voz: Antonio PT-BR (Masc.)</option>
                 </select>
+              </div>
+
+              <div id="qhf-viral-box" class="rounded-2xl bg-[#070a08] border border-fuchsia-500/20 p-3 space-y-2">
+                <div class="flex items-center justify-between gap-2">
+                  <label class="text-[11px] font-bold text-fuchsia-300">🧬 Vídeos Virais de Referência (.mp4) + Roteiro</label>
+                  <span id="qhf-viral-status" class="text-[10px] font-mono text-slate-400">Opcional</span>
+                </div>
+                <div class="flex flex-col sm:flex-row gap-2">
+                  <input id="qhf-viral-files" type="file" accept="video/*" multiple onchange="uploadHardHyperFramesVirals(event)"
+                    class="w-full min-h-[44px] bg-[#0d1210] border border-white/10 rounded-xl px-2.5 py-2 text-[11px] text-slate-300 file:mr-2 file:py-1 file:px-2 file:rounded-lg file:border-0 file:bg-fuchsia-500/20 file:text-fuchsia-200" />
+                  <button id="btn-qhf-analyze-virals" type="button" onclick="analyzeHardHyperFramesVirals()"
+                    class="touch-btn shrink-0 min-h-[44px] px-3 rounded-xl text-xs font-bold bg-fuchsia-500/20 hover:bg-fuchsia-500/30 text-fuchsia-200 border border-fuchsia-500/35 transition cursor-pointer">
+                    🔍 Analisar Virais
+                  </button>
+                </div>
+                <textarea id="qhf-voice-script" rows="2" placeholder="Roteiro customizado da locução (opcional — preenchido automaticamente pela análise viral ou Modo Guiado)..."
+                  class="w-full bg-[#0d1210] border border-white/10 focus:border-fuchsia-400 rounded-xl p-2.5 text-xs text-white placeholder-slate-500 outline-none"></textarea>
               </div>
 
               <button id="btn-qhf-submit" type="submit"
@@ -3549,19 +3884,19 @@
     let quickHfTimer = null;
 
     function hydrateVideoUseSelector() {
-      const sel = document.getElementById('qvu-source-select');
-      if (!sel) return;
-      const prev = sel.value;
       const videos = (outputsData || []).filter(item => item.media_type === 'video');
       const opts = ['<option value="">Usar Vídeo Demo PT-BR com Pausas (Auto-Gerado)</option>'];
       videos.slice(0, 40).forEach(v => {
         const label = `[${v.stack_name}] ${v.filename} (${v.size_human})`;
         opts.push(`<option value="${escapeHtml(v.id)}">${escapeHtml(label)}</option>`);
       });
-      sel.innerHTML = opts.join('');
-      if (prev && videos.some(v => v.id === prev)) {
-        sel.value = prev;
-      }
+      ['qvu-source-select', 'gp-exp-source'].forEach(selId => {
+        const sel = document.getElementById(selId);
+        if (!sel) return;
+        const prev = sel.value;
+        sel.innerHTML = opts.join('');
+        if (prev && videos.some(v => v.id === prev)) sel.value = prev;
+      });
     }
 
     async function uploadQuickVideoUseFile(inputEl) {
@@ -3717,9 +4052,11 @@
         cta: document.getElementById('qhf-cta')?.value || 'Garanta o Seu Agora',
         style: document.getElementById('qhf-style')?.value || 'B2B Emerald',
         aspect: document.getElementById('qhf-aspect')?.value || '9:16',
+        platform_preset: guidedPlatform || 'shopee_20_9',
         duration: parseFloat(document.getElementById('qhf-duration')?.value || '8'),
         voice_enabled: Boolean(document.getElementById('qhf-voice-enabled')?.checked),
         voice_name: document.getElementById('qhf-voice-name')?.value || 'pt-BR-FranciscaNeural',
+        voice_script: (document.getElementById('qhf-voice-script')?.value || '').trim(),
         campaign: selectedCampaign,
         image_paths: (qhfUploadedImagePaths && qhfUploadedImagePaths.length)
           ? qhfUploadedImagePaths
@@ -3812,6 +4149,578 @@
 
     let campaignsData = [];
     let qhfUploadedImagePaths = [];
+    let gpUploadedImagePaths = [];
+
+    let quickStudioMode = 'guided';
+    let guidedPlatform = 'shopee_20_9';
+    let guidedTemplateId = 'shopee_viral_clone';
+    let guidedActiveRunId = '';
+    let guidedLastState = null;
+    let guidedPollTimer = null;
+
+    const FALLBACK_PLATFORMS = {
+      shopee_20_9: { id: 'shopee_20_9', label: '🛒 Shopee Video (20:9 Anti-Crop)', safe_zone: 'X: 96–884px · Y_sub: 1040px · Rodapé 1210–1920px vazio' },
+      tiktok_reels: { id: 'tiktok_reels', label: '🎵 TikTok / Reels', safe_zone: 'X: 96–884px · Safe-Zone Vertical 9:16' },
+      yt_shorts: { id: 'yt_shorts', label: '▶️ YouTube Shorts', safe_zone: 'X: 96–884px · Shorts Vertical 9:16' },
+      yt_16_9: { id: 'yt_16_9', label: '🖥️ YouTube 16:9', safe_zone: '1920x1080 Full HD Widescreen' }
+    };
+
+    let guidedTemplates = [
+      {
+        id: 'shopee_viral_clone',
+        title: '🛒 Máquina de Vendas Shopee · Fotos + Clone Viral',
+        uses_docker: false,
+        ram_profile: 'Zero-RAM (0 MB ociosa)',
+        steps: [
+          { index: 0, name: 'Analisar DNA Viral & Roteiro', docker_stack: null },
+          { index: 1, name: 'Renderizar Anúncio POV no HyperFrames', docker_stack: null }
+        ]
+      },
+      {
+        id: 'novela_shorts_polish',
+        title: '🎬 Série Estilo Novela & Cortes Virais Polidos',
+        uses_docker: true,
+        ram_profile: 'SupoClip + Video Use (RAM Isolada)',
+        steps: [
+          { index: 0, name: 'Cortar Episódios / Virais (SupoClip)', docker_stack: 'supoclip' },
+          { index: 1, name: 'Polimento Cinema Warm & Safe-Zone (Video Use)', docker_stack: null }
+        ]
+      },
+      {
+        id: 'dark_channel_full',
+        title: '🕵️‍♂️ Canal Dark Completo · Roteiro IA + Vídeo Narrado',
+        uses_docker: true,
+        ram_profile: 'Cascata IA + MoneyPrinterTurbo',
+        steps: [
+          { index: 0, name: 'Roteiro, SEO & Termos B-Roll (Cascata IA)', docker_stack: null },
+          { index: 1, name: 'Renderizar Vídeo Narrado (MoneyPrinterTurbo)', docker_stack: 'moneyprinter' }
+        ]
+      },
+      {
+        id: 'pov_cinema_ad',
+        title: '🎥 Comercial Cinematográfico POV · Foto para Vídeo Animado',
+        uses_docker: true,
+        ram_profile: 'Open Higgsfield -> HyperFrames',
+        steps: [
+          { index: 0, name: 'Animação POV Visual (Open Higgsfield)', docker_stack: 'openhiggsfield' },
+          { index: 1, name: 'Empacotar Oferta, Voz PT-BR & CTA (HyperFrames)', docker_stack: null }
+        ]
+      },
+      {
+        id: 'express_jumpcut',
+        title: '⚡ Edição Expressa · Jump-Cut, Cor & Legenda Safe-Zone',
+        uses_docker: false,
+        ram_profile: 'Zero-RAM (faster-whisper + FFmpeg)',
+        steps: [
+          { index: 0, name: 'Jump-Cut, Color Grading & Legenda Safe-Zone', docker_stack: null }
+        ]
+      }
+    ];
+    let guidedPlatformsMap = { ...FALLBACK_PLATFORMS };
+
+    function setQuickStudioMode(mode) {
+      quickStudioMode = mode === 'hard' ? 'hard' : 'guided';
+      const gPanel = document.getElementById('quick-guided-panel');
+      const hGrid = document.getElementById('quick-hard-grid');
+      const bGuided = document.getElementById('btn-quick-mode-guided');
+      const bHard = document.getElementById('btn-quick-mode-hard');
+      if (gPanel) gPanel.classList.toggle('hidden', quickStudioMode !== 'guided');
+      if (hGrid) hGrid.classList.toggle('hidden', quickStudioMode !== 'hard');
+      if (bGuided) {
+        bGuided.className = quickStudioMode === 'guided'
+          ? 'touch-btn min-h-[48px] px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-extrabold flex items-center justify-center gap-2 transition cursor-pointer bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 shadow-lg shadow-emerald-500/20 border border-emerald-300/40'
+          : 'touch-btn min-h-[48px] px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition cursor-pointer bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 border border-white/10';
+      }
+      if (bHard) {
+        bHard.className = quickStudioMode === 'hard'
+          ? 'touch-btn min-h-[48px] px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-extrabold flex items-center justify-center gap-2 transition cursor-pointer bg-gradient-to-r from-fuchsia-500 to-cyan-500 text-slate-950 shadow-lg shadow-fuchsia-500/20 border border-fuchsia-300/40'
+          : 'touch-btn min-h-[48px] px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition cursor-pointer bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 border border-white/10';
+      }
+      safeCreateIcons();
+    }
+
+    function setGuidedPlatform(platformId) {
+      guidedPlatform = guidedPlatformsMap[platformId] ? platformId : 'shopee_20_9';
+      document.querySelectorAll('.gp-plat-btn').forEach(btn => {
+        const active = btn.getAttribute('data-platform') === guidedPlatform;
+        btn.className = active
+          ? 'gp-plat-btn touch-btn min-h-[44px] px-3 py-2 rounded-xl text-xs font-bold text-left border transition cursor-pointer bg-amber-500/20 text-amber-200 border-amber-400/60'
+          : 'gp-plat-btn touch-btn min-h-[44px] px-3 py-2 rounded-xl text-xs font-semibold text-left border transition cursor-pointer bg-white/[0.03] text-slate-300 border-white/10 hover:bg-white/[0.07]';
+      });
+      const hint = document.getElementById('gp-platform-hint');
+      if (hint && guidedPlatformsMap[guidedPlatform]) {
+        hint.textContent = guidedPlatformsMap[guidedPlatform].safe_zone || '';
+      }
+    }
+
+    async function fetchPipelineTemplates() {
+      try {
+        const res = await fetch('/api/pipelines/templates');
+        if (!res.ok) return;
+        const data = await res.json();
+        if (Array.isArray(data.templates) && data.templates.length) {
+          guidedTemplates = data.templates;
+        }
+        if (data.platform_presets) {
+          guidedPlatformsMap = data.platform_presets;
+        }
+        renderGuidedTemplates();
+        setGuidedTemplate(guidedTemplateId);
+      } catch (e) {
+        console.error('Pipeline templates error:', e);
+      }
+    }
+
+    function renderGuidedTemplates() {
+      const grid = document.getElementById('gp-templates-grid');
+      if (!grid) return;
+      grid.innerHTML = guidedTemplates.map(t => {
+        const active = t.id === guidedTemplateId;
+        return `
+          <button id="gp-tpl-${escapeHtml(t.id)}" type="button" onclick="setGuidedTemplate('${escapeHtml(t.id)}')"
+            class="touch-btn min-h-[54px] p-3 rounded-2xl text-left border transition cursor-pointer flex flex-col justify-between gap-1.5 min-w-0 ${active ? 'bg-emerald-500/15 border-emerald-400/70 text-white shadow-lg shadow-emerald-500/10' : 'bg-[#070a08] border-white/10 text-slate-300 hover:border-white/25'}">
+            <div class="text-xs font-extrabold leading-snug break-words">${escapeHtml(t.title)}</div>
+            <div class="text-[10px] font-mono ${t.uses_docker ? 'text-amber-300' : 'text-emerald-300'}">${t.steps.length} etapa(s) · ${t.uses_docker ? 'Docker Auto-Stop' : 'Zero-RAM'}</div>
+          </button>
+        `;
+      }).join('');
+    }
+
+    function setGuidedTemplate(templateId) {
+      const tmpl = guidedTemplates.find(t => t.id === templateId) || guidedTemplates[0];
+      if (!tmpl) return;
+      guidedTemplateId = tmpl.id;
+      renderGuidedTemplates();
+      document.querySelectorAll('.gp-mission-fields').forEach(el => {
+        el.classList.toggle('hidden', el.id !== `gp-fields-${tmpl.id}`);
+      });
+      const titleEl = document.getElementById('gp-active-title');
+      const ramEl = document.getElementById('gp-active-ram-badge');
+      if (titleEl) titleEl.textContent = tmpl.title;
+      if (ramEl) ramEl.textContent = tmpl.ram_profile || (tmpl.uses_docker ? 'Docker Auto-Stop' : 'Zero-RAM');
+
+      const mapEl = document.getElementById('gp-steps-map');
+      if (mapEl) {
+        mapEl.innerHTML = `
+          <div class="text-[11px] text-slate-400 font-semibold">Mapa Visual das Etapas (${escapeHtml(tmpl.title)}):</div>
+          <div class="flex flex-wrap items-center gap-2">
+            ${(tmpl.steps || []).map((s, idx) => `
+              <div class="px-2.5 py-1.5 rounded-xl bg-white/[0.04] border border-white/10 text-[11px] font-semibold text-slate-200 flex items-center gap-1.5">
+                <span class="px-1.5 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 font-mono">Etapa ${idx + 1}</span>
+                <span>${escapeHtml(s.name)}</span>
+              </div>
+              ${idx < tmpl.steps.length - 1 ? '<span class="text-emerald-400 font-bold">→</span>' : ''}
+            `).join('')}
+          </div>
+        `;
+      }
+      renderGuidedStepperInitial(tmpl);
+    }
+
+    function renderGuidedStepperInitial(tmpl) {
+      if (guidedLastState && guidedLastState.template_id === tmpl.id && guidedLastState.status === 'running') return;
+      const listEl = document.getElementById('gp-stepper-list');
+      if (!listEl) return;
+      listEl.innerHTML = (tmpl.steps || []).map((s, idx) => `
+        <div class="p-2.5 rounded-xl bg-[#070a08] border border-white/10 flex items-center justify-between gap-2">
+          <div class="min-w-0">
+            <div class="font-bold text-slate-200 truncate">Etapa ${idx + 1}: ${escapeHtml(s.name)}</div>
+            <div class="text-[11px] text-slate-500">${s.docker_stack ? `Stack ${s.docker_stack} (liga & desliga automático)` : 'Execução nativa Zero-RAM'}</div>
+          </div>
+          <span class="px-2 py-0.5 rounded-full text-[10px] font-mono bg-white/5 text-slate-400 shrink-0">Pendente</span>
+        </div>
+      `).join('');
+    }
+
+    function _renderCampaignPreviewBox(cid, boxId) {
+      const box = document.getElementById(boxId);
+      if (!box) return;
+      const camp = (campaignsData || []).find(c => c.id === cid);
+      if (!camp) {
+        box.classList.add('hidden');
+        box.innerHTML = '';
+        return;
+      }
+      const activeAssets = (camp.assets || []).filter(a => !a.excluded);
+      box.classList.remove('hidden');
+      box.innerHTML = activeAssets.map(a => `
+        <div class="relative w-12 h-12 rounded-lg overflow-hidden border border-amber-400/40" title="${escapeHtml((a.role && a.role.scene) || a.filename)}">
+          <img src="${escapeHtml(a.preview_url)}" class="w-full h-full object-cover" alt="" />
+        </div>
+      `).join('') + (camp.excluded_count ? `<span class="self-center text-[10px] text-amber-300 ml-1">+${camp.excluded_count} filtrada(s)</span>` : '');
+    }
+
+    function onGuidedCampaignChange() {
+      const cid = document.getElementById('gp-campaign')?.value || '';
+      gpUploadedImagePaths = [];
+      _renderCampaignPreviewBox(cid, 'gp-campaign-preview');
+      const camp = (campaignsData || []).find(c => c.id === cid);
+      if (camp) {
+        const tEl = document.getElementById('gp-title');
+        const oEl = document.getElementById('gp-offer');
+        const vCnt = document.getElementById('gp-viral-count');
+        const bpCard = document.getElementById('gp-viral-blueprint-card');
+        if (tEl && !tEl.value.trim()) tEl.value = camp.name || cid;
+        if (oEl && !oEl.value.trim() && camp.pricing?.kit_price) oEl.value = camp.pricing.kit_price;
+        if (vCnt) vCnt.textContent = `${camp.viral_videos_count || 0} vídeo(s)`;
+        if (bpCard && camp.viral_blueprint) {
+          _showViralBlueprintCard(camp.viral_blueprint);
+        } else if (bpCard) {
+          bpCard.classList.add('hidden');
+        }
+      }
+    }
+
+    function _showViralBlueprintCard(bp) {
+      const card = document.getElementById('gp-viral-blueprint-card');
+      const scriptEl = document.getElementById('gp-script');
+      const durEl = document.getElementById('gp-duration');
+      if (card) {
+        card.classList.remove('hidden');
+        card.innerHTML = `
+          <div><strong class="text-fuchsia-300">Hook 0–3s:</strong> ${escapeHtml(bp.hook_0_3s || '-')}</div>
+          <div><strong class="text-cyan-300">Cadência:</strong> ${escapeHtml(String(bp.pacing_seconds || '-'))}s/cena · <strong>Ritmo:</strong> ${escapeHtml(String(bp.wpm || '-'))} WPM · <strong>IA:</strong> ${escapeHtml(bp.cascade_model || 'cascade')}</div>
+          ${bp.objection_breaker ? `<div><strong class="text-emerald-300">Objeção:</strong> ${escapeHtml(bp.objection_breaker)}</div>` : ''}
+        `;
+      }
+      if (scriptEl && bp.recommended_script) scriptEl.value = bp.recommended_script;
+      if (durEl && bp.recommended_duration) durEl.value = String(bp.recommended_duration);
+    }
+
+    async function uploadGuidedPhotos(event) {
+      const files = Array.from(event.target?.files || []);
+      if (!files.length) return;
+      const fd = new FormData();
+      files.forEach(f => fd.append('files', f));
+      try {
+        const res = await fetch('/api/quick/hyperframes/upload', { method: 'POST', body: fd });
+        const data = await res.json();
+        if (!res.ok || !data.ok) throw new Error(data.detail || 'Falha no upload');
+        gpUploadedImagePaths = data.image_paths || [];
+        await fetchCampaigns();
+        const sel = document.getElementById('gp-campaign');
+        if (sel && data.campaign) {
+          sel.value = data.campaign;
+          onGuidedCampaignChange();
+        }
+        showToast(data.message || 'Fotos enviadas!', 'success');
+      } catch (e) {
+        showToast(`Erro no upload de fotos: ${e.message}`, 'error');
+      }
+    }
+
+    async function uploadGuidedVirals(event) {
+      const files = Array.from(event.target?.files || []);
+      if (!files.length) return;
+      const cid = (document.getElementById('gp-campaign')?.value || 'elseve-kit2').trim();
+      const fd = new FormData();
+      files.forEach(f => fd.append('files', f));
+      const cntEl = document.getElementById('gp-viral-count');
+      if (cntEl) cntEl.textContent = 'Enviando...';
+      try {
+        const res = await fetch(`/api/campaigns/${encodeURIComponent(cid)}/upload-virals`, { method: 'POST', body: fd });
+        const data = await res.json();
+        if (!res.ok || !data.ok) throw new Error(data.detail || 'Falha no upload viral');
+        if (cntEl) cntEl.textContent = `${data.count} vídeo(s) salvo(s)`;
+        showToast(data.message || 'Referências virais enviadas!', 'success');
+        await fetchCampaigns();
+      } catch (e) {
+        if (cntEl) cntEl.textContent = 'Erro no upload';
+        showToast(`Erro upload virais: ${e.message}`, 'error');
+      }
+    }
+
+    async function analyzeGuidedVirals() {
+      const btn = document.getElementById('btn-gp-analyze-virals');
+      const cid = (document.getElementById('gp-campaign')?.value || 'elseve-kit2').trim();
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Analisando DNA...';
+      }
+      try {
+        const res = await fetch(`/api/campaigns/${encodeURIComponent(cid)}/analyze-virals`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            product_title: document.getElementById('gp-title')?.value || '',
+            product_price: document.getElementById('gp-offer')?.value || '',
+            product_description: document.getElementById('gp-desc')?.value || '',
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) throw new Error(data.detail || 'Falha na análise viral');
+        const bp = data.viral_blueprint || data;
+        _showViralBlueprintCard(bp);
+        showToast('DNA Viral extraído e roteiro preenchido!', 'success');
+      } catch (e) {
+        showToast(`Erro na análise viral: ${e.message}`, 'error');
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = '🔍 Analisar DNA Viral';
+        }
+      }
+    }
+
+    async function uploadHardHyperFramesVirals(event) {
+      const files = Array.from(event.target?.files || []);
+      if (!files.length) return;
+      const cid = (document.getElementById('qhf-campaign')?.value || 'elseve-kit2').trim();
+      const fd = new FormData();
+      files.forEach(f => fd.append('files', f));
+      const st = document.getElementById('qhf-viral-status');
+      if (st) st.textContent = 'Enviando...';
+      try {
+        const res = await fetch(`/api/campaigns/${encodeURIComponent(cid)}/upload-virals`, { method: 'POST', body: fd });
+        const data = await res.json();
+        if (!res.ok || !data.ok) throw new Error(data.detail || 'Falha upload');
+        if (st) st.textContent = `${data.count} viral(is) em ${cid}`;
+        showToast(data.message || 'Virais salvos!', 'success');
+      } catch (e) {
+        if (st) st.textContent = 'Erro upload';
+        showToast(`Erro upload virais (Modo Hard): ${e.message}`, 'error');
+      }
+    }
+
+    async function analyzeHardHyperFramesVirals() {
+      const btn = document.getElementById('btn-qhf-analyze-virals');
+      const st = document.getElementById('qhf-viral-status');
+      const cid = (document.getElementById('qhf-campaign')?.value || 'elseve-kit2').trim();
+      if (btn) { btn.disabled = true; btn.textContent = 'Analisando...'; }
+      try {
+        const res = await fetch('/api/quick/hyperframes/analyze-virals', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            campaign_id: cid,
+            product_title: document.getElementById('qhf-title')?.value || '',
+            product_price: document.getElementById('qhf-offer')?.value || '',
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) throw new Error(data.detail || 'Falha na análise');
+        const bp = data.viral_blueprint || data;
+        const sc = document.getElementById('qhf-voice-script');
+        if (sc && bp.recommended_script) sc.value = bp.recommended_script;
+        if (st) st.textContent = `${bp.wpm || '-'} WPM · Script OK`;
+        showToast('Roteiro preenchido a partir dos Vídeos Virais!', 'success');
+      } catch (e) {
+        showToast(`Erro na análise: ${e.message}`, 'error');
+      } finally {
+        if (btn) { btn.disabled = false; btn.textContent = '🔍 Analisar Virais'; }
+      }
+    }
+
+    function _collectGuidedParams() {
+      if (guidedTemplateId === 'shopee_viral_clone') {
+        const cid = document.getElementById('gp-campaign')?.value || 'elseve-kit2';
+        return {
+          campaign_id: cid,
+          title: document.getElementById('gp-title')?.value || '',
+          offer: document.getElementById('gp-offer')?.value || '',
+          extra_price_note: document.getElementById('gp-desc')?.value || '',
+          product_description: document.getElementById('gp-desc')?.value || '',
+          voice_name: document.getElementById('gp-voice-name')?.value || 'pt-BR-FranciscaNeural',
+          duration: parseFloat(document.getElementById('gp-duration')?.value || '18'),
+          voice_script: (document.getElementById('gp-script')?.value || '').trim(),
+          image_paths: gpUploadedImagePaths,
+        };
+      }
+      if (guidedTemplateId === 'novela_shorts_polish') {
+        return {
+          source_url: document.getElementById('gp-novela-source')?.value || 'sample',
+          cut_mode: document.getElementById('gp-novela-cutmode')?.value || 'novela',
+          part_count: parseInt(document.getElementById('gp-novela-parts')?.value || '3', 10),
+          grade_preset: document.getElementById('gp-novela-grade')?.value || 'Cinema Warm',
+        };
+      }
+      if (guidedTemplateId === 'dark_channel_full') {
+        return {
+          video_subject: document.getElementById('gp-dark-subject')?.value || 'Curiosidades Virais',
+          broll_style: document.getElementById('gp-dark-broll')?.value || 'cinema_dark',
+          voice_name: document.getElementById('gp-dark-voice')?.value || 'pt-BR-AntonioNeural-Male',
+          video_source: document.getElementById('gp-dark-source')?.value || 'local',
+          video_script: document.getElementById('gp-dark-script')?.value || '',
+        };
+      }
+      if (guidedTemplateId === 'pov_cinema_ad') {
+        return {
+          campaign_id: document.getElementById('gp-pov-campaign')?.value || 'elseve-kit2',
+          title: document.getElementById('gp-pov-title')?.value || '',
+          offer: document.getElementById('gp-pov-offer')?.value || '',
+        };
+      }
+      return {
+        output_id: document.getElementById('gp-exp-source')?.value || '',
+        grade_preset: document.getElementById('gp-exp-grade')?.value || 'E-Commerce Vibrant',
+        language: document.getElementById('gp-exp-lang')?.value || 'pt',
+        remove_silences: Boolean(document.getElementById('gp-exp-silence')?.checked),
+        burn_subtitles: Boolean(document.getElementById('gp-exp-subtitles')?.checked),
+      };
+    }
+
+    async function submitGuidedPipeline(e) {
+      e.preventDefault();
+      if (guidedPollTimer) clearTimeout(guidedPollTimer);
+      const btn = document.getElementById('btn-gp-run');
+      const resBox = document.getElementById('gp-result-box');
+      if (resBox) resBox.classList.add('hidden');
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> Executando Trilha Guiada...`;
+        safeCreateIcons();
+      }
+      try {
+        const res = await fetch('/api/pipelines/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            template_id: guidedTemplateId,
+            platform_preset: guidedPlatform,
+            params: _collectGuidedParams(),
+            wait: false,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) throw new Error(data.detail || data.message || 'Falha ao iniciar trilha');
+        guidedActiveRunId = data.run_id;
+        renderGuidedMonitorState(data);
+        showToast('Trilha Guiada iniciada com checkpoints e gestão de RAM!', 'success');
+        pollGuidedPipeline(data.run_id);
+      } catch (err) {
+        showToast(`Erro ao iniciar trilha: ${err.message}`, 'error');
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = `<span>🚀 Executar Trilha Completa</span>`;
+        }
+      }
+    }
+
+    async function pollGuidedPipeline(runId) {
+      try {
+        const res = await fetch(`/api/pipelines/status/${encodeURIComponent(runId)}`);
+        if (res.ok) {
+          const st = await res.json();
+          renderGuidedMonitorState(st);
+          if (st.ready || st.failed) {
+            const btn = document.getElementById('btn-gp-run');
+            if (btn) {
+              btn.disabled = false;
+              btn.innerHTML = `<span>🚀 Executar Trilha Completa</span>`;
+            }
+            if (st.ready) {
+              fetchOutputs();
+              showToast('Trilha Guiada concluída e salva na Galeria!', 'success');
+            }
+            return;
+          }
+        }
+      } catch (e) {}
+      guidedPollTimer = setTimeout(() => pollGuidedPipeline(runId), 2200);
+    }
+
+    async function resumeLastGuidedPipeline() {
+      if (!guidedActiveRunId) return;
+      try {
+        const res = await fetch(`/api/pipelines/resume/${encodeURIComponent(guidedActiveRunId)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ wait: false }),
+        });
+        const st = await res.json();
+        if (!res.ok) throw new Error(st.detail || 'Falha ao retomar');
+        renderGuidedMonitorState(st);
+        pollGuidedPipeline(guidedActiveRunId);
+      } catch (e) {
+        showToast(`Erro ao retomar trilha: ${e.message}`, 'error');
+      }
+    }
+
+    function renderGuidedMonitorState(st) {
+      guidedLastState = st;
+      const runLbl = document.getElementById('gp-run-id-label');
+      const pctEl = document.getElementById('gp-progress-pct');
+      const barEl = document.getElementById('gp-progress-bar');
+      const titleEl = document.getElementById('gp-status-title');
+      const ramEl = document.getElementById('gp-ram-badge');
+      const listEl = document.getElementById('gp-stepper-list');
+      const resBox = document.getElementById('gp-result-box');
+      const vidEl = document.getElementById('gp-preview-video');
+      const dlEl = document.getElementById('gp-download-link');
+      const resBtn = document.getElementById('btn-gp-resume');
+
+      if (runLbl) runLbl.textContent = `run_id: ${st.run_id || '—'}`;
+      const p = Math.max(0, Math.min(100, Number(st.progress || 0)));
+      if (pctEl) pctEl.textContent = `${p}%`;
+      if (barEl) barEl.style.width = `${p}%`;
+      if (titleEl) titleEl.textContent = st.message || st.status || '';
+      if (ramEl) {
+        const ramFree = st.ram_free_gb !== undefined ? `RAM Livre ${st.ram_free_gb} GB · ` : '';
+        ramEl.textContent = `${ramFree}${st.active_containers || 0}/7 Dockers`;
+      }
+      if (resBtn) resBtn.classList.toggle('hidden', !st.can_resume);
+
+      if (listEl && Array.isArray(st.steps)) {
+        listEl.innerHTML = st.steps.map((s, idx) => {
+          const badge = s.status === 'completed'
+            ? '<span class="px-2 py-0.5 rounded-full text-[10px] font-mono bg-emerald-500/20 text-emerald-300">Concluída ✓</span>'
+            : (s.status === 'running'
+              ? '<span class="px-2 py-0.5 rounded-full text-[10px] font-mono bg-cyan-500/20 text-cyan-300">Rodando...</span>'
+              : (s.status === 'error'
+                ? '<span class="px-2 py-0.5 rounded-full text-[10px] font-mono bg-rose-500/20 text-rose-300">Erro</span>'
+                : '<span class="px-2 py-0.5 rounded-full text-[10px] font-mono bg-white/5 text-slate-400">Pendente</span>'));
+          return `
+            <div class="p-2.5 rounded-xl bg-[#070a08] border border-white/10 flex items-center justify-between gap-2">
+              <div class="min-w-0">
+                <div class="font-bold text-slate-200 truncate">Etapa ${idx + 1}: ${escapeHtml(s.name)}</div>
+                <div class="text-[11px] text-slate-400 break-words">${escapeHtml(s.message || '')}</div>
+              </div>
+              <div class="shrink-0">${badge}</div>
+            </div>
+          `;
+        }).join('');
+      }
+
+      if (st.ready && st.final_output && resBox) {
+        resBox.classList.remove('hidden');
+        if (vidEl && st.final_output.preview_url) vidEl.src = st.final_output.preview_url;
+        if (dlEl && st.final_output.download_url) {
+          dlEl.href = st.final_output.download_url;
+          dlEl.setAttribute('download', st.final_output.filename || 'studio_output.mp4');
+        }
+      }
+    }
+
+    function openGuidedResultInHardMode() {
+      const fo = guidedLastState && guidedLastState.final_output ? guidedLastState.final_output : null;
+      const hm = (fo && fo.hard_mode_payload) ? fo.hard_mode_payload : {};
+      const engine = (fo && fo.hard_mode_engine) || 'hyperframes';
+
+      setQuickStudioMode('hard');
+
+      if (engine === 'hyperframes') {
+        if (hm.title && document.getElementById('qhf-title')) document.getElementById('qhf-title').value = hm.title;
+        if (hm.offer !== undefined && document.getElementById('qhf-offer')) document.getElementById('qhf-offer').value = hm.offer;
+        if (hm.campaign && document.getElementById('qhf-campaign')) {
+          document.getElementById('qhf-campaign').value = hm.campaign;
+          renderHyperFramesCampaignPreview();
+        }
+        if (hm.style && document.getElementById('qhf-style')) document.getElementById('qhf-style').value = hm.style;
+        if (hm.aspect && document.getElementById('qhf-aspect')) document.getElementById('qhf-aspect').value = hm.aspect;
+        if (hm.voice_name && document.getElementById('qhf-voice-name')) document.getElementById('qhf-voice-name').value = hm.voice_name;
+        if (hm.voice_script && document.getElementById('qhf-voice-script')) document.getElementById('qhf-voice-script').value = hm.voice_script;
+        document.getElementById('qhf-title')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      } else if (engine === 'videouse') {
+        if (hm.grade_preset && document.getElementById('qvu-grade')) document.getElementById('qvu-grade').value = hm.grade_preset;
+        if (hm.output_id && document.getElementById('qvu-source-select')) document.getElementById('qvu-source-select').value = hm.output_id;
+        document.getElementById('btn-qvu-submit')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      } else if (engine === 'moneyprinter') {
+        if (hm.video_subject && document.getElementById('qm-subject')) document.getElementById('qm-subject').value = hm.video_subject;
+        if (hm.video_script && document.getElementById('qm-script')) document.getElementById('qm-script').value = hm.video_script;
+        document.getElementById('btn-qm-submit')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+      showToast('Parâmetros transferidos para o Modo Hard! Ajuste e re-renderize quando quiser.', 'success');
+    }
 
     async function fetchCampaigns() {
       try {
@@ -3819,14 +4728,27 @@
         if (!res.ok) return;
         const data = await res.json();
         campaignsData = data.campaigns || [];
-        const sel = document.getElementById('qhf-campaign');
-        if (!sel) return;
-        const cur = sel.value;
-        sel.innerHTML = `<option value="">Sem fotos (Motion Tipográfico Puro)</option>` + campaignsData.map(c =>
+
+        const campOpts = campaignsData.map(c =>
           `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)} (${c.curated_count} fotos curadas${c.excluded_count ? `, ${c.excluded_count} filtradas` : ''})</option>`
         ).join('');
-        if (cur && campaignsData.some(c => c.id === cur)) sel.value = cur;
-        renderHyperFramesCampaignPreview();
+
+        const sel = document.getElementById('qhf-campaign');
+        if (sel) {
+          const cur = sel.value;
+          sel.innerHTML = `<option value="">Sem fotos (Motion Tipográfico Puro)</option>` + campOpts;
+          if (cur && campaignsData.some(c => c.id === cur)) sel.value = cur;
+          renderHyperFramesCampaignPreview();
+        }
+
+        ['gp-campaign', 'gp-pov-campaign'].forEach(gid => {
+          const gsel = document.getElementById(gid);
+          if (!gsel) return;
+          const prev = gsel.value;
+          gsel.innerHTML = campOpts || `<option value="elseve-kit2">elseve-kit2</option>`;
+          if (prev && campaignsData.some(c => c.id === prev)) gsel.value = prev;
+        });
+        onGuidedCampaignChange();
       } catch (e) {
         console.error('Campaigns fetch error:', e);
       }
@@ -3834,23 +4756,9 @@
 
     function renderHyperFramesCampaignPreview() {
       const sel = document.getElementById('qhf-campaign');
-      const box = document.getElementById('qhf-campaign-preview');
-      if (!sel || !box) return;
-      const cid = sel.value;
-      const camp = (campaignsData || []).find(c => c.id === cid);
-      if (!camp) {
-        box.classList.add('hidden');
-        box.innerHTML = '';
-        return;
-      }
+      if (!sel) return;
       qhfUploadedImagePaths = [];
-      const activeAssets = (camp.assets || []).filter(a => !a.excluded);
-      box.classList.remove('hidden');
-      box.innerHTML = activeAssets.map(a => `
-        <div class="relative w-12 h-12 rounded-lg overflow-hidden border border-amber-400/40" title="${escapeHtml((a.role && a.role.scene) || a.filename)}">
-          <img src="${escapeHtml(a.preview_url)}" class="w-full h-full object-cover" alt="" />
-        </div>
-      `).join('') + (camp.excluded_count ? `<span class="self-center text-[10px] text-amber-300 ml-1">+${camp.excluded_count} filtrada(s) (Anti-Confusão)</span>` : '');
+      _renderCampaignPreviewBox(sel.value, 'qhf-campaign-preview');
     }
 
     async function uploadQuickHyperFramesPhotos(event) {
@@ -3885,7 +4793,8 @@
         loadKeys(),
         fetchCascadeStatus(),
         fetchOutputs(),
-        fetchCampaigns()
+        fetchCampaigns(),
+        fetchPipelineTemplates()
       ]);
     }
 
@@ -3910,6 +4819,10 @@
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('/sw.js').catch(() => {});
       }
+      renderGuidedTemplates();
+      setGuidedTemplate('shopee_viral_clone');
+      setGuidedPlatform('shopee_20_9');
+      setQuickStudioMode('guided');
       safeCreateIcons();
       refreshAll();
       setInterval(fetchTelemetry, 4000);
