@@ -122,17 +122,22 @@ CAST_REGISTRY: Dict[str, Dict[str, str]] = {
         "hair_color": "#cbd5e1",
         "prop": "glasses",
         "lock_3d": (
-            "cheerful expressive 65-year-old senior lady named Socorro wearing a bright yellow floral cotton apron "
-            "over a teal blouse, small pearl earrings, round tortoiseshell eyeglasses resting on her nose, "
-            "silver hair in a neat bun, playful animated eyebrows"
+            "cheerful expressive 65-year-old senior Brazilian lady named Socorro wearing a bright yellow floral cotton apron "
+            "over a teal blouse, small pearl earrings, thin-rimmed tortoiseshell eyeglasses resting on her nose, "
+            "silver hair in a neat bun, arms relaxed naturally down at her sides"
         ),
         "lock_tv": (
-            "charismatic 65-year-old Brazilian senior lady wearing a bright yellow floral apron over a teal blouse, "
-            "small pearl earrings, round tortoiseshell eyeglasses, silver hair tied in a neat bun, natural comedy poise"
+            "photorealistic 62-year-old Brazilian woman named Socorro wearing a tasteful teal linen blouse and yellow apron, "
+            "small pearl earrings, realistic thin eyeglasses, silver-streaked hair pinned back neatly, natural skin texture, "
+            "calm posture with arms resting naturally down"
         ),
         "veo_desc": (
-            "Dona Socorro, an expressive 60-year-old Northeastern Brazilian matriarch wearing a bright yellow floral cotton apron "
+            "Dona Socorro, an expressive 60-year-old Northeastern Brazilian matriarch wearing a yellow floral apron "
             "over a teal blouse, pearl earrings, round tortoiseshell glasses, silver hair in a neat bun"
+        ),
+        "veo_live": (
+            "a real 60-year-old Brazilian woman with expressive dark eyes, neat silver-streaked bun, thin eyeglasses, "
+            "wearing a crisp teal linen blouse"
         ),
     },
     "seu_bastiao": {
@@ -150,16 +155,18 @@ CAST_REGISTRY: Dict[str, Dict[str, str]] = {
         "prop": "straw_hat",
         "lock_3d": (
             "jovial 68-year-old countryside shopkeeper gentleman wearing a woven light straw brimmed hat, "
-            "open unbuttoned blue plaid shirt over a white tee, neat silver mustache, holding a small aluminum coffee cup, "
-            "wisecracking half-smile"
+            "open unbuttoned blue plaid shirt over a white tee, neat silver mustache, arms relaxed naturally down"
         ),
         "lock_tv": (
-            "humorous 68-year-old Brazilian countryside shopkeeper gentleman wearing a woven straw hat and open blue plaid "
-            "cotton shirt over a crisp white tee, neat silver mustache, holding a metal coffee cup, amused squinting eyes"
+            "photorealistic 65-year-old Brazilian gentleman wearing a well-ironed open blue plaid cotton shirt over a white tee, "
+            "neat trimmed silver mustache, natural tanned skin pores and realistic wrinkles, arms resting comfortably down"
         ),
         "veo_desc": (
             "Seu Bastião, a witty 65-year-old countryside shopkeeper wearing a woven straw hat and open blue plaid shirt "
-            "over a white cotton tee, neat silver mustache, holding a small aluminum coffee cup"
+            "over a white cotton tee, neat silver mustache"
+        ),
+        "veo_live": (
+            "a real 65-year-old Brazilian man with weathered warm face, trimmed silver mustache, wearing an open blue plaid linen shirt"
         ),
     },
     "enzo": {
@@ -176,16 +183,18 @@ CAST_REGISTRY: Dict[str, Dict[str, str]] = {
         "hair_color": "#1e293b",
         "prop": "phone_sunglasses",
         "lock_3d": (
-            "dramatic goofy 22-year-old city young man wearing a trendy oversized lavender hoodie, "
-            "dark sunglasses pushed up onto wavy dark hair, holding a smartphone tightly, wide comedic startled eyes"
+            "22-year-old Brazilian city young man wearing a trendy oversized lavender hoodie, "
+            "dark sunglasses pushed up onto wavy dark hair, arms resting calmly at his sides"
         ),
         "lock_tv": (
-            "expressive 22-year-old young Brazilian city guy wearing an oversized pastel purple sweatshirt with sunglasses "
-            "pushed up onto curly dark hair, holding a modern smartphone, bewildered comical facial expression"
+            "photorealistic 23-year-old young Brazilian urban man wearing a minimalist lavender casual crewneck sweater, "
+            "natural dark curly hair, clear skin pores, calm relaxed posture with arms resting naturally down"
         ),
         "veo_desc": (
-            "Enzo, a confused 22-year-old city nephew wearing an oversized lavender hoodie with sunglasses pushed up onto "
-            "dark curly hair, gripping his smartphone"
+            "Enzo, a 22-year-old Brazilian city guy wearing an oversized lavender hoodie with sunglasses pushed up onto dark curly hair"
+        ),
+        "veo_live": (
+            "a real 23-year-old Brazilian young man with curly dark hair in a clean lavender crewneck sweater"
         ),
     },
     "narrador": {
@@ -202,15 +211,16 @@ CAST_REGISTRY: Dict[str, Dict[str, str]] = {
         "hair_color": "#0f172a",
         "prop": "village_wide",
         "lock_3d": (
-            "sunny colorful village cobblestone street corner outside a cozy wooden rustic countryside grocery shop "
-            "in Northeast Brazil with festive hanging colorful triangular flags and clay roof tiles, golden light, no text"
+            "charming Brazilian character standing calmly outdoors with arms relaxed down, warm golden sunlight, no text"
         ),
         "lock_tv": (
-            "wide 35mm golden hour exterior establishing frame of a charming rustic cobblestone sidewalk corner shop in "
-            "Northeast Brazil with warm painted walls, terracotta tiles, wooden porch chairs, no text"
+            "photorealistic Brazilian bystander in golden hour natural sunlight, calm relaxed arms down posture, 85mm shallow depth of field, no text"
         ),
         "veo_desc": (
             "A lively village observer on the sunlit Northeastern Brazilian cobblestone corner sidewalk with bystanders watching"
+        ),
+        "veo_live": (
+            "a real Brazilian observer reacting on a sunlit urban cafe sidewalk with blurred passersby"
         ),
     },
 }
@@ -229,37 +239,58 @@ SPEAKER_ALIASES: Dict[str, str] = {
     "narradora": "narrador",
 }
 
+def normalize_visual_style(raw: str) -> str:
+    """Normalize visual style across v2.5/v2.8 names into 'cinematic_live_action' or 'stylized_3d_pixar'."""
+    val = (raw or "stylized_3d_pixar").strip().lower()
+    if val in ("cinematic_live_action", "cinematic_tv", "live_action", "realistic", "cinema_8k"):
+        return "cinematic_live_action"
+    return "stylized_3d_pixar"
+
+
+def normalize_dramatic_structure(raw: str) -> str:
+    """Normalize dramatic directing structure ('viral_4_cuts' or 'classic_3_cuts')."""
+    val = (raw or "viral_4_cuts").strip().lower()
+    if val in ("classic_3_cuts", "3_cuts", "classic"):
+        return "classic_3_cuts"
+    return "viral_4_cuts"
+
+
 EMOTION_DIRECTIONS: Dict[str, Tuple[str, str, str]] = {
-    # (flux_desc [neutral/ready-to-speak mouth for Lip-Sync & Veo], default_cam, veo_acting)
+    # (flux_desc [STRICTLY positive closed-lips & arms-down phrasing], default_cam, veo_acting)
     "shocked": (
-        "eyes wide open in comic astonishment, eyebrows raised high, expressive face with lips gently closed ready to speak, hands raised energetically",
+        "focused wide-eyed attentive gaze, subtly lifted eyebrows, firmly closed resting lips together, calm poised relaxed arms down",
         "shake",
-        "widens eyes in shock, throws both hands up energetically",
+        "widens eyes in shock and leans slightly forward with dynamic hand gesture",
     ),
     "confused": (
-        "head tilted, squinting suspiciously, eyebrows knotted in puzzlement, closed neutral lips ready to speak",
+        "slight skeptical head tilt, inquisitive raised brow, composed lips gently closed together, relaxed lowered shoulders",
         "zoom_in",
-        "blinks rapidly, tilts head sideways squinting in baffled city-kid panic",
+        "blinks twice and tilts head sideways in puzzled disbelief",
     ),
     "laughing": (
-        "warm amused eyes crinkling joyfully, relaxed closed-lip grin ready to speak, cheerful posture",
+        "crinkling warm eyes with confident knowing gaze, closed gentle relaxed lips, calm lowered arms",
         "whip_pan",
-        "bursts into hearty amused laughter with a teasing wink",
+        "chuckles warmly with a knowing smirk and expressive shoulder movement",
     ),
     "proud": (
-        "chest puffed out, wise amused closed-lip smirk ready to speak, wagging one finger playfully",
+        "poised upright posture, calm confident expression, lips gently closed together, relaxed arms at sides",
         "zoom_in",
-        "leans forward with a proud knowing smirk wagging one finger playfully",
+        "takes a calm breath, lifts chin with poise and delivers a sharp comeback",
     ),
     "dramatic": (
-        "hand over chest in comical telenovela dramatization, expressive eyes, relaxed closed lips ready to speak",
+        "intense focused eyes, subtle furrowed brow, composed lips gently closed together, relaxed natural arms down",
         "dramatic_push",
-        "puts hands on hips then dramatically gasps in pure soap-opera exaggeration",
+        "tightens expression dramatically before reacting",
+    ),
+    "shame": (
+        "humbled lowered gaze looking slightly downward, lips gently closed together in quiet embarrassment, relaxed lowered shoulders",
+        "dramatic_push",
+        "swallows hard silently, shoulders slump downward, brows knit in pure embarrassment with zero speech",
     ),
     "warm": (
-        "friendly welcoming smile with relaxed closed lips ready to speak, leaning forward mid-story",
+        "friendly attentive gaze, relaxed lips gently closed together, calm posture with arms down",
         "zoom_in",
-        "smiles warmly nodding animatedly mid-conversation",
+        "nods warmly and speaks with lively natural gestures",
     ),
 }
 
@@ -327,6 +358,9 @@ class TurnCompiled:
     voice_engine_used: str = "nordestino_raiz"
     animation_engine_used: str = ""
     lipsync_peak_open: float = 0.0
+    cut_role: str = "dialogue"
+    lead_in_pause: float = 0.0
+    is_silent_reaction: bool = False
 
 
 def _normalize_speaker_key(raw: str) -> str:
@@ -367,10 +401,98 @@ def _get_character_spec(speaker_raw: str) -> Tuple[str, Dict[str, str]]:
         "skin_tone": "#d6a07a",
         "hair_color": "#1e293b",
         "prop": "none",
-        "lock_3d": f"friendly expressive Brazilian countryside resident named {display} on a village sidewalk",
-        "lock_tv": f"charismatic Brazilian town character named {display} outdoors in golden afternoon sunlight",
-        "veo_desc": f"{display}, a spirited Brazilian countryside character outdoors in warm natural daylight",
+        "lock_3d": f"friendly expressive Brazilian character named {display}, calm arms resting down",
+        "lock_tv": f"photorealistic Brazilian human actor named {display}, natural skin texture, calm posture with arms down, 85mm cinema lens",
+        "veo_desc": f"{display}, a spirited Brazilian character outdoors in warm natural daylight",
+        "veo_live": f"{display}, a real charismatic Brazilian person in 8K live-action natural lighting",
     }
+
+
+def compile_dramatic_cuts(
+    raw_dialogue: List[Dict[str, Any]],
+    dramatic_structure: str = "viral_4_cuts",
+) -> List[Dict[str, Any]]:
+    """Structure raw turns into either 4 viral dramatic cuts (with 0.45s Cut-2 pause + Cut-4 Silent Shame Reaction) or classic dialogue."""
+    structure = normalize_dramatic_structure(dramatic_structure)
+    turns = [dict(t) for t in (raw_dialogue or []) if isinstance(t, dict)]
+    if not turns:
+        return []
+
+    if structure == "classic_3_cuts":
+        out = []
+        for idx, t in enumerate(turns):
+            if not str(t.get("tts_text") or t.get("subtitle_text") or t.get("text") or "").strip() and not bool(t.get("is_silent_reaction")):
+                continue
+            t.setdefault("cut_role", "dialogue")
+            t.setdefault("lead_in_pause", 0.0)
+            t.setdefault("is_silent_reaction", False)
+            out.append(t)
+        return out
+
+    # viral_4_cuts ("Quem Passou Vergonha"):
+    # Cut 1: Attack (Speaker A) -> Cut 2: 0.45s inhale pause + Comeback (Speaker B) -> Cut 3: Shock ("O quê?!") -> Cut 4: Silent Shame Reaction (Speaker A)
+    spoken = [t for t in turns if not bool(t.get("is_silent_reaction")) and str(t.get("tts_text") or t.get("subtitle_text") or t.get("text") or "").strip()]
+    silent_existing = next((t for t in turns if bool(t.get("is_silent_reaction"))), None)
+    if not spoken:
+        return turns
+
+    cut1 = dict(spoken[0])
+    cut1["cut_role"] = str(cut1.get("cut_role") or "attack_angry")
+    cut1["lead_in_pause"] = float(cut1.get("lead_in_pause") or 0.0)
+    cut1["is_silent_reaction"] = False
+    cut1.setdefault("shot_framing", "over_shoulder")
+
+    result = [cut1]
+    if len(spoken) >= 2:
+        cut2 = dict(spoken[1])
+        cut2["cut_role"] = str(cut2.get("cut_role") or "calm_inhale_comeback")
+        cut2["lead_in_pause"] = max(0.45, float(cut2.get("lead_in_pause") or 0.45))
+        cut2["is_silent_reaction"] = False
+        cut2.setdefault("shot_framing", "reverse_over_shoulder")
+        result.append(cut2)
+
+    if len(spoken) >= 3:
+        cut3 = dict(spoken[2])
+        cut3["cut_role"] = str(cut3.get("cut_role") or "shock_what")
+        cut3["lead_in_pause"] = 0.0
+        cut3["is_silent_reaction"] = False
+        cut3.setdefault("shot_framing", "reaction_closeup")
+        result.append(cut3)
+    elif len(spoken) == 2:
+        cut3 = {
+            "speaker": "Enzo" if _normalize_speaker_key(str(cut1.get("speaker") or "")) != "enzo" else "Seu Bastião",
+            "tts_text": "O quê?! Eita peste!",
+            "subtitle_text": "O quê?!",
+            "emotion": "shocked",
+            "shot_framing": "reaction_closeup",
+            "cut_role": "shock_what",
+            "lead_in_pause": 0.0,
+            "is_silent_reaction": False,
+        }
+        result.append(cut3)
+
+    # Cut 4: Always end with Silent Shame Reaction Shot back on Cut 1's attacker!
+    if silent_existing:
+        cut4 = dict(silent_existing)
+    else:
+        cut4 = {
+            "speaker": cut1.get("speaker") or "Dona Socorro",
+            "tts_text": "",
+            "subtitle_text": "",
+            "emotion": "shame",
+            "camera_action": "dramatic_push",
+            "shot_framing": "reaction_closeup",
+        }
+    cut4["cut_role"] = "silent_shame_reaction"
+    cut4["is_silent_reaction"] = True
+    cut4["tts_text"] = ""
+    cut4["subtitle_text"] = ""
+    cut4["lead_in_pause"] = 0.0
+    cut4["silent_duration"] = float(cut4.get("silent_duration") or 2.0)
+    cut4["emotion"] = str(cut4.get("emotion") or "shame")
+    cut4["shot_framing"] = "reaction_closeup"
+    result.append(cut4)
+    return result
 
 
 def _assign_shot_framing(
@@ -545,7 +667,7 @@ def _call_nvidia_flux_image(
         method="POST",
     )
     try:
-        with urllib.request.urlopen(req, timeout=75) as resp:
+        with urllib.request.urlopen(req, timeout=95) as resp:
             data = json.loads(resp.read().decode("utf-8"))
         arts = data.get("artifacts") or []
         if not arts:
@@ -682,14 +804,17 @@ def _resolve_turn_visual(
     assets_dir: Path,
     turn_idx: int,
     env_map: Dict[str, str],
-    shot_cache: Dict[Tuple[str, str, str, str], Tuple[Path, str]],
+    shot_cache: Dict[Tuple[Any, ...], Tuple[Path, str]],
     target_filename: Optional[str] = None,
     force_jpg: bool = False,
-) -> Tuple[Path, str, str]:
-    """Generate/resolve a clean 1080x1920 Shot-Reverse-Shot portrait image for one turn."""
-    is_3d = visual_style == "3d_cartoon"
-    emo_bucket = "shocked" if emotion in ("shocked", "confused", "dramatic") else "warm"
-    cache_key = (speaker_key, emo_bucket, visual_style, shot_framing)
+    is_silent_reaction: bool = False,
+) -> Tuple[Path, str, str, str]:
+    """Generate/resolve a clean 1080x1920 closed-mouth, calm-arms portrait image for one turn."""
+    style_norm = normalize_visual_style(visual_style)
+    is_3d = style_norm == "stylized_3d_pixar"
+    emo_bucket = "shame" if is_silent_reaction else ("shocked" if emotion in ("shocked", "confused", "dramatic") else "warm")
+    # Versioned v28_closed_mouth cache key guarantees old open-mouth/raised-arms assets are never reused
+    cache_key = ("v28_closed_v2", speaker_key, emo_bucket, style_norm, shot_framing)
 
     base_name = target_filename or f"shot_{turn_idx}.jpg"
     if cache_key in shot_cache:
@@ -700,22 +825,25 @@ def _resolve_turn_visual(
             _svg_to_clean_jpg(src_path, dst)
         else:
             shutil.copy2(src_path, dst)
-        return dst, f"assets/{dst.name}", prov
+        return dst, f"assets/{dst.name}", prov, ""
 
     style_prefix = (
-        "Stylized 3D animated CG feature-film frame, sculpted stylized characters, expressive comedy cartoon eyes, "
-        "soft warm subsurface scattering rim light, rich saturated colors, no text, no subtitles, no watermark"
+        "Stylized 3D animated CG comedy film shot, theatrical feature CGI animation quality, sculpted expressive character lighting, rich warm colors, clean frame"
         if is_3d
-        else "Cinematic 35mm live-action Brazilian television telenovela still frame, realistic expressive acting, "
-             "shallow depth of field f/1.8 bokeh, golden hour natural sunlight, rich color grading, no text, no subtitles, no watermark"
+        else "Photorealistic live-action 8K cinema shot, cinema camera 85mm f/1.8 lens, shallow depth of field, "
+             "natural lighting, Brazilian television drama cinematography, clean frame"
     )
     char_lock = spec["lock_3d"] if is_3d else spec["lock_tv"]
-    emo_desc, _, _ = EMOTION_DIRECTIONS.get(emotion, EMOTION_DIRECTIONS["warm"])
+    emo_key = "shame" if is_silent_reaction else emotion
+    emo_desc, _, _ = EMOTION_DIRECTIONS.get(emo_key, EMOTION_DIRECTIONS["warm"])
     framing_meta = SHOT_FRAMINGS.get(shot_framing, SHOT_FRAMINGS["over_shoulder"])
-    action_clause = f", {physical_action_en}" if physical_action_en else ""
+    closed_mouth_mandate = (
+        "composed neutral expression with lips gently closed together ready for dubbing, "
+        "calm relaxed lowered shoulders and hands resting naturally down at sides"
+    )
     prompt = (
         f"{style_prefix}. {framing_meta['flux_cue'].format(speaker_en=spec['label'])}. "
-        f"{char_lock}, {emo_desc}{action_clause}. Natural expressive face, ready to speak with calm neutral closed lips (no frozen screaming open mouth). "
+        f"{char_lock}, {emo_desc}, {closed_mouth_mandate}. "
         f"Background setting: {setting}, vertical 9:16 portrait composition."
     )
 
@@ -724,28 +852,35 @@ def _resolve_turn_visual(
     ok, prov = _call_nvidia_flux_image(prompt, nv_key, out_jpg, "black-forest-labs/flux.1-dev")
     if not ok and prov == "content_filtered":
         safe_prompt = (
-            f"{style_prefix}. Over-the-shoulder vertical 9:16 cinema shot of cheerful Brazilian comedian character wearing "
-            f"{spec.get('shirt_color', 'colorful')} outfit, {emo_desc}, sunny village corner shop street background."
+            f"{style_prefix}. Over-the-shoulder vertical 9:16 portrait of expressive Brazilian character in "
+            f"{spec.get('shirt_color', 'colorful')} attire, {closed_mouth_mandate}, sunny countryside plaza."
         )
         ok, prov = _call_nvidia_flux_image(safe_prompt, nv_key, out_jpg, "black-forest-labs/flux.1-dev")
+    if not ok:
+        retry_prompt = (
+            f"{style_prefix}. Vertical 9:16 portrait of {char_lock}, {closed_mouth_mandate}, {setting}."
+            if prov != "content_filtered"
+            else f"{style_prefix}. Vertical 9:16 portrait of friendly Brazilian character, {closed_mouth_mandate}, sunny plaza."
+        )
+        ok, prov = _call_nvidia_flux_image(retry_prompt, nv_key, out_jpg, "black-forest-labs/flux.1-schnell")
 
     if ok and out_jpg.exists():
         shot_cache[cache_key] = (out_jpg, f"nvidia:{prov}")
-        return out_jpg, f"assets/{out_jpg.name}", f"nvidia:{prov}"
+        return out_jpg, f"assets/{out_jpg.name}", f"nvidia:{prov}", prompt
 
     # Deterministic clean vector artwork fallback
     out_svg = assets_dir / Path(base_name).with_suffix(".svg").name
-    _build_bespoke_svg_portrait(speaker_key, spec, visual_style, emotion, shot_framing, out_svg, clean_no_text=True)
+    _build_bespoke_svg_portrait(speaker_key, spec, "3d_cartoon" if is_3d else "cinematic_tv", emo_key, shot_framing, out_svg, clean_no_text=True)
     if force_jpg:
         try:
             _svg_to_clean_jpg(out_svg, out_jpg)
             out_svg.unlink(missing_ok=True)
             shot_cache[cache_key] = (out_jpg, f"svg_jpg_fallback:{prov}")
-            return out_jpg, f"assets/{out_jpg.name}", f"svg_jpg_fallback:{prov}"
+            return out_jpg, f"assets/{out_jpg.name}", f"svg_jpg_fallback:{prov}", prompt
         except Exception:
             pass
     shot_cache[cache_key] = (out_svg, f"svg_fallback:{prov}")
-    return out_svg, f"assets/{out_svg.name}", f"svg_fallback:{prov}"
+    return out_svg, f"assets/{out_svg.name}", f"svg_fallback:{prov}", prompt
 
 
 def build_veo_take_prompt(
@@ -756,67 +891,101 @@ def build_veo_take_prompt(
     emotion: str,
     physical_action_en: str,
     setting: str,
+    cut_role: str = "dialogue",
+    lead_in_pause: float = 0.0,
+    is_silent_reaction: bool = False,
 ) -> str:
-    """Compose bilingual Veo 3.1 technical camera + acting prompt with exact Portuguese line."""
-    is_3d = visual_style == "3d_cartoon"
+    """Compose second-by-second bilingual Veo 3.1 technical camera + acting prompt with exact Portuguese line or Silent Reaction."""
+    style_norm = normalize_visual_style(visual_style)
+    is_3d = style_norm == "stylized_3d_pixar"
     style_desc = (
-        "Stylized 3D animated CG comedy film shot, sculpted expressive character lighting, rich colors"
+        "Stylized 3D animated CG comedy film shot, theatrical 3D CGI animated feature comedy quality, sculpted expressive character lighting, rich colors"
         if is_3d
-        else "Cinematic 35mm live-action Brazilian telenovela shot, natural golden-hour daylight"
+        else "Photorealistic live-action 8K cinema shot, ARRI Alexa Mini LF 85mm f/1.8 lens, shallow depth of field, "
+             "natural skin pores and realistic lighting, dramatic Brazilian television drama cinematography, real human actors"
     )
     framing_cue = SHOT_FRAMINGS.get(shot_framing, SHOT_FRAMINGS["over_shoulder"])["veo_cue"]
-    _, _, default_acting = EMOTION_DIRECTIONS.get(emotion, EMOTION_DIRECTIONS["warm"])
+    emo_key = "shame" if is_silent_reaction else emotion
+    _, _, default_acting = EMOTION_DIRECTIONS.get(emo_key, EMOTION_DIRECTIONS["warm"])
     acting_en = (physical_action_en or "").strip() or default_acting
-    veo_char = speaker_spec.get("veo_desc") or speaker_spec.get("lock_tv") or speaker_spec["label"]
+    veo_char = (
+        speaker_spec.get("veo_desc")
+        if is_3d
+        else (speaker_spec.get("veo_live") or speaker_spec.get("lock_tv") or speaker_spec["label"])
+    )
+
+    if is_silent_reaction or cut_role == "silent_shame_reaction":
+        return (
+            f"{style_desc}, set on {setting}. {framing_cue}. "
+            f"0.0s-0.8s: {veo_char} freezes in stunned disbelief, eyebrows knitting as realization hits. "
+            f"0.8s-2.0s: {acting_en}, swallows hard with lips tightly pressed closed, shoulders subtly dropping in quiet humiliation while out-of-focus bystanders react behind. "
+            f"STRICTLY NO spoken dialogue, silent reaction shot with natural subtle breathing and eye blink. "
+            f"No subtitles, no text overlay, no watermarks."
+        )
+
     clean_speech = rve.sanitize_northeast_slang(tts_text).replace('"', "'").strip()
+    if lead_in_pause >= 0.3 or cut_role == "calm_inhale_comeback":
+        timeline = (
+            f"0.0s-{lead_in_pause:.2f}s: {veo_char} closes eyes briefly, inhales deeply and raises chin calmly before responding. "
+            f"{lead_in_pause:.2f}s-4.0s: opens eyes sharp, {acting_en}, speaking in Brazilian Portuguese with an authentic, warm Northeastern Sertão accent "
+            f"(sotaque nordestino arretado, crisp energetic comeback cadence): \"{clean_speech}\" "
+        )
+    else:
+        timeline = (
+            f"0.0s-0.3s: {veo_char} transitions naturally from a relaxed closed-lip pose with quick subtle hand/shoulder emphasis. "
+            f"0.3s-3.5s: {acting_en}, speaking in Brazilian Portuguese with an authentic, warm Northeastern Sertão accent "
+            f"(sotaque nordestino arretado, fast energetic comedy cadence, open vowels, zero slow dragging): \"{clean_speech}\" "
+        )
+
     return (
-        f"{style_desc}, set on a {setting}. {framing_cue}. "
-        f"{veo_char}, {acting_en}, starting from a relaxed neutral ready-to-speak expression and breaking into lively speech, "
-        f"speaking in Brazilian Portuguese with an authentic, warm Northeastern Sertão accent "
-        f"(sotaque nordestino arretado, fast energetic comedy cadence, open vowels, zero slow dragging): "
-        f"\"{clean_speech}\" "
-        f"Natural subtle handheld camera motion, authentic facial lip-sync, eye blinking and expressive gestures. "
+        f"{style_desc}, set on {setting}. {framing_cue}. "
+        f"{timeline}"
+        f"Blurred background passersby move subtly in depth, natural handheld camera breathing, authentic facial lip-sync and eye blinking. "
         f"No subtitles, no text overlay, no watermarks, realistic lip-sync speech in Brazilian Portuguese."
     )
 
 
 def generate_flow_veo_pack(cfg: Dict[str, Any]) -> Dict[str, Any]:
-    """Generate Google Flow Veo 3.1 Production Pack (clean 1080x1920 Ingredients + bilingual prompts + credit math)."""
+    """Generate Google Flow Veo 3.1 Production Pack (closed-mouth 1080x1920 Ingredients + 4-Cut bilingual prompts)."""
     t_start = time.time()
-    visual_style = str(cfg.get("visual_style") or "3d_cartoon").strip().lower()
-    if visual_style not in ("3d_cartoon", "cinematic_tv"):
-        visual_style = "3d_cartoon"
+    visual_style = normalize_visual_style(str(cfg.get("visual_style") or "stylized_3d_pixar"))
+    dramatic_structure = normalize_dramatic_structure(str(cfg.get("dramatic_structure") or "viral_4_cuts"))
 
-    raw_dialogue: List[Dict[str, Any]] = list(cfg.get("dialogue") or [])
+    raw_dialogue = compile_dramatic_cuts(list(cfg.get("dialogue") or []), dramatic_structure=dramatic_structure)
     if not raw_dialogue:
         raise ValueError("Campo 'dialogue' vazio: informe ao menos 1 fala para gerar o Pack Veo 3.1.")
 
     title = str(cfg.get("title") or "Causos do Sertão — Episódio 01").strip()
-    setting = str(
-        cfg.get("setting")
-        or "sunny rustic cobblestone sidewalk outside a colorful small countryside corner shop in Northeast Brazil with festive flags and bystanders watching"
-    ).strip()
+    default_setting = (
+        "sunlit contemporary Brazilian urban cafe sidewalk with warm bokeh depth and soft passersby"
+        if visual_style == "cinematic_live_action"
+        else "sunny rustic cobblestone sidewalk outside a colorful small countryside corner shop in Northeast Brazil with festive flags and bystanders watching"
+    )
+    setting = str(cfg.get("setting") or default_setting).strip()
 
     pack_id = f"flow_{int(time.time())}_{uuid.uuid4().hex[:6]}"
     pack_dir = Path(cfg.get("pack_dir") or (FLOW_PACKS_DIR / pack_id))
     pack_dir.mkdir(parents=True, exist_ok=True)
 
     env_map = _load_secrets_env()
-    shot_cache: Dict[Tuple[str, str, str, str], Tuple[Path, str]] = {}
+    shot_cache: Dict[Tuple[Any, ...], Tuple[Path, str]] = {}
     takes: List[Dict[str, Any]] = []
     prev_speaker: Optional[str] = None
 
     for idx, raw_turn in enumerate(raw_dialogue):
         spk_raw = str(raw_turn.get("speaker") or "Narrador")
         spk_key, spec = _get_character_spec(spk_raw)
-        subtitle_text = rve.sanitize_northeast_slang(str(raw_turn.get("subtitle_text") or raw_turn.get("text") or "").strip())
-        tts_text = rve.sanitize_northeast_slang(str(raw_turn.get("tts_text") or subtitle_text).strip())
-        if not tts_text:
+        is_silent = bool(raw_turn.get("is_silent_reaction", False))
+        cut_role = str(raw_turn.get("cut_role") or ("silent_shame_reaction" if is_silent else "dialogue")).strip().lower()
+        lead_pause = float(raw_turn.get("lead_in_pause") or 0.0)
+        subtitle_text = "" if is_silent else rve.sanitize_northeast_slang(str(raw_turn.get("subtitle_text") or raw_turn.get("text") or "").strip())
+        tts_text = "" if is_silent else rve.sanitize_northeast_slang(str(raw_turn.get("tts_text") or subtitle_text).strip())
+        if not tts_text and not is_silent:
             continue
-        if not subtitle_text:
+        if not subtitle_text and not is_silent:
             subtitle_text = tts_text
 
-        emotion = str(raw_turn.get("emotion") or "warm").strip().lower()
+        emotion = "shame" if is_silent else str(raw_turn.get("emotion") or "warm").strip().lower()
         shot_framing = _assign_shot_framing(
             idx,
             str(raw_turn.get("shot_framing") or ""),
@@ -827,7 +996,7 @@ def generate_flow_veo_pack(cfg: Dict[str, Any]) -> Dict[str, Any]:
         physical_action_en = str(raw_turn.get("physical_action_en") or "").strip()
 
         ing_name = f"ingredient_take_{idx + 1:02d}.jpg"
-        ing_path, _, prov = _resolve_turn_visual(
+        ing_path, _, prov, img_prompt = _resolve_turn_visual(
             speaker_key=spk_key,
             spec=spec,
             emotion=emotion,
@@ -841,6 +1010,7 @@ def generate_flow_veo_pack(cfg: Dict[str, Any]) -> Dict[str, Any]:
             shot_cache=shot_cache,
             target_filename=ing_name,
             force_jpg=True,
+            is_silent_reaction=is_silent,
         )
 
         veo_prompt = build_veo_take_prompt(
@@ -851,9 +1021,12 @@ def generate_flow_veo_pack(cfg: Dict[str, Any]) -> Dict[str, Any]:
             emotion=emotion,
             physical_action_en=physical_action_en,
             setting=setting,
+            cut_role=cut_role,
+            lead_in_pause=lead_pause,
+            is_silent_reaction=is_silent,
         )
-        words_cnt = max(2, len(tts_text.split()))
-        est_sec = max(4, min(8, round(words_cnt / 2.3) + 2))
+        words_cnt = max(2, len(tts_text.split())) if not is_silent else 0
+        est_sec = max(2, min(4, round(float(raw_turn.get("silent_duration") or 2.0)))) if is_silent else max(3, min(7, round(words_cnt / 2.6 + lead_pause) + 1))
         framing_meta = SHOT_FRAMINGS[shot_framing]
 
         # Download relative path inside NOVELA_EXPORT_DIR (`exports/novela/...`)
@@ -866,6 +1039,9 @@ def generate_flow_veo_pack(cfg: Dict[str, Any]) -> Dict[str, Any]:
         q_rel = quote(rel_inside_novela, safe="")
         takes.append({
             "take_number": idx + 1,
+            "cut_role": cut_role,
+            "is_silent_reaction": is_silent,
+            "lead_in_pause": round(lead_pause, 2),
             "speaker": spec["label"],
             "speaker_key": spk_key,
             "badge_bg": spec["badge_bg"],
@@ -876,6 +1052,7 @@ def generate_flow_veo_pack(cfg: Dict[str, Any]) -> Dict[str, Any]:
             "estimated_duration_sec": est_sec,
             "tts_text": tts_text,
             "subtitle_text": subtitle_text,
+            "image_prompt": img_prompt,
             "veo_prompt": veo_prompt,
             "ingredient_filename": ing_path.name,
             "ingredient_path": str(ing_path),
@@ -897,7 +1074,9 @@ def generate_flow_veo_pack(cfg: Dict[str, Any]) -> Dict[str, Any]:
         "pack_id": pack_id,
         "title": title,
         "visual_style": visual_style,
+        "dramatic_structure": dramatic_structure,
         "setting": setting,
+        "prompt_rules": "v28_closed_mouth",
         "total_takes": num_takes,
         "credit_unit_lite": 10,
         "credit_unit_fast": 20,
@@ -907,7 +1086,9 @@ def generate_flow_veo_pack(cfg: Dict[str, Any]) -> Dict[str, Any]:
         "takes": takes,
         "elapsed_sec": round(time.time() - t_start, 2),
     }
-    (pack_dir / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+    manifest_json = json.dumps(manifest, ensure_ascii=False, indent=2)
+    (pack_dir / "manifest.json").write_text(manifest_json, encoding="utf-8")
+    (pack_dir / "flow_production_pack.json").write_text(manifest_json, encoding="utf-8")
     return manifest
 
 
@@ -1682,16 +1863,50 @@ def _call_colab_animate_take(
     return data
 
 
+def _synthesize_silent_ambient_wav(out_wav: Path, dur_sec: float = 2.0) -> float:
+    """Create subtle 48kHz Stereo room-tone/sigh ambient audio for Silent Reaction Shot."""
+    dur = max(0.3, float(dur_sec))
+    _run_checked([
+        FFMPEG_BIN, "-y", "-hide_banner", "-loglevel", "error",
+        "-f", "lavfi", "-t", f"{dur:.3f}", "-i", "anoisesrc=color=pink:amplitude=0.004:sample_rate=48000",
+        "-af", "highpass=f=120,lowpass=f=600,aresample=48000:resampler=soxr,aformat=sample_fmts=s16:channel_layouts=stereo",
+        "-ar", "48000", "-ac", "2", "-c:a", "pcm_s16le",
+        str(out_wav),
+    ], timeout=30)
+    return _probe_duration(out_wav)
+
+
+def _prepend_lead_silence_wav(src_wav: Path, lead_sec: float) -> float:
+    """Prepend clean subtle lead silence (e.g. 0.45s Cut-2 breath pause) preserving 48kHz Stereo SoXR."""
+    if lead_sec <= 0.02:
+        return _probe_duration(src_wav)
+    lead_wav = src_wav.with_suffix(".lead.wav")
+    merged_wav = src_wav.with_suffix(".merged.wav")
+    _synthesize_silent_ambient_wav(lead_wav, dur_sec=lead_sec)
+    try:
+        _run_checked([
+            FFMPEG_BIN, "-y", "-hide_banner", "-loglevel", "error",
+            "-i", str(lead_wav), "-i", str(src_wav),
+            "-filter_complex", "[0:a][1:a]concat=n=2:v=0:a=1,aresample=48000:resampler=soxr[outa]",
+            "-map", "[outa]", "-ar", "48000", "-ac", "2", "-c:a", "pcm_s16le",
+            str(merged_wav),
+        ], timeout=45)
+        shutil.move(str(merged_wav), str(src_wav))
+    finally:
+        lead_wav.unlink(missing_ok=True)
+        merged_wav.unlink(missing_ok=True)
+    return _probe_duration(src_wav)
+
+
 def render_novela_episode(cfg: Dict[str, Any]) -> Dict[str, Any]:
-    """Execute end-to-end multi-character micro-series production across v2.5 modes."""
+    """Execute end-to-end multi-character micro-series production across v2.8 Dual-Style & 4-Cut modes."""
     t_start_wall = time.time()
     render_mode = str(cfg.get("render_mode") or "vps_preview").strip().lower()
     if render_mode == "flow_pack":
         return generate_flow_veo_pack(cfg)
 
-    visual_style = str(cfg.get("visual_style") or "3d_cartoon").strip().lower()
-    if visual_style not in ("3d_cartoon", "cinematic_tv"):
-        visual_style = "3d_cartoon"
+    visual_style = normalize_visual_style(str(cfg.get("visual_style") or "stylized_3d_pixar"))
+    dramatic_structure = normalize_dramatic_structure(str(cfg.get("dramatic_structure") or "viral_4_cuts"))
 
     platform_preset = str(cfg.get("platform_preset") or "tiktok_reels").strip().lower()
     safe_zone = PLATFORM_SAFE_ZONES.get(platform_preset) or PLATFORM_SAFE_ZONES["tiktok_reels"]
@@ -1702,14 +1917,16 @@ def render_novela_episode(cfg: Dict[str, Any]) -> Dict[str, Any]:
         subtitles_mode = "none" if clean_cinema_mode else "minimal"
     include_dictionary_endcard = bool(cfg.get("include_dictionary_endcard", False if clean_cinema_mode else True))
 
-    raw_dialogue: List[Dict[str, Any]] = list(cfg.get("dialogue") or [])
+    raw_dialogue = compile_dramatic_cuts(list(cfg.get("dialogue") or []), dramatic_structure=dramatic_structure)
     if not raw_dialogue:
         raise ValueError("Campo 'dialogue' vazio: informe ao menos 1 fala de personagem.")
 
-    setting = str(
-        cfg.get("setting")
-        or "sunny cobblestone sidewalk outside a painted wooden country corner grocery shop in Northeast Brazil with festive triangular flags and curious bystanders, warm afternoon sunlight"
-    ).strip()
+    default_setting = (
+        "sunlit contemporary Brazilian urban cafe sidewalk with warm bokeh depth and soft passersby"
+        if visual_style == "cinematic_live_action"
+        else "sunny cobblestone sidewalk outside a painted wooden country corner grocery shop in Northeast Brazil with festive triangular flags and curious bystanders, warm afternoon sunlight"
+    )
+    setting = str(cfg.get("setting") or default_setting).strip()
 
     freeze_dur = float(cfg.get("freeze_duration") or (0.0 if not include_dictionary_endcard else 3.5))
     quality = str(cfg.get("quality") or "standard").strip().lower()
@@ -1735,7 +1952,7 @@ def render_novela_episode(cfg: Dict[str, Any]) -> Dict[str, Any]:
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     env_map = _load_secrets_env()
-    shot_cache: Dict[Tuple[str, str, str, str], Tuple[Path, str]] = {}
+    shot_cache: Dict[Tuple[Any, ...], Tuple[Path, str]] = {}
     compiled_turns: List[TurnCompiled] = []
     cursor_t = 0.0
     prev_speaker: Optional[str] = None
@@ -1743,14 +1960,17 @@ def render_novela_episode(cfg: Dict[str, Any]) -> Dict[str, Any]:
     for idx, raw_turn in enumerate(raw_dialogue):
         spk_raw = str(raw_turn.get("speaker") or "Narrador")
         spk_key, spec = _get_character_spec(spk_raw)
-        subtitle_text = rve.sanitize_northeast_slang(str(raw_turn.get("subtitle_text") or raw_turn.get("text") or "").strip())
-        tts_text = rve.sanitize_northeast_slang(str(raw_turn.get("tts_text") or subtitle_text).strip())
-        if not tts_text:
+        is_silent = bool(raw_turn.get("is_silent_reaction", False))
+        cut_role = str(raw_turn.get("cut_role") or ("silent_shame_reaction" if is_silent else "dialogue")).strip().lower()
+        lead_pause = float(raw_turn.get("lead_in_pause") or 0.0)
+        subtitle_text = "" if is_silent else rve.sanitize_northeast_slang(str(raw_turn.get("subtitle_text") or raw_turn.get("text") or "").strip())
+        tts_text = "" if is_silent else rve.sanitize_northeast_slang(str(raw_turn.get("tts_text") or subtitle_text).strip())
+        if not tts_text and not is_silent:
             continue
-        if not subtitle_text:
+        if not subtitle_text and not is_silent:
             subtitle_text = tts_text
 
-        emotion = str(raw_turn.get("emotion") or "warm").strip().lower()
+        emotion = "shame" if is_silent else str(raw_turn.get("emotion") or "warm").strip().lower()
         _, default_cam, _ = EMOTION_DIRECTIONS.get(emotion, EMOTION_DIRECTIONS["warm"])
         camera_action = str(raw_turn.get("camera_action") or default_cam).strip().lower()
         shot_framing = _assign_shot_framing(
@@ -1764,28 +1984,34 @@ def render_novela_episode(cfg: Dict[str, Any]) -> Dict[str, Any]:
         highlight_phrase = str(raw_turn.get("expression_highlight") or raw_turn.get("highlight") or "").strip()
 
         clean_wav = audio_dir / f"turn_{idx}.wav"
-        guide_raw = str(raw_turn.get("guide_audio_path") or "").strip()
-        guide_path = Path(guide_raw) if guide_raw and Path(guide_raw).is_file() else None
-        accent_engine = str(cfg.get("accent_engine") or cfg.get("accent_preset") or "nordestino_raiz").strip().lower()
-        colab_url_eff = str(cfg.get("colab_url") or env_map.get("COLAB_GPU_URL") or "").strip()
-        colab_tok_eff = str(cfg.get("colab_token") or env_map.get("COLAB_GPU_TOKEN") or "").strip()
-        tts_meta = rve.synthesize_regional_turn(
-            tts_text=tts_text,
-            speaker=spk_raw,
-            emotion=emotion,
-            accent_engine=accent_engine,
-            out_wav=clean_wav,
-            guide_audio_path=guide_path,
-            colab_url=colab_url_eff,
-            colab_token=colab_tok_eff,
-            lead_pad=0.02 if clean_cinema_mode else 0.04,
-            tail_pad=0.05 if clean_cinema_mode else 0.14,
-            voice_override=str(raw_turn.get("voice") or ""),
-        )
-        slot_dur = float(tts_meta["duration"])
-        v_engine_used = str(tts_meta["voice_engine_used"])
+        if is_silent:
+            slot_dur = _synthesize_silent_ambient_wav(clean_wav, dur_sec=float(raw_turn.get("silent_duration") or 2.0))
+            v_engine_used = "silent_reaction_ambient"
+        else:
+            guide_raw = str(raw_turn.get("guide_audio_path") or "").strip()
+            guide_path = Path(guide_raw) if guide_raw and Path(guide_raw).is_file() else None
+            accent_engine = str(cfg.get("accent_engine") or cfg.get("accent_preset") or "nordestino_raiz").strip().lower()
+            colab_url_eff = str(cfg.get("colab_url") or env_map.get("COLAB_GPU_URL") or "").strip()
+            colab_tok_eff = str(cfg.get("colab_token") or env_map.get("COLAB_GPU_TOKEN") or "").strip()
+            tts_meta = rve.synthesize_regional_turn(
+                tts_text=tts_text,
+                speaker=spk_raw,
+                emotion=emotion,
+                accent_engine=accent_engine,
+                out_wav=clean_wav,
+                guide_audio_path=guide_path,
+                colab_url=colab_url_eff,
+                colab_token=colab_tok_eff,
+                lead_pad=0.02 if clean_cinema_mode else 0.04,
+                tail_pad=0.05 if clean_cinema_mode else 0.14,
+                voice_override=str(raw_turn.get("voice") or ""),
+            )
+            slot_dur = float(tts_meta["duration"])
+            if lead_pause > 0.05:
+                slot_dur = _prepend_lead_silence_wav(clean_wav, lead_pause)
+            v_engine_used = str(tts_meta["voice_engine_used"])
 
-        shot_abs_path, shot_relpath, asset_source = _resolve_turn_visual(
+        shot_abs_path, shot_relpath, asset_source, _ = _resolve_turn_visual(
             speaker_key=spk_key,
             spec=spec,
             emotion=emotion,
@@ -1798,6 +2024,7 @@ def render_novela_episode(cfg: Dict[str, Any]) -> Dict[str, Any]:
             env_map=env_map,
             shot_cache=shot_cache,
             force_jpg=(render_mode == "colab_gpu"),
+            is_silent_reaction=is_silent,
         )
 
         compiled_turns.append(
@@ -1824,6 +2051,9 @@ def render_novela_episode(cfg: Dict[str, Any]) -> Dict[str, Any]:
                 shot_abs_path=shot_abs_path,
                 asset_source=asset_source,
                 voice_engine_used=v_engine_used,
+                cut_role=cut_role,
+                lead_in_pause=lead_pause,
+                is_silent_reaction=is_silent,
             )
         )
         cursor_t += slot_dur
@@ -1851,6 +2081,9 @@ def render_novela_episode(cfg: Dict[str, Any]) -> Dict[str, Any]:
                 emotion=t.emotion,
                 physical_action_en=t.physical_action_en,
                 setting=setting,
+                cut_role=t.cut_role,
+                lead_in_pause=t.lead_in_pause,
+                is_silent_reaction=t.is_silent_reaction,
             )
             take_mp4 = work_dir / f"colab_take_{t.index:02d}.mp4"
             _call_colab_animate_take(
@@ -1879,16 +2112,17 @@ def render_novela_episode(cfg: Dict[str, Any]) -> Dict[str, Any]:
             "render_mode": "colab_gpu",
             "colab_engine": colab_engine,
             "visual_style": visual_style,
+            "dramatic_structure": dramatic_structure,
             "clean_cinema_mode": clean_cinema_mode,
             "lipsync_enabled": True,
             "animation_engines_used": sorted({t.animation_engine_used for t in compiled_turns if t.animation_engine_used}),
-            "voice_engines_used": sorted({t.voice_engine_used for t in compiled_turns}),
+            "voice_engines_used": sorted({t.voice_engine_used for t in compiled_turns if not t.is_silent_reaction}),
             "speakers": sorted({t.speaker_label for t in compiled_turns}),
             "asset_sources": sorted({f"{t.asset_source}+colab:{colab_engine}" for t in compiled_turns}),
             "elapsed_sec": round(time.time() - t_start_wall, 2),
         }
 
-    # Mode 3 (Default v2.7): True Lip-Sync & Facial Motion Cascade via novela_lipsync_animator.py
+    # Mode 3 (Default v2.8): True Lip-Sync & Facial Motion Cascade via novela_lipsync_animator.py
     enable_lipsync = bool(cfg.get("enable_lipsync", True))
     if enable_lipsync:
         colab_url = str(cfg.get("colab_url") or env_map.get("COLAB_GPU_URL") or "").strip()
@@ -1909,6 +2143,9 @@ def render_novela_episode(cfg: Dict[str, Any]) -> Dict[str, Any]:
                 emotion=t.emotion,
                 physical_action_en=t.physical_action_en,
                 setting=setting,
+                cut_role=t.cut_role,
+                lead_in_pause=t.lead_in_pause,
+                is_silent_reaction=t.is_silent_reaction,
             )
             take_mp4 = work_dir / f"lipsync_take_{t.index:02d}.mp4"
             anim_meta = nla.animate_character_talking_take(
@@ -1918,6 +2155,9 @@ def render_novela_episode(cfg: Dict[str, Any]) -> Dict[str, Any]:
                 prompt=v_prompt,
                 emotion=t.emotion,
                 camera_action=t.camera_action,
+                emotion_preset=t.cut_role,
+                lead_in_pause=t.lead_in_pause,
+                is_silent_reaction=t.is_silent_reaction,
                 colab_url=colab_url,
                 colab_token=colab_token,
                 colab_engine=colab_engine,
@@ -1932,16 +2172,18 @@ def render_novela_episode(cfg: Dict[str, Any]) -> Dict[str, Any]:
             lipsync_turns.append({
                 "index": t.index,
                 "speaker": t.speaker_label,
+                "cut_role": t.cut_role,
+                "is_silent_reaction": t.is_silent_reaction,
+                "lead_in_pause": t.lead_in_pause,
                 "animation_engine": t.animation_engine_used,
                 "voice_engine": t.voice_engine_used,
                 "peak_mouth_open": t.lipsync_peak_open,
                 "duration": anim_meta.get("duration", t.slot_dur),
             })
-            if subtitles_mode == "minimal" and t.subtitle_text:
-                ass_events.append((tl_t + 0.04, tl_t + max(0.3, float(anim_meta.get("duration") or t.slot_dur) - 0.04), t.subtitle_text))
+            if subtitles_mode == "minimal" and t.subtitle_text and not t.is_silent_reaction:
+                ass_events.append((tl_t + max(0.04, t.lead_in_pause), tl_t + max(0.3, float(anim_meta.get("duration") or t.slot_dur) - 0.04), t.subtitle_text))
             tl_t += float(anim_meta.get("duration") or t.slot_dur)
 
-        # Concat animated clips seamlessly + optional minimal ASS + 48kHz SoXR final pass
         concat_list = work_dir / "lipsync_clips.txt"
         concat_list.write_text("\n".join(f"file '{p}'" for p in animated_clips) + "\n", encoding="utf-8")
         concat_mp4 = work_dir / "lipsync_concat.mp4"
@@ -1992,6 +2234,8 @@ def render_novela_episode(cfg: Dict[str, Any]) -> Dict[str, Any]:
             "filename": out_path.name,
             "render_mode": render_mode,
             "visual_style": visual_style,
+            "dramatic_structure": dramatic_structure,
+            "prompt_rules": "v28_closed_mouth",
             "platform_preset": platform_preset,
             "clean_cinema_mode": clean_cinema_mode,
             "subtitles_mode": subtitles_mode,
@@ -2002,7 +2246,7 @@ def render_novela_episode(cfg: Dict[str, Any]) -> Dict[str, Any]:
             "speakers": sorted({t.speaker_label for t in compiled_turns}),
             "shot_framings": [t.shot_framing for t in compiled_turns],
             "accent_engine": str(cfg.get("accent_engine") or cfg.get("accent_preset") or "nordestino_raiz"),
-            "voice_engines_used": sorted({t.voice_engine_used for t in compiled_turns}),
+            "voice_engines_used": sorted({t.voice_engine_used for t in compiled_turns if not t.is_silent_reaction}),
             "animation_engines_used": sorted({t.animation_engine_used for t in compiled_turns if t.animation_engine_used}),
             "lipsync_turns": lipsync_turns,
             "asset_sources": sorted({t.asset_source for t in compiled_turns}),

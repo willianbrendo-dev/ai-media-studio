@@ -170,12 +170,30 @@ def _sanitize_northeast_text(text: str) -> str:
         return re.sub(r"\s+", " ", t).strip()
 
 
+def _normalize_novela_visual_style(raw: str = "stylized_3d_pixar") -> str:
+    val = (raw or "stylized_3d_pixar").strip().lower()
+    if val in ("cinematic_live_action", "cinematic_tv", "live_action", "realistic", "cinema_8k"):
+        return "cinematic_live_action"
+    return "stylized_3d_pixar"
+
+
+def _normalize_novela_dramatic_structure(raw: str = "viral_4_cuts") -> str:
+    val = (raw or "viral_4_cuts").strip().lower()
+    if val in ("classic_3_cuts", "3_cuts", "classic"):
+        return "classic_3_cuts"
+    return "viral_4_cuts"
+
+
 def build_fallback_novela_script(
     theme: str = "Enzo da capital confundindo gírias nordestinas na bodega de Seu Bastião",
     expressions: Optional[List[str]] = None,
     tone: str = "Comédia Leve",
+    visual_style: str = "stylized_3d_pixar",
+    dramatic_structure: str = "viral_4_cuts",
 ) -> Dict[str, Any]:
-    """Deterministic multi-character Brazilian Northeast comedy script fallback."""
+    """Deterministic multi-character Brazilian Northeast script fallback with v2.8 Dual-World & Viral 4-Cut pacing."""
+    vstyle = _normalize_novela_visual_style(visual_style)
+    dstruct = _normalize_novela_dramatic_structure(dramatic_structure)
     exprs = [e.strip() for e in (expressions or []) if e and e.strip()] or [
         "Oxente",
         "Morreu Maria Preá",
@@ -185,57 +203,107 @@ def build_fallback_novela_script(
     main_expr = _sanitize_northeast_text(exprs[0])
     second_expr = _sanitize_northeast_text(exprs[1] if len(exprs) > 1 else "Botar Boneco")
     clean_theme = _sanitize_northeast_text((theme or "Confusão na Bodega do Sertão").strip())
+    setting = (
+        "sunlit authentic Brazilian countryside cafe terrace with outdoor wicker tables, cobblestone street, "
+        "warm afternoon sun rays and discreet customers chatting out of focus in the background"
+        if vstyle == "cinematic_live_action"
+        else "sunny cobblestone sidewalk outside a painted wooden countryside corner grocery shop in Northeast Brazil "
+        "with festive colorful paper flags, golden hour"
+    )
+
+    cuts_viral: List[Dict[str, Any]] = [
+        {
+            "speaker": "Dona Socorro",
+            "tts_text": f"Oxente, {clean_theme[:52]}?! Tu num tem um pingo de vergonha na cara não, é?!",
+            "subtitle_text": f"Oxente! {clean_theme[:52]}?! Sem vergonha não?!",
+            "emotion": "shocked",
+            "camera_action": "shake",
+            "shot_framing": "over_shoulder",
+            "cut_role": "attack_angry",
+            "lead_in_pause": 0.0,
+            "is_silent_reaction": False,
+            "silent_duration": 0.0,
+            "physical_action_en": "leans slightly forward past foreground shoulder with shocked eyes and stern brow while holding arms low",
+            "expression_highlight": main_expr,
+        },
+        {
+            "speaker": "Seu Bastião",
+            "tts_text": f"Tenho não, dona Socorro... mas depois de {second_expr}, quem ficou sem graça aqui foi a senhora!",
+            "subtitle_text": f"Tenho não... mas com '{second_expr}', quem corou foi a senhora!",
+            "emotion": "proud",
+            "camera_action": "zoom_in",
+            "shot_framing": "reverse_over_shoulder",
+            "cut_role": "calm_inhale_comeback",
+            "lead_in_pause": 0.45,
+            "is_silent_reaction": False,
+            "silent_duration": 0.0,
+            "physical_action_en": "closes eyes for 0.45s taking a calm breath, then opens eyes slowly with a poised knowing smirk and calm sharp comeback",
+            "expression_highlight": second_expr,
+        },
+        {
+            "speaker": "Enzo",
+            "tts_text": "O quê?! Eita peste, essa doeu até em mim!",
+            "subtitle_text": "O quê?! Eita peste, essa doeu!",
+            "emotion": "shocked",
+            "camera_action": "whip_pan",
+            "shot_framing": "reaction_closeup",
+            "cut_role": "shock_what",
+            "lead_in_pause": 0.0,
+            "is_silent_reaction": False,
+            "silent_duration": 0.0,
+            "physical_action_en": "whips head sharply toward the scene, widens eyes in instant shock mouth closed between gasps",
+            "expression_highlight": "O quê?!",
+        },
+        {
+            "speaker": "Dona Socorro",
+            "tts_text": "",
+            "subtitle_text": "",
+            "emotion": "shame",
+            "camera_action": "dramatic_push",
+            "shot_framing": "reaction_closeup",
+            "cut_role": "silent_shame_reaction",
+            "lead_in_pause": 0.0,
+            "is_silent_reaction": True,
+            "silent_duration": 2.0,
+            "physical_action_en": "freezes in silent mortified embarrassment, lowers gaze, swallows hard with sealed trembling lips and slumping shoulders",
+            "expression_highlight": "",
+        },
+    ]
+
+    if dstruct == "classic_3_cuts":
+        dialogue_out = [
+            cuts_viral[0],
+            cuts_viral[1],
+            {
+                "speaker": "Enzo",
+                "tts_text": "Deixe de cunversa, Seu Bastião! Aqui na bodega o senhor num perde uma!",
+                "subtitle_text": "Deixe de cunversa! O senhor não perde uma!",
+                "emotion": "laughing",
+                "camera_action": "zoom_in",
+                "shot_framing": "over_shoulder",
+                "cut_role": "attack_angry",
+                "lead_in_pause": 0.0,
+                "is_silent_reaction": False,
+                "silent_duration": 0.0,
+                "physical_action_en": "chuckles warmly rubbing the back of his neck while shaking his head in good humor",
+                "expression_highlight": "Deixe de cunversa",
+            },
+        ]
+    else:
+        dialogue_out = cuts_viral
+
     return {
         "title": f"{clean_theme[:46]} — Ep. 01",
-        "episode_badge": "🌵 NOVELINHA DO SERTÃO • EP. 01",
+        "episode_badge": "🎬 CINEMA NORDESTINO • EP. 01" if vstyle == "cinematic_live_action" else "🌵 NOVELINHA DO SERTÃO • EP. 01",
+        "visual_style": vstyle,
+        "dramatic_structure": dstruct,
         "tone": tone,
-        "setting": "sunny cobblestone sidewalk outside a painted wooden countryside corner grocery shop in Northeast Brazil with festive colorful paper flags, golden hour",
+        "setting": setting,
         "dictionary": [
             {"term": main_expr.upper(), "meaning": "Gíria nordestina clássica de espanto, surpresa ou quebra de expectativa."},
             {"term": second_expr.upper(), "meaning": "Expressão popular cheia de drama e humor usada no dia a dia do sertão."},
         ],
-        "dialogue": [
-            {
-                "speaker": "Dona Socorro",
-                "tts_text": f"Oxente, Enzo! {clean_theme[:60]}?! Larga esse celular, minino!",
-                "subtitle_text": f"Oxente, Enzo! {clean_theme[:60]}?! Larga esse celular!",
-                "emotion": "shocked",
-                "camera_action": "shake",
-                "shot_framing": "over_shoulder",
-                "physical_action_en": "puts hands on her hips, leans forward abruptly waving one finger in disbelief while two neighbors peek from behind",
-                "expression_highlight": main_expr,
-            },
-            {
-                "speaker": "Enzo",
-                "tts_text": f"Quê?! Tia Socorro, eu achei que {second_expr} era sério! Tô passado!",
-                "subtitle_text": f"Quê?! Tia Socorro, achei que '{second_expr}' era sério! Tô passado!",
-                "emotion": "confused",
-                "camera_action": "zoom_in",
-                "shot_framing": "reverse_over_shoulder",
-                "physical_action_en": "blinks rapidly looking up from his smartphone, clutching his chest in confused city-kid panic",
-                "expression_highlight": second_expr,
-            },
-            {
-                "speaker": "Seu Bastião",
-                "tts_text": "Hahaha! Deixe de cunversa, cabra leso! Aqui na bodega isso é café pequeno!",
-                "subtitle_text": "Hahaha! Deixe de cunversa! Aqui isso é café pequeno!",
-                "emotion": "laughing",
-                "camera_action": "whip_pan",
-                "shot_framing": "over_shoulder",
-                "physical_action_en": "bursts into a hearty laugh while lifting his small aluminum coffee mug with an amused wink",
-                "expression_highlight": "Deixe de cunversa",
-            },
-            {
-                "speaker": "Dona Socorro",
-                "tts_text": "Vixe Maria, desse jeito eu vô botar boneco na calçada inteira hoje!",
-                "subtitle_text": "Vixe Maria, desse jeito eu vou botar boneco na calçada hoje!",
-                "emotion": "dramatic",
-                "camera_action": "dramatic_push",
-                "shot_framing": "reaction_closeup",
-                "physical_action_en": "throws her hands up dramatically rolling her eyes toward the sky in comedic exasperation",
-                "expression_highlight": "Botar Boneco",
-            },
-        ],
+        "dialogue": dialogue_out,
     }
 
 
@@ -928,72 +996,148 @@ class GuidedPipelineOrchestrator:
         expressions: Optional[List[str]] = None,
         tone: str = "Comédia Leve",
         episode_badge: str = "🌵 NOVELINHA DO SERTÃO • EP. 01",
+        visual_style: str = "stylized_3d_pixar",
+        dramatic_structure: str = "viral_4_cuts",
     ) -> Dict[str, Any]:
-        """Generate multi-character Northeast comedy dialogue via AI cascade with deterministic fallback."""
+        """Generate multi-character Northeast dialogue via AI cascade with v2.8 Dual-World & Viral 4-Cut pacing."""
+        vstyle = _normalize_novela_visual_style(visual_style)
+        dstruct = _normalize_novela_dramatic_structure(dramatic_structure)
         expr_list = [e.strip() for e in (expressions or []) if e and e.strip()]
         if not expr_list:
             expr_list = ["Oxente", "Morreu Maria Preá", "Botar Boneco", "Deixe de cunversa"]
 
+        world_directive = (
+            "ESTILO VISUAL: CINEMATOGRÁFICO REALISTA 8K LIVE-ACTION (pessoas reais em café/calçada nordestina iluminada, atuação contida de cinema/novela das 9). "
+            if vstyle == "cinematic_live_action"
+            else "ESTILO VISUAL: ANIMAÇÃO 3D PIXAR/CARTOON EXPRESSIVA (bodega nordestina colorida estilizada). "
+        )
+        structure_directive = (
+            "ESTRUTURA OBRIGATÓRIA VIRAL 4 CORTES (v2.8):\n"
+            "- Corte 1 (`attack_angry`, `lead_in_pause`: 0.0): Personagem A dispara provocação ou acusação direta (1 frase curta de 2.5s a 3.5s, `over_shoulder`).\n"
+            "- Corte 2 (`calm_inhale_comeback`, `lead_in_pause`: 0.45): Personagem B fecha os olhos, respira 0.45s antes de responder e devolve uma invertida certeira (`reverse_over_shoulder`).\n"
+            "- Corte 3 (`shock_what`, `lead_in_pause`: 0.0): Personagem C reage em choque rápido ('O quê?! Eita peste!'), máx. 4 palavras (`reaction_closeup`).\n"
+            "- Corte 4 (`silent_shame_reaction`, `is_silent_reaction`: true, `silent_duration`: 2.0, `tts_text`: \"\", `subtitle_text`: \"\"): Close-up MUDO de 2.0s voltando no Personagem A em vergonha absoluta (`emotion`: 'shame', SEM fala!).\n"
+            if dstruct == "viral_4_cuts"
+            else "ESTRUTURA CLÁSSICA (3 CORTES RÁPIDOS): dialogue com 3 falas ágeis alternando plano/contraplano/fechamento cômico.\n"
+        )
+
         sys_prompt = (
-            "Você é roteirista e diretor cinematográfico de micro-séries de humor nordestino viral para Reels/TikTok (11 a 20 segundos no total, falas muito rápidas de 3s a 5s em corte seco plano/contraplano). "
-            "Personagens fixos disponíveis: 'Dona Socorro' (matriarca dramática), 'Seu Bastião' (comerciante sábio debochado), "
-            "'Enzo' (sobrinho da capital confuso), 'Narrador'. "
+            "Você é roteirista e diretor cinematográfico de micro-séries virais nordestinas para Reels/TikTok (10 a 16 segundos no total, corte seco plano/contraplano). "
+            + world_directive
+            + structure_directive
+            + "Personagens fixos disponíveis: 'Dona Socorro', 'Seu Bastião', 'Enzo', 'Narrador'. "
             "REGRA CULTURAL INEGOCIÁVEL: é PROIBIDO usar gírias mineiras, paulistas ou gaúchas como 'trem', 'uai', 'sô', 'mano', 'meo', 'daora', 'guri', 'bah', 'tchê'. "
-            "Use apenas vocabulário legítimo do Nordeste/Piauí/Ceará ('oxente', 'oxe', 'vixe', 'esse negócio', 'essa marmota', 'essa presepada', 'cabra', 'mangar', 'botar boneco', 'morreu Maria Preá', 'deixe de cunversa', 'arretado'). "
-            "NUNCA alongue vogais repetidas ('Oxêêênte' é proibido; escreva 'Oxente!'). Frases curtas, afiadas e rápidas! "
+            "Use apenas vocabulário legítimo do Nordeste ('oxente', 'oxe', 'vixe', 'esse negócio', 'essa marmota', 'essa presepada', 'cabra', 'mangar', 'botar boneco', 'morreu Maria Preá', 'deixe de cunversa', 'arretado'). "
+            "NUNCA alongue vogais repetidas ('Oxêêênte' é proibido; escreva 'Oxente!'). "
             "Responda EXCLUSIVAMENTE um JSON válido com as chaves:\n"
             "- title (string curta)\n"
             "- episode_badge (string)\n"
             "- setting (descrição curta em inglês do cenário externo iluminado com figurantes discretos ao fundo)\n"
             "- dictionary (array de 2 objetos {term, meaning} explicando as gírias usadas em português claro e engraçado)\n"
-            "- dialogue (array com 3 a 5 takes curtos e velozes alternando personagens em plano e contraplano; cada item com: "
-            "speaker, tts_text [fala curta e ágil de 3s a 5s sem vogais alongadas para Gemini TTS/Veo], "
-            "subtitle_text [grafia limpa e curta], "
-            "emotion [uma de: shocked, confused, laughing, proud, dramatic, warm], "
-            "camera_action [uma de: shake, whip_pan, zoom_in, dramatic_push], "
-            "shot_framing [uma de: over_shoulder, reverse_over_shoulder, reaction_closeup], "
-            "physical_action_en [descrição curta em inglês da ação física e expressão corporal do personagem na cena], "
-            "expression_highlight [palavra-chave curta])."
+            "- dialogue (array de takes com: speaker, tts_text, subtitle_text, emotion [uma de: shocked, confused, laughing, proud, dramatic, shame, warm], "
+            "camera_action [uma de: shake, whip_pan, zoom_in, dramatic_push], shot_framing [uma de: over_shoulder, reverse_over_shoulder, reaction_closeup], "
+            "cut_role [attack_angry, calm_inhale_comeback, shock_what, silent_shame_reaction], lead_in_pause [float segundos], "
+            "is_silent_reaction [boolean], silent_duration [float segundos], physical_action_en [ação física em inglês], expression_highlight [string])."
         )
         user_prompt = (
             f"Tema do episódio: {theme}\n"
             f"Expressões obrigatórias: {', '.join(expr_list)}\n"
             f"Tom de humor: {tone}\n"
             f"Selo do episódio: {episode_badge}\n"
-            "Entregue de 3 a 5 takes bem rápidos (1 frase impactante por take, estilo plano e contraplano por cima do ombro)."
+            f"Estilo visual: {vstyle} | Estrutura: {dstruct}\n"
+            "Entregue os cortes rigorosamente na cadência pedida."
         )
         raw_ai = await self._cascade_text(sys_prompt, user_prompt, 3200)
         parsed = _extract_json_block(raw_ai)
-        fallback = build_fallback_novela_script(theme=theme, expressions=expr_list, tone=tone)
+        fallback = build_fallback_novela_script(
+            theme=theme,
+            expressions=expr_list,
+            tone=tone,
+            visual_style=vstyle,
+            dramatic_structure=dstruct,
+        )
         if not parsed or not isinstance(parsed.get("dialogue"), list) or len(parsed["dialogue"]) < 2:
             fallback["source"] = "fallback_deterministic"
             return fallback
 
-        cleaned_dialogue: List[Dict[str, str]] = []
-        default_framings = ["over_shoulder", "reverse_over_shoulder", "reaction_closeup"]
-        for d_idx, row in enumerate(parsed["dialogue"][:8]):
+        cleaned_dialogue: List[Dict[str, Any]] = []
+        default_framings = ["over_shoulder", "reverse_over_shoulder", "reaction_closeup", "reaction_closeup"]
+        default_roles = ["attack_angry", "calm_inhale_comeback", "shock_what", "silent_shame_reaction"]
+        for d_idx, row in enumerate(parsed["dialogue"][:6]):
             if not isinstance(row, dict):
                 continue
-            sub = _sanitize_northeast_text(str(row.get("subtitle_text") or row.get("text") or "").strip())
-            tts = _sanitize_northeast_text(str(row.get("tts_text") or sub).strip())
-            if not sub:
+            is_silent = bool(row.get("is_silent_reaction", False))
+            if dstruct == "viral_4_cuts" and d_idx == 3 and (is_silent or not str(row.get("tts_text") or "").strip()):
+                is_silent = True
+
+            sub = "" if is_silent else _sanitize_northeast_text(str(row.get("subtitle_text") or row.get("text") or "").strip())
+            tts = "" if is_silent else _sanitize_northeast_text(str(row.get("tts_text") or sub).strip())
+            if not is_silent and not sub:
                 continue
+
             framing = str(row.get("shot_framing") or default_framings[d_idx % len(default_framings)]).strip().lower()
             if framing not in ("over_shoulder", "reverse_over_shoulder", "reaction_closeup"):
                 framing = default_framings[d_idx % len(default_framings)]
+
+            cut_role = str(row.get("cut_role") or default_roles[min(d_idx, len(default_roles) - 1)]).strip().lower()
+            if is_silent:
+                cut_role = "silent_shame_reaction"
+            elif dstruct == "viral_4_cuts" and d_idx == 1 and cut_role not in ("calm_inhale_comeback",):
+                cut_role = "calm_inhale_comeback"
+
+            try:
+                lead_in = float(row.get("lead_in_pause") or 0.0)
+            except (TypeError, ValueError):
+                lead_in = 0.0
+            if dstruct == "viral_4_cuts" and d_idx == 1 and lead_in < 0.45:
+                lead_in = 0.45
+
+            try:
+                silent_dur = float(row.get("silent_duration") or (2.0 if is_silent else 0.0))
+            except (TypeError, ValueError):
+                silent_dur = 2.0 if is_silent else 0.0
+            if is_silent:
+                silent_dur = max(1.8, min(2.2, silent_dur or 2.0))
+
+            emotion = "shame" if is_silent else str(row.get("emotion") or "warm").strip().lower()
             cleaned_dialogue.append({
                 "speaker": str(row.get("speaker") or "Dona Socorro").strip(),
                 "tts_text": tts,
                 "subtitle_text": sub,
-                "emotion": str(row.get("emotion") or "warm").strip().lower(),
-                "camera_action": str(row.get("camera_action") or "zoom_in").strip().lower(),
+                "emotion": emotion,
+                "camera_action": "dramatic_push" if is_silent else str(row.get("camera_action") or "zoom_in").strip().lower(),
                 "shot_framing": framing,
+                "cut_role": cut_role,
+                "lead_in_pause": round(lead_in, 2),
+                "is_silent_reaction": is_silent,
+                "silent_duration": round(silent_dur, 2),
                 "physical_action_en": str(row.get("physical_action_en") or "").strip(),
-                "expression_highlight": _sanitize_northeast_text(str(row.get("expression_highlight") or "").strip()),
+                "expression_highlight": "" if is_silent else _sanitize_northeast_text(str(row.get("expression_highlight") or "").strip()),
             })
         if len(cleaned_dialogue) < 2:
             fallback["source"] = "fallback_deterministic"
             return fallback
+
+        if dstruct == "viral_4_cuts":
+            if len(cleaned_dialogue) >= 2 and float(cleaned_dialogue[1].get("lead_in_pause") or 0.0) < 0.45:
+                cleaned_dialogue[1]["lead_in_pause"] = 0.45
+                cleaned_dialogue[1]["cut_role"] = "calm_inhale_comeback"
+            if len(cleaned_dialogue) >= 3 and not any(x.get("is_silent_reaction") for x in cleaned_dialogue):
+                cleaned_dialogue = cleaned_dialogue[:3]
+                cleaned_dialogue.append({
+                    "speaker": cleaned_dialogue[0]["speaker"],
+                    "tts_text": "",
+                    "subtitle_text": "",
+                    "emotion": "shame",
+                    "camera_action": "dramatic_push",
+                    "shot_framing": "reaction_closeup",
+                    "cut_role": "silent_shame_reaction",
+                    "lead_in_pause": 0.0,
+                    "is_silent_reaction": True,
+                    "silent_duration": 2.0,
+                    "physical_action_en": "freezes in silent mortified embarrassment, lowers gaze, swallows hard with sealed trembling lips and slumping shoulders",
+                    "expression_highlight": "",
+                })
 
         raw_dict = parsed.get("dictionary") if isinstance(parsed.get("dictionary"), list) else []
         cleaned_dict = [
@@ -1005,6 +1149,8 @@ class GuidedPipelineOrchestrator:
         return {
             "title": str(parsed.get("title") or fallback["title"]).strip()[:90],
             "episode_badge": str(parsed.get("episode_badge") or episode_badge).strip()[:60],
+            "visual_style": vstyle,
+            "dramatic_structure": dstruct,
             "tone": tone,
             "setting": str(parsed.get("setting") or fallback["setting"]).strip()[:240],
             "dictionary": cleaned_dict[:3],
@@ -1032,13 +1178,18 @@ class GuidedPipelineOrchestrator:
             tone = (params.get("tone") or "Comédia Leve").strip()
             ep_badge = (params.get("episode_badge") or "🌵 NOVELINHA DO SERTÃO • EP. 01").strip()
 
+            visual_style = _normalize_novela_visual_style(params.get("visual_style") or "stylized_3d_pixar")
+            dramatic_structure = _normalize_novela_dramatic_structure(params.get("dramatic_structure") or "viral_4_cuts")
             if isinstance(raw_dlg, list) and len(raw_dlg) >= 1:
+                fb_obj = build_fallback_novela_script(theme, expr_list, tone, visual_style, dramatic_structure)
                 script_obj = {
                     "title": (params.get("title") or theme[:60]).strip(),
                     "episode_badge": ep_badge,
+                    "visual_style": visual_style,
+                    "dramatic_structure": dramatic_structure,
                     "tone": tone,
-                    "setting": (params.get("setting") or build_fallback_novela_script(theme, expr_list, tone)["setting"]),
-                    "dictionary": params.get("dictionary") or build_fallback_novela_script(theme, expr_list, tone)["dictionary"],
+                    "setting": (params.get("setting") or fb_obj["setting"]),
+                    "dictionary": params.get("dictionary") or fb_obj["dictionary"],
                     "dialogue": raw_dlg,
                     "source": "user_edited",
                 }
@@ -1048,9 +1199,11 @@ class GuidedPipelineOrchestrator:
                     expressions=expr_list,
                     tone=tone,
                     episode_badge=ep_badge,
+                    visual_style=visual_style,
+                    dramatic_structure=dramatic_structure,
                 )
             return {
-                "summary": f"Roteiro '{script_obj['title']}' pronto ({len(script_obj['dialogue'])} falas, fonte: {script_obj.get('source', 'ai')}).",
+                "summary": f"Roteiro '{script_obj['title']}' pronto ({len(script_obj['dialogue'])} takes · {visual_style} · {dramatic_structure}, fonte: {script_obj.get('source', 'ai')}).",
                 **script_obj,
             }
 
@@ -1058,20 +1211,20 @@ class GuidedPipelineOrchestrator:
             raise RuntimeError("Executor run_novela_cli_fn não configurado no orquestrador")
 
         cp0 = checkpoints.get("0") or {}
-        visual_style = str(params.get("visual_style") or "3d_cartoon").strip().lower()
-        if visual_style not in ("3d_cartoon", "cinematic_tv"):
-            visual_style = "3d_cartoon"
+        visual_style = _normalize_novela_visual_style(params.get("visual_style") or cp0.get("visual_style") or "stylized_3d_pixar")
+        dramatic_structure = _normalize_novela_dramatic_structure(params.get("dramatic_structure") or cp0.get("dramatic_structure") or "viral_4_cuts")
 
         clean_cinema = bool(params.get("clean_cinema_mode", True))
         subtitles_mode = str(params.get("subtitles_mode") or ("none" if clean_cinema else "minimal")).strip().lower()
         render_mode = str(params.get("render_mode") or "vps_preview").strip().lower()
-        colab_engine = str(params.get("colab_engine") or "echomimic_v3").strip().lower()
+        colab_engine = str(params.get("colab_engine") or "liveportrait_latentsync").strip().lower()
         accent_engine = str(params.get("accent_engine") or "nordestino_raiz").strip().lower()
 
         nov_meta = await self._run_novela_cli(
             title=cp0.get("title") or params.get("title") or "Causos do Sertão — Ep. 01",
             episode_badge=cp0.get("episode_badge") or params.get("episode_badge") or "🌵 NOVELINHA DO SERTÃO • EP. 01",
             visual_style=visual_style,
+            dramatic_structure=dramatic_structure,
             platform_preset=p_meta["id"],
             setting=cp0.get("setting") or "",
             dictionary=cp0.get("dictionary") or [],
@@ -1090,12 +1243,14 @@ class GuidedPipelineOrchestrator:
                 "title": cp0.get("title") or "",
                 "episode_badge": cp0.get("episode_badge") or "",
                 "visual_style": visual_style,
+                "dramatic_structure": dramatic_structure,
                 "platform_preset": p_meta["id"],
                 "dictionary": cp0.get("dictionary") or [],
                 "dialogue": cp0.get("dialogue") or [],
                 "clean_cinema_mode": clean_cinema,
                 "subtitles_mode": subtitles_mode,
                 "render_mode": render_mode,
+                "colab_engine": colab_engine,
                 "accent_engine": accent_engine,
             },
         }

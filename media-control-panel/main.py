@@ -2935,17 +2935,34 @@ async def api_quick_hyperframes_task(task_id: str):
 # Novela Studio Multi-Personagem (v2.5 — Clean Cinema, Veo 3.1 Pack, Take Stitcher & Colab GPU)
 # ==============================================================================
 
+def _normalize_novela_visual_style(raw: str = "stylized_3d_pixar") -> str:
+    val = (raw or "stylized_3d_pixar").strip().lower()
+    if val in ("cinematic_live_action", "cinematic_tv", "live_action", "realistic", "cinema_8k"):
+        return "cinematic_live_action"
+    return "stylized_3d_pixar"
+
+
+def _normalize_novela_dramatic_structure(raw: str = "viral_4_cuts") -> str:
+    val = (raw or "viral_4_cuts").strip().lower()
+    if val in ("classic_3_cuts", "3_cuts", "classic"):
+        return "classic_3_cuts"
+    return "viral_4_cuts"
+
+
 class QuickNovelaScriptRequest(BaseModel):
     theme: str = "Enzo da capital confundindo gírias nordestinas na bodega de Seu Bastião"
     expressions: List[str] = ["Oxente", "Morreu Maria Preá", "Botar Boneco", "Deixe de cunversa"]
     tone: str = "Comédia Leve"
     episode_badge: str = "🌵 NOVELINHA DO SERTÃO • EP. 01"
+    visual_style: str = "stylized_3d_pixar"
+    dramatic_structure: str = "viral_4_cuts"
 
 
 class QuickNovelaRequest(BaseModel):
     title: str = "Causos do Sertão — Episódio 01"
     episode_badge: str = "🌵 NOVELINHA DO SERTÃO • EP. 01"
-    visual_style: str = "3d_cartoon"
+    visual_style: str = "stylized_3d_pixar"
+    dramatic_structure: str = "viral_4_cuts"
     platform_preset: str = "tiktok_reels"
     setting: str = ""
     dictionary: List[Dict[str, str]] = []
@@ -2958,7 +2975,7 @@ class QuickNovelaRequest(BaseModel):
     subtitles_mode: str = "none"
     include_dictionary_endcard: Optional[bool] = None
     render_mode: str = "vps_preview"
-    colab_engine: str = "echomimic_v3"
+    colab_engine: str = "liveportrait_latentsync"
     colab_url: str = ""
     accent_engine: str = "nordestino_raiz"
     output_filename: str = ""
@@ -2967,7 +2984,8 @@ class QuickNovelaRequest(BaseModel):
 
 class QuickNovelaFlowPackRequest(BaseModel):
     title: str = "Causos do Sertão — Episódio 01"
-    visual_style: str = "3d_cartoon"
+    visual_style: str = "stylized_3d_pixar"
+    dramatic_structure: str = "viral_4_cuts"
     setting: str = ""
     dialogue: List[Dict[str, Any]] = []
     theme: str = "Enzo confundindo gírias nordestinas na mercearia do sertão"
@@ -3070,7 +3088,7 @@ async def _pipeline_run_novela_cli(**kwargs: Any) -> Dict[str, Any]:
             safe_name += ".mp4"
     else:
         slug = re.sub(r"[^a-zA-Z0-9_-]+", "-", str(kwargs.get("title") or "novela").lower()).strip("-")[:32] or "novela"
-        vstyle = str(kwargs.get("visual_style") or "3d_cartoon").strip().lower()
+        vstyle = _normalize_novela_visual_style(str(kwargs.get("visual_style") or "stylized_3d_pixar"))
         safe_name = f"novela_{slug}_{vstyle}_{int(time.time())}_{uuid.uuid4().hex[:6]}.mp4"
     out_path = NOVELA_EXPORTS_DIR / safe_name
     return await _invoke_novela_cli(out_path, kwargs, mode="render")
@@ -3094,6 +3112,8 @@ async def _execute_novela_job(task_id: str, out_path: Path, cfg_payload: Dict[st
                 expressions=cfg_payload.get("expressions") or [],
                 tone=cfg_payload.get("tone") or "Comédia Leve",
                 episode_badge=cfg_payload.get("episode_badge") or "🌵 NOVELINHA DO SERTÃO • EP. 01",
+                visual_style=cfg_payload.get("visual_style") or "stylized_3d_pixar",
+                dramatic_structure=cfg_payload.get("dramatic_structure") or "viral_4_cuts",
             )
             cfg_payload["dialogue"] = generated["dialogue"]
             if not cfg_payload.get("dictionary"):
@@ -3113,9 +3133,9 @@ async def _execute_novela_job(task_id: str, out_path: Path, cfg_payload: Dict[st
         job["progress"] = 100
         job["ready"] = True
         job["message"] = (
-            f"Pack Veo 3.1 pronto ({res.get('total_takes', 0)} takes, {res.get('total_credits_lite', 0)} créd Lite)!"
+            f"Pack Veo 3.1 v2.8 pronto ({res.get('total_takes', 0)} takes, {res.get('total_credits_lite', 0)} créd Lite)!"
             if rmode == "flow_pack"
-            else f"Novelinha v2.7 Lip-Sync 30fps '{out_path.name}' ({cfg_payload.get('visual_style')}) renderizada!"
+            else f"Novelinha v2.8 Dual-World 30fps '{out_path.name}' ({cfg_payload.get('visual_style')}) renderizada!"
         )
     except Exception as exc:
         job["status"] = "error"
@@ -3126,11 +3146,15 @@ async def _execute_novela_job(task_id: str, out_path: Path, cfg_payload: Dict[st
 
 @app.post("/api/quick/novela/generate-script")
 async def api_quick_novela_generate_script(req: QuickNovelaScriptRequest):
+    vstyle = _normalize_novela_visual_style(req.visual_style)
+    dstruct = _normalize_novela_dramatic_structure(req.dramatic_structure)
     script_data = await PIPELINE_ORCHESTRATOR.generate_novela_script(
         theme=req.theme,
         expressions=req.expressions,
         tone=req.tone,
         episode_badge=req.episode_badge,
+        visual_style=vstyle,
+        dramatic_structure=dstruct,
     )
     return {"ok": True, **script_data}
 
@@ -3138,12 +3162,18 @@ async def api_quick_novela_generate_script(req: QuickNovelaScriptRequest):
 @app.post("/api/quick/novela/flow-pack")
 async def api_quick_novela_flow_pack(req: QuickNovelaFlowPackRequest):
     cfg_payload = req.model_dump() if hasattr(req, "model_dump") else req.dict()
+    vstyle = _normalize_novela_visual_style(cfg_payload.get("visual_style") or "stylized_3d_pixar")
+    dstruct = _normalize_novela_dramatic_structure(cfg_payload.get("dramatic_structure") or "viral_4_cuts")
+    cfg_payload["visual_style"] = vstyle
+    cfg_payload["dramatic_structure"] = dstruct
     if not cfg_payload.get("dialogue"):
         generated = await PIPELINE_ORCHESTRATOR.generate_novela_script(
             theme=req.theme or req.title,
             expressions=req.expressions or [],
             tone=req.tone,
             episode_badge=req.episode_badge,
+            visual_style=vstyle,
+            dramatic_structure=dstruct,
         )
         cfg_payload["dialogue"] = generated["dialogue"]
         if not cfg_payload.get("setting"):
@@ -3386,7 +3416,8 @@ async def api_quick_novela(req: QuickNovelaRequest):
         raise HTTPException(status_code=500, detail="Motor Novela Studio não configurado em /opt/ai-media-studio/tools/hyperframes/vps_novela_runner.py")
 
     NOVELA_EXPORTS_DIR.mkdir(parents=True, exist_ok=True)
-    vstyle = req.visual_style if req.visual_style in ("3d_cartoon", "cinematic_tv") else "3d_cartoon"
+    vstyle = _normalize_novela_visual_style(req.visual_style)
+    dstruct = _normalize_novela_dramatic_structure(req.dramatic_structure)
     rmode = req.render_mode if req.render_mode in ("vps_preview", "flow_pack", "colab_gpu") else "vps_preview"
     aengine = (req.accent_engine or "nordestino_raiz").strip().lower()
     if aengine not in ("nordestino_raiz", "f5_tts_clone", "seed_vc_guide"):
@@ -3405,6 +3436,7 @@ async def api_quick_novela(req: QuickNovelaRequest):
     _trim_local_media_jobs()
     cfg_payload = req.model_dump() if hasattr(req, "model_dump") else req.dict()
     cfg_payload["visual_style"] = vstyle
+    cfg_payload["dramatic_structure"] = dstruct
     cfg_payload["render_mode"] = rmode
     cfg_payload["accent_engine"] = aengine
     _LOCAL_MEDIA_JOBS[task_id] = {
@@ -3419,12 +3451,13 @@ async def api_quick_novela(req: QuickNovelaRequest):
         "failed": False,
         "title": req.title,
         "visual_style": vstyle,
+        "dramatic_structure": dstruct,
         "platform_preset": req.platform_preset,
         "clean_cinema_mode": req.clean_cinema_mode,
         "subtitles_mode": req.subtitles_mode,
         "filename": safe_name,
         "created_at": time.time(),
-        "message": f"Iniciando Novela Studio v2.6 ({rmode} · {vstyle} · {aengine})...",
+        "message": f"Iniciando Novela Studio v2.8 ({rmode} · {vstyle} · {dstruct} · {aengine})...",
     }
 
     task = asyncio.create_task(_execute_novela_job(task_id, out_path, cfg_payload))

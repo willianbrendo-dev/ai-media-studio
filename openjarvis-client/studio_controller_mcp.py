@@ -692,9 +692,9 @@ _STUDIO_CAPABILITIES_CATALOG: dict[str, dict[str, str]] = {
         "execution_ui": "/app/openseo/",
     },
     "novela_studio": {
-        "name": "Novela Studio · Cinema Clean, Flow Veo 3.1 & Colab GPU",
-        "kind": "Motor Nativo v2.5 (0 MB RAM ociosa · Trilha 6)",
-        "best_for": "Criar micro-séries multi-personagem estilo plano/contraplano 100% limpo (`clean_cinema_mode=True`) via 3 motores: (1) Pack Google Flow Veo 3.1 (Ingredients 1080x1920 + Prompts Bilíngues + Costurador de Takes), (2) Colab GPU Lip-Sync (EchoMimicV3/LatentSync) ou (3) Preview Rápido VPS.",
+        "name": "Novela Studio · Cinema Clean Dual-World, Flow Veo 3.1 & Colab T4",
+        "kind": "Motor Nativo v2.8 (0 MB RAM ociosa · Trilha 6)",
+        "best_for": "Criar micro-séries multi-personagem estilo plano/contraplano 100% limpo (`clean_cinema_mode=True`) em Dual-World (`stylized_3d_pixar` ou `cinematic_live_action` 8K) com Direção Viral 4 Cortes (`viral_4_cuts`: Ataque -> Pausa 0.45s + Invertida -> Choque -> Reação Muda de Vergonha), visemas 2.5D + pálpebra segura p/ óculos, Pack Google Flow Veo 3.1 ou Colab T4 (LivePortrait + LatentSync 1.5 / MuseTalk 1.5).",
         "execution_api": "POST /api/quick/novela/flow-pack + /stitch-takes (redub_with_regional_tts) + /preview-voice + /api/quick/novela + /api/colab/status · MCP: studio_preview_regional_voice / studio_generate_flow_pack / studio_stitch_novela_takes / studio_run_novela",
         "execution_ui": "Aba Estúdio Rápido -> Modo Guiado (Trilha 6) ou Modo Hard -> Novela Studio",
     },
@@ -737,8 +737,8 @@ def _recommend_studio_tracks(goal: str, format_hint: str = "") -> tuple[list[dic
             },
         })
         questions.extend([
-            "Qual motor prefere: (1) Pack Google Flow Veo 3.1 + Costurador de Takes, (2) Colab GPU Lip-Sync (EchoMimicV3/LatentSync) ou (3) Preview Rápido VPS Clean Cinema?",
-            "Qual estilo visual (`3d_cartoon` vs `cinematic_tv`), tema/gírias e quer tela 100% limpa sem texto (`none`) ou legenda minimalista 1 linha (`minimal`)?",
+            "Qual motor prefere: (1) Pack Google Flow Veo 3.1 + Costurador de Takes, (2) Colab T4 Open-Source (LivePortrait + LatentSync 1.5 / MuseTalk 1.5) ou (3) Render CPU VPS c/ Visemas 2.5D?",
+            "Qual mundo visual (`stylized_3d_pixar` vs `cinematic_live_action`), estrutura (`viral_4_cuts` com Reação Muda vs `classic_3_cuts`), tema/gírias e legendas (`none` vs `minimal`)?",
         ])
     is_cleanup_polish = any(k in text for k in (
         "silêncio", "silencio", "silêncios", "silencios", "limpar", "jump-cut",
@@ -1560,7 +1560,8 @@ def webcam_look(
 @mcp.tool()
 def studio_run_novela(
     title: str = "Causos do Sertão — Episódio 01",
-    visual_style: str = "3d_cartoon",
+    visual_style: str = "stylized_3d_pixar",
+    dramatic_structure: str = "viral_4_cuts",
     platform_preset: str = "tiktok_reels",
     theme: str = "Enzo da capital confundindo gírias nordestinas na bodega de Seu Bastião",
     expressions_csv: str = "Oxente, Morreu Maria Preá, Botar Boneco, Deixe de cunversa",
@@ -1570,28 +1571,29 @@ def studio_run_novela(
     clean_cinema_mode: bool = True,
     subtitles_mode: str = "none",
     render_mode: str = "vps_preview",
-    colab_engine: str = "echomimic_v3",
+    colab_engine: str = "liveportrait_latentsync",
     accent_engine: str = "nordestino_raiz",
     quality: str = "standard",
     output_filename: str = "",
     wait: bool = True,
     poll_timeout_s: float = 600.0,
 ) -> str:
-    """Produce a multi-character vertical mini-novela / regional comedy episode (Clean Cinema Shot-Reverse-Shot, Flow Pack, or Colab GPU Lip-Sync) with authentic Brazilian Northeast accent.
+    """Produce a multi-character vertical mini-novela / regional comedy episode (v2.8 Dual-World Cinema/3D + Viral 4-Cut Direction + 2.5D Visemes / Flow Pack / Colab T4) with authentic Brazilian Northeast accent.
 
     Args:
         title: Episode title.
-        visual_style: Visual aesthetic: '3d_cartoon' or 'cinematic_tv'.
+        visual_style: Dual-World visual aesthetic: 'stylized_3d_pixar' (or legacy '3d_cartoon') or 'cinematic_live_action' (or legacy 'cinematic_tv').
+        dramatic_structure: 'viral_4_cuts' (default: Attack -> 0.45s Breath + Comeback -> Shock -> 2s Silent Shame Reaction Shot) or 'classic_3_cuts'.
         platform_preset: Safe-Zone target: 'tiktok_reels', 'yt_shorts', or 'shopee_20_9'.
         theme: Storyline/theme if dialogue_json is omitted.
         expressions_csv: Comma-separated regional expressions to feature.
         tone: Comedy/drama tone.
-        dialogue_json: Optional JSON array of turns (supports optional 'guide_audio_path' per line).
+        dialogue_json: Optional JSON array of turns (supports optional 'guide_audio_path', 'lead_in_pause', 'is_silent_reaction').
         dictionary_json: Optional JSON array of dictionary items.
         clean_cinema_mode: True (default) for 100% clean full-bleed cinema without cluttering dialogue boxes/badges.
         subtitles_mode: 'none' (default clean screen) or 'minimal' (thin white outline line).
-        render_mode: 'vps_preview' (default), 'flow_pack' (Veo 3.1 Prompts + Ingredients), or 'colab_gpu' (EchoMimicV3/LatentSync).
-        colab_engine: When render_mode='colab_gpu': 'echomimic_v3' or 'latentsync'.
+        render_mode: 'vps_preview' (default), 'flow_pack' (Veo 3.1 Prompts + Ingredients), or 'colab_gpu' (LivePortrait + LatentSync 1.5 / MuseTalk 1.5).
+        colab_engine: When render_mode='colab_gpu': 'liveportrait_latentsync', 'liveportrait_musetalk', 'sonic_echomimic', 'latentsync', or 'echomimic_v3'.
         accent_engine: Regional voice engine: 'nordestino_raiz' (Gemini Native TTS + SoXR 48kHz default), 'f5_tts_clone' (Colab F5-TTS-PT-BR), or 'seed_vc_guide' (Colab Seed-VC).
         quality: 'draft' or 'standard' (default).
         output_filename: Optional filename under /opt/ai-media-studio/exports/novela/.
@@ -1602,10 +1604,14 @@ def studio_run_novela(
     expr_list = [x.strip() for x in (expressions_csv or "").split(",") if x.strip()]
     parsed_dialogue: list[dict[str, Any]] = json.loads(dialogue_json) if dialogue_json and dialogue_json.strip() else []
     parsed_dict: list[dict[str, str]] = json.loads(dictionary_json) if dictionary_json and dictionary_json.strip() else []
+    vstyle = "cinematic_live_action" if (visual_style or "").strip().lower() in ("cinematic_live_action", "cinematic_tv", "live_action") else "stylized_3d_pixar"
+    dstruct = "classic_3_cuts" if (dramatic_structure or "").strip().lower() in ("classic_3_cuts", "3_cuts") else "viral_4_cuts"
+    allowed_colab = ("liveportrait_latentsync", "liveportrait_musetalk", "sonic_echomimic", "latentsync", "musetalk", "echomimic_v3")
 
     body = {
         "title": title,
-        "visual_style": visual_style if visual_style in ("3d_cartoon", "cinematic_tv") else "3d_cartoon",
+        "visual_style": vstyle,
+        "dramatic_structure": dstruct,
         "platform_preset": platform_preset,
         "theme": theme,
         "expressions": expr_list,
@@ -1615,7 +1621,7 @@ def studio_run_novela(
         "clean_cinema_mode": bool(clean_cinema_mode),
         "subtitles_mode": subtitles_mode if subtitles_mode in ("none", "minimal") else "none",
         "render_mode": render_mode if render_mode in ("vps_preview", "flow_pack", "colab_gpu") else "vps_preview",
-        "colab_engine": colab_engine if colab_engine in ("echomimic_v3", "latentsync") else "echomimic_v3",
+        "colab_engine": colab_engine if colab_engine in allowed_colab else "liveportrait_latentsync",
         "accent_engine": accent_engine if accent_engine in ("nordestino_raiz", "f5_tts_clone", "seed_vc_guide") else "nordestino_raiz",
         "quality": quality if quality in ("draft", "looks", "delivery", "standard", "high") else "standard",
         "output_filename": output_filename,
@@ -1637,19 +1643,23 @@ def studio_run_novela(
 @mcp.tool()
 def studio_generate_flow_pack(
     title: str = "Causos do Sertão — Episódio 01",
-    visual_style: str = "3d_cartoon",
+    visual_style: str = "stylized_3d_pixar",
+    dramatic_structure: str = "viral_4_cuts",
     theme: str = "Enzo da capital confundindo gírias nordestinas na bodega de Seu Bastião",
     expressions_csv: str = "Oxente, Morreu Maria Preá, Botar Boneco, Deixe de cunversa",
     tone: str = "Comédia Leve",
     dialogue_json: str = "",
 ) -> str:
-    """Generate a Google Flow (Veo 3.1) Production Pack: clean 1080x1920 Shot-Reverse-Shot reference Ingredients + bilingual Veo 3.1 prompts + credit estimation (10 Lite / 20 Fast per take)."""
+    """Generate a v2.8 Google Flow (Veo 3.1) Production Pack: closed-mouth 1080x1920 Shot-Reverse-Shot reference Ingredients + second-by-second bilingual Veo 3.1 prompts (4 viral cuts w/ silent reaction) + credit estimation (10 Lite / 20 Fast per take)."""
     _, base_url, headers, auth = _resolve_target_conn("vps")
     expr_list = [x.strip() for x in (expressions_csv or "").split(",") if x.strip()]
     parsed_dialogue: list[dict[str, Any]] = json.loads(dialogue_json) if dialogue_json and dialogue_json.strip() else []
+    vstyle = "cinematic_live_action" if (visual_style or "").strip().lower() in ("cinematic_live_action", "cinematic_tv", "live_action") else "stylized_3d_pixar"
+    dstruct = "classic_3_cuts" if (dramatic_structure or "").strip().lower() in ("classic_3_cuts", "3_cuts") else "viral_4_cuts"
     body = {
         "title": title,
-        "visual_style": visual_style if visual_style in ("3d_cartoon", "cinematic_tv") else "3d_cartoon",
+        "visual_style": vstyle,
+        "dramatic_structure": dstruct,
         "theme": theme,
         "expressions": expr_list,
         "tone": tone,

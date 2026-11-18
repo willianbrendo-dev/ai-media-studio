@@ -124,7 +124,6 @@ def audit_lipsync_video(mp4_path: Path, min_mouth_diff: float = 3.5) -> Dict[str
     # Detect hard scene cuts between takes
     cuts = [0]
     for i in range(1, n_frames):
-        # Downsampled MAD detects shot-reverse-shot transitions cleanly
         small_a = cv2.resize(frames_gray[i - 1], (96, 160))
         small_b = cv2.resize(frames_gray[i], (96, 160))
         mad = float(np.mean(np.abs(small_a.astype(np.float32) - small_b.astype(np.float32))))
@@ -140,6 +139,8 @@ def audit_lipsync_video(mp4_path: Path, min_mouth_diff: float = 3.5) -> Dict[str
         seg_rms = rms[f_start:f_end]
         p20 = float(np.percentile(seg_rms, 18))
         p80 = float(np.percentile(seg_rms, 80))
+        p90 = float(np.percentile(seg_rms, 90))
+        is_silent_cut = bool(p90 < 0.008)
 
         quiet_rel = int(np.argmin(seg_rms))
         ref_idx = f_start + quiet_rel
@@ -151,7 +152,6 @@ def audit_lipsync_video(mp4_path: Path, min_mouth_diff: float = 3.5) -> Dict[str
         mcx, mcy = rig["mouth_center"]
         mw = max(32.0, rig["mouth_width"])
 
-        # Forehead / nose bridge anchor above mouth for head-motion stabilization
         ax, ay = int(round(fx0 + 0.50 * fw)), int(round(fy0 + 0.42 * fh))
         aw, ah = max(36, int(round(0.32 * fw))), max(28, int(round(0.20 * fh)))
 
@@ -163,78 +163,142 @@ def audit_lipsync_video(mp4_path: Path, min_mouth_diff: float = 3.5) -> Dict[str
         my1 = int(np.clip(mcy + m_half_h * 1.45, my0 + 8, ref_gray.shape[0]))
         ref_mouth = ref_gray[my0:my1, mx0:mx1].astype(np.float32)
 
+        # Center 50% (vertical jaw) vs outer left/right 25% corners (horizontal O/U pucker & S/F stretch)
+        mw_px = ref_mouth.shape[1]
+        cw_edge = max(2, mw_px // 4)
+
         lex, ley, lew, leh = rig["left_eye"]
         ex0 = int(np.clip(lex - 0.55 * lew, 0, ref_gray.shape[1] - 2))
         ey0 = int(np.clip(ley - 0.90 * leh, 0, ref_gray.shape[0] - 2))
         ex1 = int(np.clip(lex + 0.55 * lew, ex0 + 6, ref_gray.shape[1]))
         ey1 = int(np.clip(ley + 0.90 * leh, ey0 + 6, ref_gray.shape[0]))
         ref_eye = ref_gray[ey0:ey1, ex0:ex1].astype(np.float32)
+        ref_eye_std = max(1.0, float(np.std(ref_eye)))
+
+        # Face + brow ROI for silent reaction & general expression audit
+        rx0 = int(np.clip(fx0, 0, ref_gray.shape[1] - 10))
+        ry0 = int(np.clip(fy0, 0, ref_gray.shape[0] - 10))
+        rx1 = int(np.clip(fx0 + fw, rx0 + 10, ref_gray.shape[1]))
+        ry1 = int(np.clip(fy0 + fh, ry0 + 10, ref_gray.shape[0]))
+        ref_face = ref_gray[ry0:ry1, rx0:rx1].astype(np.float32)
 
         mouth_diffs: List[float] = []
+        mouth_step_vel: List[float] = []
+        vert_diffs: List[float] = []
+        horiz_diffs: List[float] = []
         eye_diffs: List[float] = []
-        loud_mouth_diffs: List[float] = []
-        quiet_mouth_diffs: List[float] = []
+        eye_std_ratios: List[float] = []
+        face_raw_diffs: List[float] = []
+        anchor_shifts: List[float] = []
+        loud_step_vel: List[float] = []
+        quiet_step_vel: List[float] = []
+        aligned_mouth_history: List[np.ndarray] = []
 
         for fi in range(f_start, f_end):
             cur_g = frames_gray[fi]
             dx, dy = _track_anchor_shift(ref_gray, cur_g, ax, ay, aw, ah)
+            anchor_shifts.append(abs(dx) + abs(dy))
+
             cx0 = int(np.clip(mx0 + dx, 0, cur_g.shape[1] - (mx1 - mx0)))
             cy0 = int(np.clip(my0 + dy, 0, cur_g.shape[0] - (my1 - my0)))
             cur_mouth = cur_g[cy0 : cy0 + (my1 - my0), cx0 : cx0 + (mx1 - mx0)].astype(np.float32)
-            mdiff = float(np.mean(np.abs(cur_mouth - ref_mouth)))
+            diff_map = np.abs(cur_mouth - ref_mouth)
+            mdiff = float(np.mean(diff_map))
             mouth_diffs.append(mdiff)
+            aligned_mouth_history.append(cur_mouth)
+
+            prev_m = aligned_mouth_history[max(0, len(aligned_mouth_history) - 4)]
+            step_v = float(np.mean(np.abs(cur_mouth - prev_m)))
+            mouth_step_vel.append(step_v)
+
+            vert_diffs.append(float(np.mean(diff_map[:, cw_edge : max(cw_edge + 1, mw_px - cw_edge)])))
+            horiz_diffs.append(
+                0.5 * (float(np.mean(diff_map[:, :cw_edge])) + float(np.mean(diff_map[:, max(cw_edge, mw_px - cw_edge) :])))
+            )
             if rms[fi] >= p80:
-                loud_mouth_diffs.append(mdiff)
+                loud_step_vel.append(step_v)
             elif rms[fi] <= p20:
-                quiet_mouth_diffs.append(mdiff)
+                quiet_step_vel.append(step_v)
 
             ecx0 = int(np.clip(ex0 + dx, 0, cur_g.shape[1] - (ex1 - ex0)))
             ecy0 = int(np.clip(ey0 + dy, 0, cur_g.shape[0] - (ey1 - ey0)))
             cur_eye = cur_g[ecy0 : ecy0 + (ey1 - ey0), ecx0 : ecx0 + (ex1 - ex0)].astype(np.float32)
             eye_diffs.append(float(np.mean(np.abs(cur_eye - ref_eye))))
+            eye_std_ratios.append(float(np.std(cur_eye)) / ref_eye_std)
 
-        loud_mean = float(np.mean(loud_mouth_diffs)) if loud_mouth_diffs else float(np.max(mouth_diffs))
-        quiet_mean = float(np.mean(quiet_mouth_diffs)) if quiet_mouth_diffs else 0.0
+            face_raw_diffs.append(float(np.mean(np.abs(cur_g[ry0:ry1, rx0:rx1].astype(np.float32) - ref_face))))
+
+        loud_mean = float(np.mean(loud_step_vel)) if loud_step_vel else float(np.max(mouth_step_vel))
+        quiet_mean = float(np.mean(quiet_step_vel)) if quiet_step_vel else 0.0
         mouth_peak = float(np.percentile(mouth_diffs, 95))
         mouth_std = float(np.std(mouth_diffs))
+        vert_p95 = float(np.percentile(vert_diffs, 95))
+        horiz_std = float(np.std(horiz_diffs))
         eye_peak = float(np.max(eye_diffs)) if eye_diffs else 0.0
+        eye_min_std_ratio = float(np.min(eye_std_ratios)) if eye_std_ratios else 1.0
+        reaction_motion = float(np.percentile(face_raw_diffs, 95)) + 0.5 * float(np.percentile(anchor_shifts, 95))
 
         corr = 0.0
-        if np.std(seg_rms) > 1e-6 and np.std(mouth_diffs) > 1e-6:
-            corr = float(np.corrcoef(seg_rms, np.array(mouth_diffs, dtype=np.float32))[0, 1])
+        if (not is_silent_cut) and np.std(seg_rms) > 1e-6 and np.std(mouth_step_vel) > 1e-6:
+            corr = float(np.corrcoef(seg_rms, np.array(mouth_step_vel, dtype=np.float32))[0, 1])
 
         scene_reports.append({
             "scene": len(scene_reports) + 1,
             "frames": [f_start, f_end],
             "detector": rig["detector"],
+            "is_silent_cut": is_silent_cut,
             "mouth_roi_diff": round(loud_mean - quiet_mean, 3),
             "mouth_loud_mean": round(loud_mean, 3),
             "mouth_quiet_mean": round(quiet_mean, 3),
             "mouth_peak_p95": round(mouth_peak, 3),
+            "mouth_vert_p95": round(vert_p95, 3),
+            "mouth_horiz_std": round(horiz_std, 3),
             "mouth_temporal_std": round(mouth_std, 3),
             "eye_blink_peak_diff": round(eye_peak, 3),
+            "eye_min_std_ratio": round(eye_min_std_ratio, 3),
+            "eye_no_opaque_fill": bool(eye_min_std_ratio >= 0.40),
+            "reaction_body_motion": round(reaction_motion, 3),
             "audio_mouth_corr": round(corr, 3),
         })
 
     assert scene_reports, "Nenhuma cena detectada para auditoria"
-    min_diff_seen = min(s["mouth_peak_p95"] for s in scene_reports)
-    avg_speech_vs_pause = float(np.mean([s["mouth_loud_mean"] - s["mouth_quiet_mean"] for s in scene_reports]))
-    max_eye_seen = max(s["eye_blink_peak_diff"] for s in scene_reports)
+    speaking = [s for s in scene_reports if not s["is_silent_cut"]]
+    silent_cuts = [s for s in scene_reports if s["is_silent_cut"]]
+    assert speaking, "Nenhuma cena falada detectada"
 
-    passed = (
-        avg_speech_vs_pause >= min_mouth_diff
+    min_diff_seen = min(s["mouth_peak_p95"] for s in speaking)
+    avg_speech_vs_pause = float(np.mean([s["mouth_loud_mean"] - s["mouth_quiet_mean"] for s in speaking]))
+    max_eye_seen = max(s["eye_blink_peak_diff"] for s in scene_reports)
+    min_eye_std_ratio = min(s["eye_min_std_ratio"] for s in scene_reports)
+
+    speaking_ok = (
+        avg_speech_vs_pause >= max(1.5, 0.45 * min_mouth_diff)
         and min_diff_seen >= max(4.0, min_mouth_diff)
-        and all(s["mouth_temporal_std"] >= 1.2 for s in scene_reports)
+        and all(s["mouth_temporal_std"] >= 1.2 for s in speaking)
+        and all(s["mouth_horiz_std"] >= 0.45 for s in speaking)
+        and all(s["eye_no_opaque_fill"] for s in scene_reports)
     )
+    avg_spk_peak = float(np.mean([s["mouth_peak_p95"] for s in speaking]))
+    silent_ok = all(
+        s["reaction_body_motion"] >= 2.5
+        and s["mouth_temporal_std"] <= 3.5
+        and s["mouth_peak_p95"] <= max(14.0, 0.72 * avg_spk_peak)
+        for s in silent_cuts
+    )
+    passed = bool(speaking_ok and silent_ok)
     return {
         "ok": passed,
         "video": str(mp4_path),
         "fps": round(fps, 2),
         "total_frames": n_frames,
         "scenes_detected": len(scene_reports),
+        "speaking_scenes": len(speaking),
+        "silent_reaction_scenes": len(silent_cuts),
         "avg_mouth_speech_vs_pause_diff": round(avg_speech_vs_pause, 3),
         "min_scene_mouth_peak_p95": round(min_diff_seen, 3),
         "max_eye_blink_diff": round(max_eye_seen, 3),
+        "min_eye_std_ratio": round(min_eye_std_ratio, 3),
+        "eye_no_opaque_fill": bool(min_eye_std_ratio >= 0.40),
         "threshold": min_mouth_diff,
         "scenes": scene_reports,
     }

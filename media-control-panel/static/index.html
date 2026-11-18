@@ -830,24 +830,24 @@
 
               <!-- MISSAO 6: NOVELA REGIONAL STUDIO -->
               <div id="gp-fields-novela_regional_studio" class="gp-mission-fields hidden space-y-3">
-                <input id="gp-nov-style" type="hidden" value="3d_cartoon" />
+                <input id="gp-nov-style" type="hidden" value="stylized_3d_pixar" />
                 <div class="space-y-1.5">
-                  <label class="text-[11px] font-semibold text-slate-400">Estilo Visual da Micro-Série (Teste A/B)</label>
+                  <label class="text-[11px] font-semibold text-slate-400">Mundo Visual da Micro-Série (v2.8 Dual-World)</label>
                   <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    <button id="gp-nov-style-3d_cartoon" type="button" onclick="setGuidedNovelaStyle('3d_cartoon')"
+                    <button id="gp-nov-style-stylized_3d_pixar" type="button" onclick="setGuidedNovelaStyle('stylized_3d_pixar')"
                       class="touch-btn min-h-[48px] px-3 py-2 rounded-xl border text-left transition cursor-pointer bg-amber-500/20 border-amber-400/70 text-amber-200">
-                      <div class="text-xs font-extrabold">🎨 3D Cartoon (Animado Expressivo)</div>
-                      <div class="text-[10px] opacity-80">Traços 3D estilizados, cores vibrantes e humor exagerado</div>
+                      <div class="text-xs font-extrabold">🎨 Animação 3D Pixar (Estilizada)</div>
+                      <div class="text-[10px] opacity-80">CGI expressivo colorido, iluminação teatral e humor exagerado</div>
                     </button>
-                    <button id="gp-nov-style-cinematic_tv" type="button" onclick="setGuidedNovelaStyle('cinematic_tv')"
+                    <button id="gp-nov-style-cinematic_live_action" type="button" onclick="setGuidedNovelaStyle('cinematic_live_action')"
                       class="touch-btn min-h-[48px] px-3 py-2 rounded-xl border text-left transition cursor-pointer bg-white/[0.03] border-white/10 text-slate-300 hover:bg-white/[0.07]">
-                      <div class="text-xs font-extrabold">🎬 Novela Cinematográfica (TV 35mm)</div>
-                      <div class="text-[10px] opacity-80">Dramaturgia realista de TV aberta com textura e bokeh 35mm</div>
+                      <div class="text-xs font-extrabold">🎬 Cinematográfico Realista (8K Live-Action)</div>
+                      <div class="text-[10px] opacity-80">Atores reais em 85mm f/1.8, textura de pele e drama naturalista</div>
                     </button>
                   </div>
                 </div>
 
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                   <div class="space-y-1">
                     <label class="text-[11px] font-semibold text-slate-400">Tema do Causos / Episódio</label>
                     <input id="gp-nov-theme" type="text" value="Enzo da capital confundindo gírias nordestinas na bodega de Seu Bastião"
@@ -859,6 +859,13 @@
                       <option value="Comédia Leve" selected>Comédia Leve Nordestina</option>
                       <option value="Novela Mexicana Exagerada">Novela Dramática Exagerada</option>
                       <option value="Fofoca de Calçada">Fofoca de Calçada / Bodega</option>
+                    </select>
+                  </div>
+                  <div class="space-y-1">
+                    <label class="text-[11px] font-semibold text-amber-300">Estrutura de Direção</label>
+                    <select id="nov-dramatic-structure" class="w-full min-h-[44px] bg-[#070a08] border border-amber-500/30 rounded-xl px-2.5 text-xs text-white outline-none">
+                      <option value="viral_4_cuts" selected>🔥 4 Cortes Virais (Início + Pausa 0.45s + Choque + Reação Muda)</option>
+                      <option value="classic_3_cuts">💬 3 Cortes Clássicos (Plano / Contraplano)</option>
                     </select>
                   </div>
                 </div>
@@ -953,8 +960,8 @@
                     </button>
                     <button id="gp-nov-mode-colab_gpu" type="button" onclick="setNovelaRenderMode('colab_gpu')"
                       class="touch-btn min-h-[52px] px-3 py-2 rounded-xl border text-left transition cursor-pointer bg-white/[0.03] border-white/10 text-slate-300 hover:bg-white/[0.07] min-w-0">
-                      <div class="text-xs font-extrabold leading-tight break-words">🚀 Modo 2: Colab GPU Lip-Sync</div>
-                      <div class="text-[10px] opacity-80 leading-tight mt-0.5">EchoMimicV3 / LatentSync via Túnel</div>
+                      <div class="text-xs font-extrabold leading-tight break-words">🚀 Modo 2: Colab T4 Open-Source</div>
+                      <div class="text-[10px] opacity-80 leading-tight mt-0.5">LivePortrait + LatentSync 1.5 / MuseTalk 1.5</div>
                     </button>
                     <button id="gp-nov-mode-vps_preview" type="button" onclick="setNovelaRenderMode('vps_preview')"
                       class="touch-btn min-h-[52px] px-3 py-2 rounded-xl border text-left transition cursor-pointer bg-white/[0.03] border-white/10 text-slate-300 hover:bg-white/[0.07] min-w-0">
@@ -1005,21 +1012,33 @@
                     </div>
                   </div>
 
-                  <!-- SUBPAINEL MODO 2: GOOGLE COLAB GPU WORKER -->
+                  <!-- SUBPAINEL MODO 2: GOOGLE COLAB GPU WORKER & ARQUITETURA HÍBRIDA v2.8 -->
                   <div id="gp-nov-panel-colab_gpu" class="hidden space-y-2.5 pt-1">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                      <div class="rounded-xl bg-amber-500/10 border border-amber-400/30 px-2.5 py-2 text-amber-200">
+                        <div class="font-extrabold">🏆 Caminho 1 (Gemini Pro)</div>
+                        <div class="opacity-85">Google Flow Veo 3.1 (4 Cortes + Ingredients) → Costurador 48kHz</div>
+                      </div>
+                      <div class="rounded-xl bg-indigo-500/10 border border-indigo-400/30 px-2.5 py-2 text-indigo-200">
+                        <div class="font-extrabold">🚀 Caminho 2 (Colab T4 fp16)</div>
+                        <div class="opacity-85">LivePortrait (olhar/vergonha) + LatentSync 1.5 / MuseTalk 1.5</div>
+                      </div>
+                    </div>
                     <div class="flex flex-wrap items-center justify-between gap-2">
                       <span id="nov-colab-status-badge" class="px-2.5 py-1 rounded-full text-[10px] font-mono bg-slate-800 text-slate-300 border border-white/10">Colab: Verificando...</span>
                       <a id="btn-nov-colab-notebook" href="/api/colab/notebook" download="ai_studio_colab_novela_gpu.ipynb"
                         class="touch-btn min-h-[40px] px-3 rounded-xl text-[11px] font-bold bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-200 border border-indigo-400/40 inline-flex items-center gap-1.5">
-                        📓 Baixar Notebook Colab (.ipynb)
+                        📓 Baixar Notebook Colab T4 v2.8 (.ipynb)
                       </a>
                     </div>
                     <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
                       <input id="nov-colab-url" type="url" placeholder="https://xxxx.trycloudflare.com"
                         class="sm:col-span-2 w-full min-h-[44px] bg-[#0d1210] border border-white/10 focus:border-indigo-400 rounded-xl px-3 text-xs text-white outline-none" />
                       <select id="nov-colab-engine" class="w-full min-h-[44px] bg-[#0d1210] border border-white/10 rounded-xl px-2.5 text-xs text-white outline-none">
-                        <option value="echomimic_v3" selected>EchoMimicV3-Flash</option>
-                        <option value="latentsync">LatentSync 1.5</option>
+                        <option value="liveportrait_latentsync" selected>LivePortrait + LatentSync 1.5 (fp16)</option>
+                        <option value="liveportrait_musetalk">LivePortrait + MuseTalk 1.5 (fp16)</option>
+                        <option value="sonic_echomimic">Sonic / EchoMimicV2 (Expressivo)</option>
+                        <option value="latentsync">LatentSync 1.5 Direto</option>
                       </select>
                     </div>
                     <button id="btn-nov-colab-connect" type="button" onclick="connectColabTunnel()"
@@ -1911,16 +1930,23 @@
 
             <form onsubmit="submitHardNovela(event)" class="space-y-3.5">
               <div class="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
-                <div class="sm:col-span-2 space-y-1">
+                <div class="space-y-1">
                   <label class="text-[11px] font-semibold text-slate-400 block">Título do Episódio</label>
                   <input id="qnv-title" type="text" value="Confusão na Bodega — Causos do Sertão Ep. 01" required
                     class="w-full min-h-[44px] bg-[#070a08] border border-white/10 focus:border-amber-400 rounded-xl px-3 text-xs text-white outline-none" />
                 </div>
                 <div class="space-y-1">
-                  <label class="text-[11px] font-semibold text-slate-400 block">Estilo Visual</label>
+                  <label class="text-[11px] font-semibold text-slate-400 block">Mundo Visual (v2.8)</label>
                   <select id="qnv-style" class="w-full min-h-[44px] bg-[#070a08] border border-white/10 rounded-xl px-2.5 text-xs text-slate-100 outline-none">
-                    <option value="3d_cartoon" selected>🎨 3D Cartoon (Animado)</option>
-                    <option value="cinematic_tv">🎬 Novela TV 35mm (Realista)</option>
+                    <option value="stylized_3d_pixar" selected>🎨 Animação 3D Pixar (Estilizada)</option>
+                    <option value="cinematic_live_action">🎬 Cinematográfico Realista 8K</option>
+                  </select>
+                </div>
+                <div class="space-y-1">
+                  <label class="text-[11px] font-semibold text-amber-300 block">Estrutura de Direção</label>
+                  <select id="qnv-dramatic-structure" class="w-full min-h-[44px] bg-[#070a08] border border-amber-500/30 rounded-xl px-2.5 text-xs text-slate-100 outline-none">
+                    <option value="viral_4_cuts" selected>🔥 4 Cortes Virais (Pausa + Reação Muda)</option>
+                    <option value="classic_3_cuts">💬 3 Cortes Clássicos</option>
                   </select>
                 </div>
                 <div class="space-y-1">
@@ -1938,7 +1964,7 @@
                   <label class="text-[11px] font-semibold text-amber-300 block">Motor de Produção</label>
                   <select id="qnv-render-mode" class="w-full min-h-[44px] bg-[#0d1210] border border-white/10 rounded-xl px-2.5 text-xs text-white outline-none">
                     <option value="vps_preview" selected>⚡ Preview Rápido VPS (Clean Cinema)</option>
-                    <option value="colab_gpu">🚀 Colab GPU Lip-Sync (EchoMimicV3/LatentSync)</option>
+                    <option value="colab_gpu">🚀 Colab T4 (LivePortrait + LatentSync 1.5 / MuseTalk)</option>
                     <option value="flow_pack">🎬 Pack Google Flow Veo 3.1</option>
                   </select>
                 </div>
@@ -4916,14 +4942,15 @@
       if (guidedTemplateId === 'novela_regional_studio') {
         const cleanCinema = Boolean(document.getElementById('gp-nov-clean-cinema')?.checked ?? true);
         const out = {
-          visual_style: document.getElementById('gp-nov-style')?.value || '3d_cartoon',
+          visual_style: document.getElementById('gp-nov-style')?.value || 'stylized_3d_pixar',
+          dramatic_structure: document.getElementById('nov-dramatic-structure')?.value || 'viral_4_cuts',
           theme: document.getElementById('gp-nov-theme')?.value || 'Enzo da capital confundindo gírias nordestinas na bodega de Seu Bastião',
           expressions: document.getElementById('gp-nov-expressions')?.value || 'Oxente, Morreu Maria Preá, Botar Boneco',
           tone: document.getElementById('gp-nov-tone')?.value || 'Comédia Leve',
           clean_cinema_mode: cleanCinema,
           subtitles_mode: document.getElementById('gp-nov-subtitles')?.value || 'none',
           render_mode: document.getElementById('gp-nov-render-mode')?.value || 'flow_pack',
-          colab_engine: document.getElementById('nov-colab-engine')?.value || 'echomimic_v3',
+          colab_engine: document.getElementById('nov-colab-engine')?.value || 'liveportrait_latentsync',
           accent_engine: document.getElementById('nov-accent-engine')?.value || 'nordestino_raiz',
         };
         if (Array.isArray(gpNovGeneratedDialogue) && gpNovGeneratedDialogue.length) {
@@ -5117,7 +5144,13 @@
         document.getElementById('btn-qm-submit')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       } else if (engine === 'novela') {
         if (hm.title && document.getElementById('qnv-title')) document.getElementById('qnv-title').value = hm.title;
-        if (hm.visual_style && document.getElementById('qnv-style')) document.getElementById('qnv-style').value = hm.visual_style;
+        if (hm.visual_style && document.getElementById('qnv-style')) {
+          const vsNorm = (hm.visual_style === 'cinematic_tv' || hm.visual_style === 'cinematic_live_action') ? 'cinematic_live_action' : 'stylized_3d_pixar';
+          document.getElementById('qnv-style').value = vsNorm;
+        }
+        if (hm.dramatic_structure && document.getElementById('qnv-dramatic-structure')) {
+          document.getElementById('qnv-dramatic-structure').value = hm.dramatic_structure === 'classic_3_cuts' ? 'classic_3_cuts' : 'viral_4_cuts';
+        }
         if (hm.platform_preset && document.getElementById('qnv-platform')) document.getElementById('qnv-platform').value = hm.platform_preset;
         if (Array.isArray(hm.dictionary) && document.getElementById('qnv-dict-json')) {
           document.getElementById('qnv-dict-json').value = JSON.stringify(hm.dictionary, null, 2);
@@ -5137,39 +5170,56 @@
     let qnvDialogueRows = [
       {
         speaker: 'Dona Socorro',
-        tts_text: 'Oxêêênte, Enzo! Vem cá minino! Disseram que morreu Maria Preá lá na roça!',
+        tts_text: 'Oxente, Enzo! Vem cá minino! Disseram que morreu Maria Preá lá na roça!',
         subtitle_text: 'Oxente, Enzo! Vem cá! Disseram que morreu Maria Preá lá na roça!',
         emotion: 'shocked',
+        shot_framing: 'over_shoulder',
+        cut_role: 'attack_angry',
+        lead_in_pause: 0.0,
+        is_silent_reaction: false,
         expression_highlight: 'Morreu Maria Preá'
       },
       {
-        speaker: 'Enzo',
-        tts_text: 'Meu Deus, Tia Socorro! Que horas vai ser o velório da Dona Maria?! Tô comprando terno preto na Shopee!',
-        subtitle_text: 'Meu Deus, Tia! Que horas é o velório da Dona Maria?! Tô comprando terno!',
-        emotion: 'confused',
-        expression_highlight: 'velório'
-      },
-      {
         speaker: 'Seu Bastião',
-        tts_text: 'Hahahaha! Deixe de cunversa, Enzo! Morreu Maria Preá quer dizer que acabou tudo, ô cabra leso!',
-        subtitle_text: 'Hahaha! Deixe de cunversa, Enzo! Morreu Maria Preá quer dizer que acabou tudo!',
-        emotion: 'laughing',
+        tts_text: 'Deixe de cunversa, cabra leso! Morreu Maria Preá quer dizer que acabou tudo!',
+        subtitle_text: 'Deixe de cunversa! Morreu Maria Preá quer dizer que acabou!',
+        emotion: 'proud',
+        shot_framing: 'reverse_over_shoulder',
+        cut_role: 'calm_inhale_comeback',
+        lead_in_pause: 0.45,
+        is_silent_reaction: false,
         expression_highlight: 'Deixe de cunversa'
       },
       {
+        speaker: 'Enzo',
+        tts_text: 'O quê?! Eita peste, o povo inteiro ouviu!',
+        subtitle_text: 'O quê?! Eita peste!',
+        emotion: 'shocked',
+        shot_framing: 'reaction_closeup',
+        cut_role: 'shock_what',
+        lead_in_pause: 0.0,
+        is_silent_reaction: false,
+        expression_highlight: 'O quê?!'
+      },
+      {
         speaker: 'Dona Socorro',
-        tts_text: 'E vê se num começa a botar boneco aqui na calçada não viu, meu fí!',
-        subtitle_text: 'E vê se não começa a botar boneco aqui na calçada não, viu meu filho!',
-        emotion: 'dramatic',
-        expression_highlight: 'Botar Boneco'
+        tts_text: '',
+        subtitle_text: '',
+        emotion: 'shame',
+        shot_framing: 'reaction_closeup',
+        cut_role: 'silent_shame_reaction',
+        lead_in_pause: 0.0,
+        is_silent_reaction: true,
+        silent_duration: 2.0,
+        expression_highlight: ''
       }
     ];
 
     function setGuidedNovelaStyle(styleId) {
-      const val = styleId === 'cinematic_tv' ? 'cinematic_tv' : '3d_cartoon';
+      const val = (styleId === 'cinematic_live_action' || styleId === 'cinematic_tv') ? 'cinematic_live_action' : 'stylized_3d_pixar';
       const hidden = document.getElementById('gp-nov-style');
       if (hidden) hidden.value = val;
-      ['3d_cartoon', 'cinematic_tv'].forEach(s => {
+      ['stylized_3d_pixar', 'cinematic_live_action'].forEach(s => {
         const btn = document.getElementById(`gp-nov-style-${s}`);
         if (!btn) return;
         const active = s === val;
@@ -5204,6 +5254,8 @@
             theme: document.getElementById('gp-nov-theme')?.value || '',
             expressions: exprRaw.split(',').map(s => s.trim()).filter(Boolean),
             tone: document.getElementById('gp-nov-tone')?.value || 'Comédia Leve',
+            visual_style: document.getElementById('gp-nov-style')?.value || 'stylized_3d_pixar',
+            dramatic_structure: document.getElementById('nov-dramatic-structure')?.value || 'viral_4_cuts',
           }),
         });
         const data = await res.json();
@@ -5216,22 +5268,22 @@
           episode_badge: data.episode_badge || '',
         };
         if (box) box.classList.remove('hidden');
-        if (cntEl) cntEl.textContent = `${data.dialogue.length} falas (${data.source || 'ai'})`;
+        if (cntEl) cntEl.textContent = `${data.dialogue.length} cortes (${data.source || 'ai'})`;
         if (linesEl) {
           linesEl.innerHTML = data.dialogue.map(d => `
             <div class="p-2 rounded-xl bg-white/[0.03] border border-white/10 space-y-1">
               <div>
                 <span class="font-extrabold text-amber-300">${escapeHtml(d.speaker)}:</span>
-                <span class="text-slate-200">${escapeHtml(d.subtitle_text)}</span>
+                <span class="text-slate-200">${d.is_silent_reaction ? '<i>[Reação Muda de Vergonha · ' + escapeHtml(String(d.silent_duration || 2.0)) + 's]</i>' : escapeHtml(d.subtitle_text)}</span>
               </div>
               <div class="flex flex-wrap gap-1.5 text-[10px]">
-                <span class="px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-200 border border-emerald-400/30">🎙️ 100% Gemini Native TTS · Sotaque Sertão Ágil</span>
-                <span class="px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-200 border border-cyan-400/30">👄 Lip-Sync &amp; Movimento Ativo</span>
+                <span class="px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-200 border border-emerald-400/30">${d.is_silent_reaction ? '😶 Sem Fala · Sussurro/Silêncio' : '🎙️ 100% Gemini Native TTS'}</span>
+                <span class="px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-200 border border-cyan-400/30">👄 Visemas 2.5D${Number(d.lead_in_pause || 0) > 0 ? ' + Pausa ' + escapeHtml(String(d.lead_in_pause)) + 's' : ''}</span>
               </div>
             </div>
           `).join('');
         }
-        showToast(`Diálogo gerado com ${data.dialogue.length} falas!`, 'success');
+        showToast(`Diálogo gerado com ${data.dialogue.length} cortes!`, 'success');
       } catch (err) {
         showToast(`Erro ao gerar diálogo: ${err.message}`, 'error');
       } finally {
@@ -5246,14 +5298,14 @@
         <div class="p-3 rounded-2xl bg-[#070a08] border border-white/10 space-y-2">
           <div class="flex flex-wrap items-center justify-between gap-2">
             <div class="flex flex-wrap items-center gap-2">
-              <span class="text-[11px] font-mono text-amber-300 font-bold">Fala #${idx + 1}</span>
+              <span class="text-[11px] font-mono text-amber-300 font-bold">Corte #${idx + 1}</span>
               <select onchange="qnvDialogueRows[${idx}].speaker = this.value"
                 class="min-h-[38px] bg-[#0d1210] border border-white/10 rounded-lg px-2 text-xs text-white outline-none">
                 ${['Dona Socorro', 'Seu Bastião', 'Enzo', 'Narrador'].map(sp => `<option value="${sp}" ${row.speaker === sp ? 'selected' : ''}>${sp}</option>`).join('')}
               </select>
               <select onchange="qnvDialogueRows[${idx}].emotion = this.value"
                 class="min-h-[38px] bg-[#0d1210] border border-white/10 rounded-lg px-2 text-xs text-slate-200 outline-none">
-                ${['shocked', 'confused', 'laughing', 'proud', 'dramatic', 'warm'].map(em => `<option value="${em}" ${(row.emotion || 'warm') === em ? 'selected' : ''}>${em}</option>`).join('')}
+                ${['shocked', 'confused', 'laughing', 'proud', 'dramatic', 'shame', 'warm'].map(em => `<option value="${em}" ${(row.emotion || 'warm') === em ? 'selected' : ''}>${em}</option>`).join('')}
               </select>
               <select onchange="qnvDialogueRows[${idx}].shot_framing = this.value"
                 class="min-h-[38px] bg-[#0d1210] border border-white/10 rounded-lg px-2 text-xs text-cyan-200 outline-none">
@@ -5331,6 +5383,8 @@
             theme: document.getElementById('qnv-title')?.value || 'Confusão na Bodega do Sertão',
             expressions: ['Oxente', 'Morreu Maria Preá', 'Botar Boneco'],
             tone: 'Comédia Leve',
+            visual_style: document.getElementById('qnv-style')?.value || 'stylized_3d_pixar',
+            dramatic_structure: document.getElementById('qnv-dramatic-structure')?.value || 'viral_4_cuts',
           }),
         });
         const data = await res.json();
@@ -5473,12 +5527,14 @@
         const payload = isHard
           ? {
               title: document.getElementById('qnv-title')?.value || 'Novela Flow Veo 3.1',
-              visual_style: document.getElementById('qnv-style')?.value || '3d_cartoon',
+              visual_style: document.getElementById('qnv-style')?.value || 'stylized_3d_pixar',
+              dramatic_structure: document.getElementById('qnv-dramatic-structure')?.value || 'viral_4_cuts',
               dialogue: qnvDialogueRows,
             }
           : {
               title: gpNovGeneratedMeta.title || document.getElementById('gp-nov-theme')?.value || 'Causos do Sertão',
-              visual_style: document.getElementById('gp-nov-style')?.value || '3d_cartoon',
+              visual_style: document.getElementById('gp-nov-style')?.value || 'stylized_3d_pixar',
+              dramatic_structure: document.getElementById('nov-dramatic-structure')?.value || 'viral_4_cuts',
               theme: document.getElementById('gp-nov-theme')?.value || '',
               expressions: (document.getElementById('gp-nov-expressions')?.value || '').split(',').map(s => s.trim()).filter(Boolean),
               tone: document.getElementById('gp-nov-tone')?.value || 'Comédia Leve',
@@ -5819,12 +5875,13 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             title: document.getElementById('qnv-title')?.value || 'Causos do Sertão — Ep. 01',
-            visual_style: document.getElementById('qnv-style')?.value || '3d_cartoon',
+            visual_style: document.getElementById('qnv-style')?.value || 'stylized_3d_pixar',
+            dramatic_structure: document.getElementById('qnv-dramatic-structure')?.value || 'viral_4_cuts',
             platform_preset: document.getElementById('qnv-platform')?.value || 'tiktok_reels',
             clean_cinema_mode: Boolean(document.getElementById('qnv-clean-cinema')?.checked ?? true),
             subtitles_mode: document.getElementById('qnv-subtitles-mode')?.value || 'none',
             render_mode: rmode,
-            colab_engine: document.getElementById('nov-colab-engine')?.value || 'echomimic_v3',
+            colab_engine: document.getElementById('nov-colab-engine')?.value || 'liveportrait_latentsync',
             accent_engine: document.getElementById('qnv-accent-engine')?.value || document.getElementById('nov-accent-engine')?.value || 'nordestino_raiz',
             dictionary: Array.isArray(parsedDict) ? parsedDict : [],
             dialogue: qnvDialogueRows,

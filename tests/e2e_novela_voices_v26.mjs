@@ -120,6 +120,34 @@ async function runDesktop(browser) {
   await page.locator('#gp-tpl-novela_regional_studio').click();
   await page.waitForSelector('#nov-accent-engine', { state: 'visible', timeout: 15000 });
 
+  // v2.8 Dual-World + Viral 4 Cuts selectors
+  await page.waitForSelector('#gp-nov-style-cinematic_live_action', { state: 'visible' });
+  await page.waitForSelector('#gp-nov-style-stylized_3d_pixar', { state: 'visible' });
+  await page.waitForSelector('#nov-dramatic-structure', { state: 'visible' });
+  assert((await page.locator('#nov-dramatic-structure').inputValue()) === 'viral_4_cuts', 'Default #nov-dramatic-structure inesperado');
+  await page.locator('#gp-nov-style-cinematic_live_action').click();
+  assert((await page.locator('#gp-nov-style').inputValue()) === 'cinematic_live_action', 'Deveria selecionar cinematic_live_action');
+  await page.locator('#gp-nov-style-stylized_3d_pixar').click();
+  assert((await page.locator('#gp-nov-style').inputValue()) === 'stylized_3d_pixar', 'Deveria voltar para stylized_3d_pixar');
+
+  const genScriptWait = page.waitForResponse(
+    (r) => r.url().includes('/api/quick/novela/generate-script') && r.request().method() === 'POST' && r.status() === 200,
+    { timeout: 60000 }
+  );
+  await page.locator('#btn-gp-nov-gen').click();
+  const gsJson = await (await genScriptWait).json();
+  assert(gsJson.ok && Array.isArray(gsJson.dialogue) && gsJson.dialogue.length === 4, 'Esperado roteiro viral de 4 cortes');
+  await page.waitForSelector('#gp-nov-preview-box:not(.hidden)', { state: 'visible' });
+  await page.waitForSelector('#gp-nov-preview-lines :text("Reação Muda de Vergonha")', { state: 'visible', timeout: 10000 });
+  console.log(`[PASS v2.8] Dual-World + Viral 4 Cuts script preview (${gsJson.dialogue.length} cortes)`);
+
+  await page.locator('#gp-nov-mode-colab_gpu').click();
+  await page.waitForSelector('#gp-nov-panel-colab_gpu:not(.hidden)', { state: 'visible' });
+  const colabPanelTxt = await page.locator('#gp-nov-panel-colab_gpu').innerText();
+  assert(colabPanelTxt.includes('LivePortrait + LatentSync 1.5'), 'Banner híbrido v2.8 Colab T4 ausente');
+  assert((await page.locator('#nov-colab-engine').inputValue()) === 'liveportrait_latentsync', 'Default #nov-colab-engine inesperado');
+  await page.locator('#gp-nov-mode-flow_pack').click();
+
   const defaultAccent = await page.locator('#nov-accent-engine').inputValue();
   assert(defaultAccent === 'nordestino_raiz', `Default #nov-accent-engine inesperado: ${defaultAccent}`);
 
@@ -185,6 +213,10 @@ async function runDesktop(browser) {
   // 3) Modo Hard: seletor sincronizado, selos v2.7, "Ouvir Fala" individual e upload "Áudio Guia"
   await page.locator('#btn-quick-mode-hard').click();
   await page.waitForSelector('#card-hard-novela', { state: 'visible' });
+  await page.waitForSelector('#qnv-style', { state: 'visible' });
+  await page.waitForSelector('#qnv-dramatic-structure', { state: 'visible' });
+  assert((await page.locator('#qnv-style').inputValue()) === 'stylized_3d_pixar', 'Default #qnv-style v2.8 inesperado');
+  assert((await page.locator('#qnv-dramatic-structure').inputValue()) === 'viral_4_cuts', 'Default #qnv-dramatic-structure inesperado');
   await page.waitForSelector('#qnv-accent-engine', { state: 'visible' });
   await page.waitForSelector('#qnv-badge-voice', { state: 'visible' });
   await page.waitForSelector('#qnv-badge-lipsync', { state: 'visible' });
