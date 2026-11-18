@@ -748,6 +748,30 @@ def _unused_legacy_local_viseme_removed(
     }
 
 
+def _post_colab_json(
+    url: str,
+    payload: Dict[str, Any],
+    headers: Dict[str, str],
+    timeout: int = 240,
+) -> Dict[str, Any]:
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={**headers, "Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        body = ""
+        try:
+            body = exc.read().decode("utf-8", errors="ignore")[:240]
+        except Exception:
+            pass
+        raise RuntimeError(f"HTTP {exc.code} em {url}: {body or exc.reason}") from exc
+
+
 def _try_tier1_colab_animate(
     *,
     image_path: Path,
@@ -760,9 +784,12 @@ def _try_tier1_colab_animate(
     emotion_preset: str,
     lead_in_pause: float,
     is_silent_reaction: bool,
+    tone: str = "Comédia Leve",
     width: int,
     height: int,
+    errors_out: Optional[List[str]] = None,
 ) -> Optional[Dict[str, Any]]:
+    """Two-stage Colab L4/T4 worker call (LivePortrait fp16 -> LatentSync 1.5 fp16) to beat Cloudflare 100s timeout."""
     clean_url = (colab_url or "").strip().rstrip("/")
     if not clean_url:
         return None
@@ -771,7 +798,7 @@ def _try_tier1_colab_animate(
         if colab_token:
             headers["X-Colab-Token"] = colab_token
         hreq = urllib.request.Request(f"{clean_url}/health", headers=headers, method="GET")
-        with urllib.request.urlopen(hreq, timeout=2.5) as resp:
+        with urllib.request.urlopen(hreq, timeout=5.0) as resp:
             if resp.status != 200:
                 return None
 
@@ -783,46 +810,147 @@ def _try_tier1_colab_animate(
             cv2.imwrite(str(tmp_jpg), img_arr, [int(cv2.IMWRITE_JPEG_QUALITY), 92])
             src_img = tmp_jpg
         try:
-            payload = {
-                "image_b64": base64.b64encode(src_img.read_bytes()).decode("ascii"),
-                "audio_b64": base64.b64encode(audio_wav.read_bytes()).decode("ascii"),
-                "prompt": prompt,
-                "engine": colab_engine or "liveportrait_latentsync",
-                "emotion_preset": emotion_preset or "warm",
-                "lead_in_pause": float(lead_in_pause or 0.0),
-                "is_silent_reaction": bool(is_silent_reaction),
-                "width": width,
-                "height": height,
-            }
+            image_b64 = base64.b64encode(src_img.read_bytes()).decode("ascii")
         finally:
             if tmp_jpg:
                 tmp_jpg.unlink(missing_ok=True)
+        audio_b64 = base64.b64encode(audio_wav.read_bytes()).decode("ascii")
 
-        data = None
+        # Chamada 1 (Stage 1): LivePortrait fp16 ja cortado exatamente na duracao do audio (~15s)
+        stage1_payload = {
+            "image_b64": image_b64,
+            "audio_b64": audio_b64,
+            "prompt": prompt,
+            "engine": colab_engine or "liveportrait_latentsync",
+            "emotion_preset": emotion_preset or "warm",
+            "lead_in_pause": float(lead_in_pause or 0.0),
+            "is_silent_reaction": True,
+            "width": 512,
+            "height": 896,
+        }
+        data1 = None
+        stage1_errs: List[str] = []
         for route in ("/animate_turn", "/animate-take"):
             try:
-                req = urllib.request.Request(
-                    f"{clean_url}{route}",
-                    data=json.dumps(payload).encode("utf-8"),
-                    headers={**headers, "Content-Type": "application/json"},
-                    method="POST",
-                )
-                with urllib.request.urlopen(req, timeout=240) as resp:
-                    cand = json.loads(resp.read().decode("utf-8"))
+                cand = _post_colab_json(f"{clean_url}{route}", stage1_payload, headers, timeout=180)
                 if cand.get("ok") and cand.get("video_b64"):
-                    data = cand
+                    data1 = cand
                     break
-            except Exception:
-                continue
-        if not data:
-            return None
+                stage1_errs.append(f"{route}: resposta sem video_b64")
+            except Exception as exc:
+                stage1_errs.append(f"{route}: {str(exc)[:140]}")
+        if not data1:
+            raise RuntimeError("Colab Stage 1 falhou: " + " | ".join(stage1_errs))
 
-        raw_mp4 = out_mp4.with_suffix(".colab_raw.mp4")
-        raw_mp4.write_bytes(base64.b64decode(data["video_b64"]))
+        stage1_video_b64 = data1["video_b64"]
+        if is_silent_reaction:
+            raw_mp4 = out_mp4.with_suffix(".colab_raw.mp4")
+            raw_mp4.write_bytes(base64.b64decode(stage1_video_b64))
+            try:
+                _normalize_gpu_clip(raw_mp4, audio_wav, out_mp4, width=width, height=height)
+            finally:
+                raw_mp4.unlink(missing_ok=True)
+            qt = _get_qt()
+            if qt is not None:
+                qt.record_call("colab-t4-gpu", ok=True, status_code=200, specialty="video")
+            return {
+                "ok": True,
+                "animation_engine_used": "tier1_colab:liveportrait_fp16+silent_reaction",
+                "detector": "colab_gpu_worker",
+                "reaction_style": _resolve_reaction_style(tone=tone),
+                "duration": round(_probe_duration(out_mp4), 2),
+                "is_silent_reaction": True,
+                "output_mp4": str(out_mp4),
+            }
+
+        # Chamada 2 (Stage 2): LatentSync 1.5 fp16 segmentado apenas se audio > 2.85s (v3.0-turbo roda ~60s por 2.5s!)
+        aud_dur = _probe_duration(audio_wav)
+        stage_dir = out_mp4.parent / f".colab_s2_{uuid.uuid4().hex[:6]}"
+        stage_dir.mkdir(parents=True, exist_ok=True)
         try:
-            _normalize_gpu_clip(raw_mp4, audio_wav, out_mp4, width=width, height=height)
+            stage1_mp4 = stage_dir / "stage1.mp4"
+            stage1_mp4.write_bytes(base64.b64decode(stage1_video_b64))
+            max_chunk_sec = 2.85
+            n_chunks = max(1, int(math.ceil(aud_dur / max_chunk_sec)))
+            if n_chunks == 1:
+                data2 = _post_colab_json(
+                    f"{clean_url}/lipsync_video",
+                    {
+                        "video_b64": stage1_video_b64,
+                        "audio_b64": audio_b64,
+                        "engine": "latentsync_1.5",
+                        "width": width,
+                        "height": height,
+                    },
+                    headers,
+                    timeout=240,
+                )
+                if not data2.get("ok") or not data2.get("video_b64"):
+                    raise RuntimeError("Colab Stage 2 (/lipsync_video) retornou resposta sem video_b64")
+                raw_mp4 = stage_dir / "colab_raw.mp4"
+                raw_mp4.write_bytes(base64.b64decode(data2["video_b64"]))
+                _normalize_gpu_clip(raw_mp4, audio_wav, out_mp4, width=width, height=height)
+            else:
+                chunk_dur = aud_dur / float(n_chunks)
+                synced_chunks: List[Path] = []
+                for c_idx in range(n_chunks):
+                    t0_c = c_idx * chunk_dur
+                    len_c = (aud_dur - t0_c) if (c_idx == n_chunks - 1) else chunk_dur
+                    c_vid = stage_dir / f"c_{c_idx}.mp4"
+                    c_wav = stage_dir / f"c_{c_idx}.wav"
+                    subprocess.run(
+                        [
+                            FFMPEG_BIN, "-y", "-hide_banner", "-loglevel", "error",
+                            "-ss", f"{t0_c:.3f}", "-i", str(stage1_mp4), "-t", f"{len_c:.3f}",
+                            "-c:v", "libx264", "-preset", "fast", "-crf", "16", "-pix_fmt", "yuv420p", "-r", "30",
+                            "-an", str(c_vid),
+                        ],
+                        check=True,
+                        timeout=60,
+                    )
+                    subprocess.run(
+                        [
+                            FFMPEG_BIN, "-y", "-hide_banner", "-loglevel", "error",
+                            "-ss", f"{t0_c:.3f}", "-i", str(audio_wav), "-t", f"{len_c:.3f}",
+                            "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", str(c_wav),
+                        ],
+                        check=True,
+                        timeout=30,
+                    )
+                    c_data = _post_colab_json(
+                        f"{clean_url}/lipsync_video",
+                        {
+                            "video_b64": base64.b64encode(c_vid.read_bytes()).decode("ascii"),
+                            "audio_b64": base64.b64encode(c_wav.read_bytes()).decode("ascii"),
+                            "engine": "latentsync_1.5",
+                            "width": width,
+                            "height": height,
+                        },
+                        headers,
+                        timeout=240,
+                    )
+                    if not c_data.get("ok") or not c_data.get("video_b64"):
+                        raise RuntimeError(f"Colab Stage 2 chunk {c_idx}/{n_chunks} sem video_b64")
+                    c_out = stage_dir / f"c_{c_idx}_synced.mp4"
+                    c_out.write_bytes(base64.b64decode(c_data["video_b64"]))
+                    synced_chunks.append(c_out)
+
+                merged_raw = stage_dir / "merged_raw.mp4"
+                concat_cmd: List[str] = [FFMPEG_BIN, "-y", "-hide_banner", "-loglevel", "error"]
+                inputs_str = ""
+                for idx_c, cp in enumerate(synced_chunks):
+                    concat_cmd.extend(["-i", str(cp)])
+                    inputs_str += f"[{idx_c}:v]"
+                concat_cmd.extend([
+                    "-filter_complex", f"{inputs_str}concat=n={len(synced_chunks)}:v=1:a=0[vout]",
+                    "-map", "[vout]",
+                    "-c:v", "libx264", "-preset", "fast", "-crf", "16", "-pix_fmt", "yuv420p",
+                    str(merged_raw),
+                ])
+                subprocess.run(concat_cmd, check=True, timeout=60)
+                _normalize_gpu_clip(merged_raw, audio_wav, out_mp4, width=width, height=height)
         finally:
-            raw_mp4.unlink(missing_ok=True)
+            shutil.rmtree(stage_dir, ignore_errors=True)
 
         qt = _get_qt()
         if qt is not None:
@@ -830,13 +958,15 @@ def _try_tier1_colab_animate(
 
         return {
             "ok": True,
-            "animation_engine_used": f"tier1_colab:{data.get('engine') or colab_engine}",
+            "animation_engine_used": "tier1_colab:liveportrait_fp16+latentsync_1.5_fp16",
             "detector": "colab_gpu_worker",
             "duration": round(_probe_duration(out_mp4), 2),
-            "is_silent_reaction": bool(is_silent_reaction),
+            "is_silent_reaction": False,
             "output_mp4": str(out_mp4),
         }
     except Exception as exc:
+        if errors_out is not None:
+            errors_out.append(f"colab: {str(exc)[:200]}")
         qt = _get_qt()
         if qt is not None:
             qt.record_call("colab-t4-gpu", ok=False, status_code=500, specialty="video", error=str(exc)[:160])
@@ -1093,6 +1223,31 @@ def zerogpu_lipsync_video(
         shutil.rmtree(work_dir, ignore_errors=True)
 
 
+def _resolve_reaction_style(tone: str = "Comédia Leve", reaction_style: str = "") -> str:
+    rs = (reaction_style or "").strip().lower()
+    if rs in ("dramatic_shock", "comedy_smile"):
+        return rs
+    low = (tone or "").strip().lower()
+    if any(k in low for k in ("drama", "traiç", "traic", "vergonha", "tenso", "suspense", "choque", "sério", "serio")):
+        return "dramatic_shock"
+    return "comedy_smile"
+
+
+def _build_reaction_wan_prompt(tone: str = "Comédia Leve", reaction_style: str = "") -> str:
+    style = _resolve_reaction_style(tone=tone, reaction_style=reaction_style)
+    if style == "dramatic_shock":
+        return (
+            "The character gasps in dramatic shock and mortified embarrassment, "
+            "raising both hands to their head and lowering their gaze in disbelief, "
+            "shoulders slumping, vertical 9:16 cinema video"
+        )
+    return (
+        "The character breaks into an awkward sheepish smile and warm chuckle, "
+        "raising one hand to scratch the back of their head while shaking their head in funny disbelief, "
+        "friendly expressive eyes, natural upper-body motion, vertical 9:16 cinema video"
+    )
+
+
 def _try_zerogpu_cloud_animate(
     *,
     image_path: Path,
@@ -1102,6 +1257,8 @@ def _try_zerogpu_cloud_animate(
     emotion: str = "warm",
     emotion_preset: str = "warm",
     is_silent_reaction: bool = False,
+    tone: str = "Comédia Leve",
+    reaction_style: str = "",
     env_map: Optional[Dict[str, str]] = None,
     width: int = 1080,
     height: int = 1920,
@@ -1117,12 +1274,10 @@ def _try_zerogpu_cloud_animate(
         src_img = _prepare_raster_image(image_path, work_dir, width=width, height=height)
         aud_dur = _probe_duration(audio_wav)
 
-        # Silent reaction take (Cut 4): pure GPU Image-to-Video acting (NO speech distortion)
+        # Silent/Reaction take (Cut 4): tone-matched Wan 2.2 GPU acting (comedy_smile vs dramatic_shock)
         if is_silent_reaction:
-            react_prompt = (
-                prompt.strip()
-                or "The character swallows hard in shock and embarrassment, eyes widening slightly, blinking nervously with subtle shoulder and head motion, handheld cinema camera."
-            )
+            eff_rstyle = _resolve_reaction_style(tone=tone, reaction_style=reaction_style)
+            react_prompt = _build_reaction_wan_prompt(tone=tone, reaction_style=eff_rstyle)
             i2v_res = _run_zerogpu_i2v(
                 src_img=src_img,
                 prompt=react_prompt,
@@ -1138,8 +1293,9 @@ def _try_zerogpu_cloud_animate(
                     qt.record_call("zerogpu-a10g-video", ok=True, status_code=200, specialty="video")
                 return {
                     "ok": True,
-                    "animation_engine_used": f"tier1a_zerogpu_i2v:{sid}",
+                    "animation_engine_used": f"tier1a_zerogpu_i2v:{sid}:{eff_rstyle}",
                     "detector": "huggingface_zerogpu_a10g",
+                    "reaction_style": eff_rstyle,
                     "duration": round(_probe_duration(out_mp4), 2),
                     "is_silent_reaction": True,
                     "output_mp4": str(out_mp4),
@@ -1295,6 +1451,8 @@ def animate_character_talking_take(
     camera_action: str = "zoom_in",
     lead_in_pause: float = 0.0,
     is_silent_reaction: bool = False,
+    tone: str = "Comédia Leve",
+    reaction_style: str = "",
     colab_url: str = "",
     colab_token: str = "",
     colab_engine: str = "liveportrait_latentsync",
@@ -1306,6 +1464,7 @@ def animate_character_talking_take(
     """Strict Real GPU Generative Video Cascade (v2.9): Colab T4 -> ZeroGPU A10G. No 2D fake distortion."""
     eff_url = (colab_url or (env_map or {}).get("COLAB_GPU_URL") or "").strip()
     eff_tok = (colab_token or (env_map or {}).get("COLAB_GPU_TOKEN") or "").strip()
+    colab_errors: List[str] = []
     if eff_url:
         t1 = _try_tier1_colab_animate(
             image_path=image_path,
@@ -1318,8 +1477,10 @@ def animate_character_talking_take(
             emotion_preset=emotion_preset,
             lead_in_pause=lead_in_pause,
             is_silent_reaction=is_silent_reaction,
+            tone=tone,
             width=width,
             height=height,
+            errors_out=colab_errors,
         )
         if t1 is not None:
             return t1
@@ -1333,6 +1494,8 @@ def animate_character_talking_take(
         emotion=emotion,
         emotion_preset=emotion_preset,
         is_silent_reaction=is_silent_reaction,
+        tone=tone,
+        reaction_style=reaction_style,
         env_map=env_map,
         width=width,
         height=height,
@@ -1341,7 +1504,8 @@ def animate_character_talking_take(
     if t1a is not None:
         return t1a
 
-    detail = " | ".join(zg_errors[-3:]) if zg_errors else "nenhum worker GPU ativo"
+    all_errors = colab_errors + zg_errors
+    detail = " | ".join(all_errors[-3:]) if all_errors else "nenhum worker GPU ativo"
     raise RuntimeError(
         "Falha na geração de vídeo neural GPU (ZeroGPU A10G / Colab T4) e fallback 2D (cv2.remap) banido na v2.9. "
         "Configure HF_TOKEN no Cofre Central para ampliar cota ZeroGPU ou conecte o Google Colab GPU T4. "

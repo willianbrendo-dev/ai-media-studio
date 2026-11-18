@@ -3597,6 +3597,7 @@
       const modal = document.getElementById('quota-modal');
       if (!modal) return;
       modal.classList.remove('hidden');
+      if (quotaTelemetryData) renderQuotaModal();
       fetchQuotaTelemetry();
     }
 

@@ -214,8 +214,8 @@ def build_fallback_novela_script(
     cuts_viral: List[Dict[str, Any]] = [
         {
             "speaker": "Dona Socorro",
-            "tts_text": f"Oxente, {clean_theme[:52]}?! Tu num tem um pingo de vergonha na cara não, é?!",
-            "subtitle_text": f"Oxente! {clean_theme[:52]}?! Sem vergonha não?!",
+            "tts_text": f"Oxente! {clean_theme[:38]}?! Tu num tem vergonha não?!",
+            "subtitle_text": f"Oxente! {clean_theme[:38]}?! Tu num tem vergonha não?!",
             "emotion": "shocked",
             "camera_action": "shake",
             "shot_framing": "over_shoulder",
@@ -228,22 +228,22 @@ def build_fallback_novela_script(
         },
         {
             "speaker": "Seu Bastião",
-            "tts_text": f"Tenho não, dona Socorro... mas depois de {second_expr}, quem ficou sem graça aqui foi a senhora!",
-            "subtitle_text": f"Tenho não... mas com '{second_expr}', quem corou foi a senhora!",
+            "tts_text": f"Tenho não! Depois de {second_expr}, quem corou aqui foi a senhora!",
+            "subtitle_text": f"Tenho não! Depois de {second_expr}, quem corou aqui foi a senhora!",
             "emotion": "proud",
             "camera_action": "zoom_in",
             "shot_framing": "reverse_over_shoulder",
             "cut_role": "calm_inhale_comeback",
-            "lead_in_pause": 0.45,
+            "lead_in_pause": 0.12,
             "is_silent_reaction": False,
             "silent_duration": 0.0,
-            "physical_action_en": "closes eyes for 0.45s taking a calm breath, then opens eyes slowly with a poised knowing smirk and calm sharp comeback",
+            "physical_action_en": "takes a quick 0.12s natural beat, smiling knowingly with a sharp playful comeback",
             "expression_highlight": second_expr,
         },
         {
             "speaker": "Enzo",
             "tts_text": "O quê?! Eita peste, essa doeu até em mim!",
-            "subtitle_text": "O quê?! Eita peste, essa doeu!",
+            "subtitle_text": "O quê?! Eita peste, essa doeu até em mim!",
             "emotion": "shocked",
             "camera_action": "whip_pan",
             "shot_framing": "reaction_closeup",
@@ -1012,20 +1012,22 @@ class GuidedPipelineOrchestrator:
             else "ESTILO VISUAL: ANIMAÇÃO 3D PIXAR/CARTOON EXPRESSIVA (bodega nordestina colorida estilizada). "
         )
         structure_directive = (
-            "ESTRUTURA OBRIGATÓRIA VIRAL 4 CORTES (v2.8):\n"
-            "- Corte 1 (`attack_angry`, `lead_in_pause`: 0.0): Personagem A dispara provocação ou acusação direta (1 frase curta de 2.5s a 3.5s, `over_shoulder`).\n"
-            "- Corte 2 (`calm_inhale_comeback`, `lead_in_pause`: 0.45): Personagem B fecha os olhos, respira 0.45s antes de responder e devolve uma invertida certeira (`reverse_over_shoulder`).\n"
-            "- Corte 3 (`shock_what`, `lead_in_pause`: 0.0): Personagem C reage em choque rápido ('O quê?! Eita peste!'), máx. 4 palavras (`reaction_closeup`).\n"
-            "- Corte 4 (`silent_shame_reaction`, `is_silent_reaction`: true, `silent_duration`: 2.0, `tts_text`: \"\", `subtitle_text`: \"\"): Close-up MUDO de 2.0s voltando no Personagem A em vergonha absoluta (`emotion`: 'shame', SEM fala!).\n"
+            "ESTRUTURA OBRIGATÓRIA VIRAL 4 CORTES (v3.0):\n"
+            "- Corte 1 (`attack_angry`, `lead_in_pause`: 0.0): Personagem A dispara provocação rápida (MÁX. 12 a 15 palavras, 2.0s a 3.4s, `over_shoulder`).\n"
+            "- Corte 2 (`calm_inhale_comeback`, `lead_in_pause`: 0.12): Personagem B devolve uma invertida certeira (MÁX. 12 a 15 palavras, 2.0s a 3.4s, `reverse_over_shoulder`).\n"
+            "- Corte 3 (`shock_what`, `lead_in_pause`: 0.0): Reação de espanto (MÁX. 12 palavras, `reaction_closeup`).\n"
+            "- Corte 4 (`silent_shame_reaction`, `is_silent_reaction`: true, `silent_duration`: 2.0, `tts_text`: \"\", `subtitle_text`: \"\"): Close-up de reação de 2.0s voltando no Personagem A.\n"
             if dstruct == "viral_4_cuts"
-            else "ESTRUTURA CLÁSSICA (3 CORTES RÁPIDOS): dialogue com 3 falas ágeis alternando plano/contraplano/fechamento cômico.\n"
+            else "ESTRUTURA CLÁSSICA (3 CORTES RÁPIDOS): dialogue com 3 falas ágeis (máx. 12-15 palavras cada) alternando plano/contraplano.\n"
         )
 
         sys_prompt = (
-            "Você é roteirista e diretor cinematográfico de micro-séries virais nordestinas para Reels/TikTok (10 a 16 segundos no total, corte seco plano/contraplano). "
+            "Você é roteirista e diretor cinematográfico de micro-séries virais nordestinas para Reels/TikTok (10 a 15 segundos no total, corte seco plano/contraplano). "
             + world_directive
             + structure_directive
             + "Personagens fixos disponíveis: 'Dona Socorro', 'Seu Bastião', 'Enzo', 'Narrador'. "
+            "REGRA DE DURAÇÃO & LEGENDA 100% FIEL: Cada fala deve ter NO MÁXIMO 12 a 15 palavras (2.0s a 3.4s). "
+            "`subtitle_text` DEVE reproduzir EXATAMENTE 100% de todas as palavras de `tts_text` (PROIBIDO truncar ou resumir a 2ª frase!). "
             "REGRA CULTURAL INEGOCIÁVEL: é PROIBIDO usar gírias mineiras, paulistas ou gaúchas como 'trem', 'uai', 'sô', 'mano', 'meo', 'daora', 'guri', 'bah', 'tchê'. "
             "Use apenas vocabulário legítimo do Nordeste ('oxente', 'oxe', 'vixe', 'esse negócio', 'essa marmota', 'essa presepada', 'cabra', 'mangar', 'botar boneco', 'morreu Maria Preá', 'deixe de cunversa', 'arretado'). "
             "NUNCA alongue vogais repetidas ('Oxêêênte' é proibido; escreva 'Oxente!'). "
@@ -1070,10 +1072,12 @@ class GuidedPipelineOrchestrator:
             if dstruct == "viral_4_cuts" and d_idx == 3 and (is_silent or not str(row.get("tts_text") or "").strip()):
                 is_silent = True
 
-            sub = "" if is_silent else _sanitize_northeast_text(str(row.get("subtitle_text") or row.get("text") or "").strip())
-            tts = "" if is_silent else _sanitize_northeast_text(str(row.get("tts_text") or sub).strip())
-            if not is_silent and not sub:
+            tts = "" if is_silent else _sanitize_northeast_text(str(row.get("tts_text") or row.get("subtitle_text") or row.get("text") or "").strip())
+            sub_raw = "" if is_silent else _sanitize_northeast_text(str(row.get("subtitle_text") or tts).strip())
+            if not is_silent and not tts:
                 continue
+            # Ensure subtitle_text never truncates spoken audio words
+            sub = tts if (not sub_raw or len(sub_raw.split()) < len(tts.split())) else sub_raw
 
             framing = str(row.get("shot_framing") or default_framings[d_idx % len(default_framings)]).strip().lower()
             if framing not in ("over_shoulder", "reverse_over_shoulder", "reaction_closeup"):
@@ -1089,8 +1093,8 @@ class GuidedPipelineOrchestrator:
                 lead_in = float(row.get("lead_in_pause") or 0.0)
             except (TypeError, ValueError):
                 lead_in = 0.0
-            if dstruct == "viral_4_cuts" and d_idx == 1 and lead_in < 0.45:
-                lead_in = 0.45
+            if dstruct == "viral_4_cuts" and d_idx == 1:
+                lead_in = 0.12 if (lead_in <= 0.0 or lead_in >= 0.35) else min(0.18, max(0.08, lead_in))
 
             try:
                 silent_dur = float(row.get("silent_duration") or (2.0 if is_silent else 0.0))
@@ -1119,8 +1123,9 @@ class GuidedPipelineOrchestrator:
             return fallback
 
         if dstruct == "viral_4_cuts":
-            if len(cleaned_dialogue) >= 2 and float(cleaned_dialogue[1].get("lead_in_pause") or 0.0) < 0.45:
-                cleaned_dialogue[1]["lead_in_pause"] = 0.45
+            if len(cleaned_dialogue) >= 2:
+                lp2 = float(cleaned_dialogue[1].get("lead_in_pause") or 0.0)
+                cleaned_dialogue[1]["lead_in_pause"] = 0.12 if (lp2 <= 0.0 or lp2 >= 0.35) else round(min(0.18, max(0.08, lp2)), 2)
                 cleaned_dialogue[1]["cut_role"] = "calm_inhale_comeback"
             if len(cleaned_dialogue) >= 3 and not any(x.get("is_silent_reaction") for x in cleaned_dialogue):
                 cleaned_dialogue = cleaned_dialogue[:3]
@@ -1225,6 +1230,7 @@ class GuidedPipelineOrchestrator:
             episode_badge=cp0.get("episode_badge") or params.get("episode_badge") or "🌵 NOVELINHA DO SERTÃO • EP. 01",
             visual_style=visual_style,
             dramatic_structure=dramatic_structure,
+            tone=str(cp0.get("tone") or params.get("tone") or "Comédia Leve").strip(),
             platform_preset=p_meta["id"],
             setting=cp0.get("setting") or "",
             dictionary=cp0.get("dictionary") or [],

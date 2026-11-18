@@ -1,6 +1,6 @@
 ================================================================================================
 AI MEDIA STUDIO — DOSSIÊ TÉCNICO E ARQUITETURAL COMPLETO
-Gerado por introspecção em: 2026-11-18 17:08:32 -03
+Gerado por introspecção em: 2026-11-18 20:30:47 -03
 Repositório Local: /home/wbrendo/.gemini/antigravity/scratch/ai-media-studio
 VPS Produção: root@187.77.202.176:/opt/ai-media-studio/ (https://187.77.202.176.sslip.io)
 Política de Segurança: Zero valores de segredos exibidos; apenas nomes de chaves e status SET=True/False.
@@ -216,7 +216,7 @@ SEÇÃO 1 · INVENTÁRIO COMPLETO DE ARQUIVOS, MÓDULOS, CLASSES E FUNÇÕES
       * L6654-L6656 async def api_diagnostics_project(project_id)
 
 ### media-control-panel/guided_pipelines.py
-    VPS Equiv.: /opt/ai-media-studio/media-control-panel/guided_pipelines.py | Tamanho: 61.3 KB (62791 bytes) | Linhas: 1265
+    VPS Equiv.: /opt/ai-media-studio/media-control-panel/guided_pipelines.py | Tamanho: 61.8 KB (63305 bytes) | Linhas: 1271
     Papel     : Orquestrador assíncrono das 6 Trilhas Guiadas (RAM Relay, Checkpoints JSON, Safe-Zones, Roteirista IA)
     Docstring : Guided Pipeline Orchestrator with 1-Stack-at-a-Time RAM Relay & Disk Checkpoints.
     Símbolos principais:
@@ -225,7 +225,7 @@ SEÇÃO 1 · INVENTÁRIO COMPLETO DE ARQUIVOS, MÓDULOS, CLASSES E FUNÇÕES
       * L173-L177  def _normalize_novela_visual_style(raw)
       * L180-L184  def _normalize_novela_dramatic_structure(raw)
       * L187-L307  def build_fallback_novela_script(theme, expressions, tone, visual_style, dramatic_structure) — Deterministic multi-character Brazilian Northeast script fallback with v2.8 Dual-World & Viral 4-Cut pacing.
-      * L310-L1265 class GuidedPipelineOrchestrator(methods=15: __init__(L313), state_path(L359), _save_state(L365), load_state(L376), list_runs(L385), start(L398), resume(L470), _run_pipeline_task(L494), _step_shopee_viral_clone(L584), _step_novela_shorts_polish(L697)...) — Executes multi-step production pipelines asynchronously with disk checkpoints and strict RAM protection.
+      * L310-L1271 class GuidedPipelineOrchestrator(methods=15: __init__(L313), state_path(L359), _save_state(L365), load_state(L376), list_runs(L385), start(L398), resume(L470), _run_pipeline_task(L494), _step_shopee_viral_clone(L584), _step_novela_shorts_polish(L697)...) — Executes multi-step production pipelines asynchronously with disk checkpoints and strict RAM protection.
 
 ### tools/hyperframes/quota_telemetry.py
     VPS Equiv.: /opt/ai-media-studio/tools/hyperframes/quota_telemetry.py | Tamanho: 19.2 KB (19644 bytes) | Linhas: 525
@@ -238,45 +238,49 @@ SEÇÃO 1 · INVENTÁRIO COMPLETO DE ARQUIVOS, MÓDULOS, CLASSES E FUNÇÕES
       * L521-L525  def get_tracker()
 
 ### tools/hyperframes/vps_novela_runner.py
-    VPS Equiv.: /opt/ai-media-studio/tools/hyperframes/vps_novela_runner.py | Tamanho: 108.5 KB (111106 bytes) | Linhas: 2450
-    Papel     : Motor Clean Cinema Multi-Personagem, Dual-Style Live-Action/3D, 4 Cortes Virais, Flow Veo 3.1 Pack e Take Stitcher c/ Re-LipSync GPU
+    VPS Equiv.: /opt/ai-media-studio/tools/hyperframes/vps_novela_runner.py | Tamanho: 117.9 KB (120722 bytes) | Linhas: 2653
+    Papel     : Motor Clean Cinema v3.0 Multi-Personagem: Continuity Lock (+14% crop), Single-Subject SRS, Mix Contínuo -33dB, Legendas Bipartidas (.ass) & Flow Veo 3.1
     Docstring : VPS Novela Studio Runner — Cinema Clean Engine v2.5.
     Símbolos principais:
-      * L242-L247  def normalize_visual_style(raw) — Normalize visual style across v2.5/v2.8 names into 'cinematic_live_action' or 'stylized_3d_pixar'.
-      * L250-L255  def normalize_dramatic_structure(raw) — Normalize dramatic directing structure ('viral_4_cuts' or 'classic_3_cuts').
-      * L336-L363  class TurnCompiled(methods=0: )
-      * L366-L378  def _normalize_speaker_key(raw)
-      * L381-L408  def _get_character_spec(speaker_raw)
-      * L411-L495  def compile_dramatic_cuts(raw_dialogue, dramatic_structure) — Structure raw turns into either 4 viral dramatic cuts (with 0.45s Cut-2 pause + Cut-4 Silent Shame Reaction) or classic 
-      * L498-L515  def _assign_shot_framing(turn_idx, raw_framing, emotion, prev_speaker, cur_speaker)
-      * L518-L546  def _load_secrets_env()
-      * L549-L563  def _run_checked(cmd, cwd, timeout)
-      * L566-L589  def _probe_media(media_path)
-      * L592-L593  def _probe_duration(media_path)
-      * L596-L640  def _synthesize_turn_audio(tts_text, voice, rate, pitch, raw_mp3, clean_wav, lead_pad, tail_pad) — Synthesize edge-tts voice clip with rapid clean cinema padding into 48kHz stereo WAV.
-      * L643-L651  def _get_qt()
-      * L654-L719  def _call_nvidia_flux_image(prompt, api_key, out_jpg, model) — Generate a clean vertical 9:16 portrait/scene image via NVIDIA NIM Flux API.
-      * L722-L807  def _build_bespoke_svg_portrait(speaker_key, spec, visual_style, emotion, shot_framing, out_svg, clean_no_text) — Clean procedural vector stage artwork (zero overlaid UI plaques when clean_no_text=True).
-      * L810-L817  def _svg_to_clean_jpg(svg_path, jpg_path)
-      * L820-L907  def _resolve_turn_visual(speaker_key, spec, emotion, shot_framing, physical_action_en, visual_style, setting, assets_dir...) — Generate/resolve a clean 1080x1920 closed-mouth, calm-arms portrait image for one turn.
-      * L910-L969  def build_veo_take_prompt(speaker_spec, tts_text, visual_style, shot_framing, emotion, physical_action_en, setting, cut_role...) — Compose second-by-second bilingual Veo 3.1 technical camera + acting prompt with exact Portuguese line or Silent Reactio
-      * L972-L1119 def generate_flow_veo_pack(cfg) — Generate Google Flow Veo 3.1 Production Pack (closed-mouth 1080x1920 Ingredients + 4-Cut bilingual prompts).
-      * L1122-L1211 def _build_master_audio_mix(turns, freeze_start, freeze_dur, total_dur, work_dir, include_freeze_sting) — Concatenate per-turn speech + subtle scene cut pops normalized to 48kHz Stereo SoXR loudnorm.
-      * L1214-L1226 def _format_subtitle_html(text, highlight, accent_color)
-      * L1229-L1525 def _build_hyperframes_html(cfg, turns, freeze_start, freeze_dur, total_dur, safe_zone, visual_style, clean_cinema_mode...) — Generate HyperFrames compliant index.html in Clean Cinema (100% full-bleed) or Classic Card mode.
-      * L1532-L1542 def _get_whisper_model()
-      * L1545-L1617 def _detect_speech_window(clip_path, raw_dur, work_dir, idx) — Find tight [start, end] speech bounds via faster-whisper INT8 (NumPy PCM) + silencedetect fallback.
-      * L1620-L1628 def _format_ass_ts(sec)
-      * L1631-L1924 def stitch_novela_takes(cfg) — Trim silence lead/tail on ordered MP4 takes, normalize 1080x1920 30fps + 48kHz SoXR, optional minimal captions.
-      * L1927-L1955 def _call_colab_animate_take(colab_url, colab_token, image_path, audio_wav, veo_prompt, colab_engine, out_mp4) — Send 1 take portrait + PT-BR WAV + acting prompt to remote Google Colab GPU Worker `/animate-take`.
-      * L1958-L1968 def _synthesize_silent_ambient_wav(out_wav, dur_sec) — Create subtle 48kHz Stereo room-tone/sigh ambient audio for Silent Reaction Shot.
-      * L1971-L1990 def _prepend_lead_silence_wav(src_wav, lead_sec) — Prepend clean subtle lead silence (e.g. 0.45s Cut-2 breath pause) preserving 48kHz Stereo SoXR.
-      * L1993-L2426 def render_novela_episode(cfg) — Execute end-to-end multi-character micro-series production across v2.8 Dual-Style & 4-Cut modes.
-      * L2429-L2442 def main()
+      * L244-L249  def normalize_visual_style(raw) — Normalize visual style across v2.5/v2.8 names into 'cinematic_live_action' or 'stylized_3d_pixar'.
+      * L252-L257  def normalize_dramatic_structure(raw) — Normalize dramatic directing structure ('viral_4_cuts' or 'classic_3_cuts').
+      * L339-L366  class TurnCompiled(methods=0: )
+      * L369-L381  def _normalize_speaker_key(raw)
+      * L384-L411  def _get_character_spec(speaker_raw)
+      * L414-L512  def compile_dramatic_cuts(raw_dialogue, dramatic_structure) — Structure raw turns into either 4 viral dramatic cuts (0.12s Cut-2 pause + Cut-4 tone-matched reaction) or classic dialo
+      * L515-L532  def _assign_shot_framing(turn_idx, raw_framing, emotion, prev_speaker, cur_speaker)
+      * L535-L563  def _load_secrets_env()
+      * L566-L580  def _run_checked(cmd, cwd, timeout)
+      * L583-L606  def _probe_media(media_path)
+      * L609-L610  def _probe_duration(media_path)
+      * L613-L657  def _synthesize_turn_audio(tts_text, voice, rate, pitch, raw_mp3, clean_wav, lead_pad, tail_pad) — Synthesize edge-tts voice clip with rapid clean cinema padding into 48kHz stereo WAV.
+      * L660-L668  def _get_qt()
+      * L671-L736  def _call_nvidia_flux_image(prompt, api_key, out_jpg, model) — Generate a clean vertical 9:16 portrait/scene image via NVIDIA NIM Flux API.
+      * L739-L824  def _build_bespoke_svg_portrait(speaker_key, spec, visual_style, emotion, shot_framing, out_svg, clean_no_text) — Clean procedural vector stage artwork (zero overlaid UI plaques when clean_no_text=True).
+      * L827-L834  def _svg_to_clean_jpg(svg_path, jpg_path)
+      * L837-L932  def _resolve_turn_visual(speaker_key, spec, emotion, shot_framing, physical_action_en, visual_style, setting, assets_dir...) — Generate/resolve a clean 1080x1920 portrait with v3.0 Identity & Set Continuity Lock.
+      * L935-L1001 def build_veo_take_prompt(speaker_spec, tts_text, visual_style, shot_framing, emotion, physical_action_en, setting, cut_role...) — Compose second-by-second bilingual Veo 3.1 technical camera + acting prompt matching episode tone.
+      * L1004-L1151 def generate_flow_veo_pack(cfg) — Generate Google Flow Veo 3.1 Production Pack (closed-mouth 1080x1920 Ingredients + 4-Cut bilingual prompts).
+      * L1154-L1243 def _build_master_audio_mix(turns, freeze_start, freeze_dur, total_dur, work_dir, include_freeze_sting) — Concatenate per-turn speech + subtle scene cut pops normalized to 48kHz Stereo SoXR loudnorm.
+      * L1246-L1258 def _format_subtitle_html(text, highlight, accent_color)
+      * L1261-L1557 def _build_hyperframes_html(cfg, turns, freeze_start, freeze_dur, total_dur, safe_zone, visual_style, clean_cinema_mode...) — Generate HyperFrames compliant index.html in Clean Cinema (100% full-bleed) or Classic Card mode.
+      * L1564-L1574 def _get_whisper_model()
+      * L1577-L1649 def _detect_speech_window(clip_path, raw_dur, work_dir, idx) — Find tight [start, end] speech bounds via faster-whisper INT8 (NumPy PCM) + silencedetect fallback.
+      * L1652-L1660 def _format_ass_ts(sec)
+      * L1663-L1956 def stitch_novela_takes(cfg) — Trim silence lead/tail on ordered MP4 takes, normalize 1080x1920 30fps + 48kHz SoXR, optional minimal captions.
+      * L1959-L1987 def _call_colab_animate_take(colab_url, colab_token, image_path, audio_wav, veo_prompt, colab_engine, out_mp4) — Send 1 take portrait + PT-BR WAV + acting prompt to remote Google Colab GPU Worker `/animate-take`.
+      * L1990-L1992 def _tone_is_dramatic(tone)
+      * L1995-L2005 def _synthesize_silent_ambient_wav(out_wav, dur_sec) — Create natural -32 dB room-tone/street ambience WAV (eliminates -73 dB dead air).
+      * L2008-L2018 def _create_master_ambience_bed_wav(out_wav, dur_sec, target_lufs) — Build a continuous -33 dBFS street/room-tone bed across the full episode so no 0.25s window falls below -40 dB.
+      * L2021-L2102 def _synthesize_reaction_soundtrack_wav(out_wav, dur_sec, tone, speaker, env_map, work_dir) — Generate dynamic Cut 4 audio (-22 dB to -14 dB active peak): tone-matched SFX + micro vocal reaction + street bed.
+      * L2105-L2144 def _split_subtitle_events(start_t, end_t, text, max_chars) — Split subtitles > max_chars into 2 sequential timed ASS events so 100% of spoken audio is shown dynamically.
+      * L2147-L2166 def _prepend_lead_silence_wav(src_wav, lead_sec) — Prepend clean subtle lead silence (e.g. 0.45s Cut-2 breath pause) preserving 48kHz Stereo SoXR.
+      * L2169-L2629 def render_novela_episode(cfg) — Execute end-to-end multi-character micro-series production across v2.8 Dual-Style & 4-Cut modes.
+      * L2632-L2645 def main()
 
 ### tools/hyperframes/regional_voice_engine.py
     VPS Equiv.: /opt/ai-media-studio/tools/hyperframes/regional_voice_engine.py | Tamanho: 54.8 KB (56122 bytes) | Linhas: 1413
-    Papel     : Motor de Voz Nordestina v2.9: Cache SHA-256 (<5ms), Gemini Live Audio (BidiGenerateContent), Pool Round-Robin 5 TTS REST, F5-TTS & Seed-VC
+    Papel     : Motor de Voz Nordestina v3.0: Cache SHA-256 (<5ms), Gemini Live Audio (BidiGenerateContent), Pool Round-Robin 5 TTS REST, F5-TTS & Seed-VC
     Docstring : Regional Accent & Voice Cloning Engine (v2.6).
     Símbolos principais:
       * L87-L95   def _get_qt()
@@ -310,8 +314,8 @@ SEÇÃO 1 · INVENTÁRIO COMPLETO DE ARQUIVOS, MÓDULOS, CLASSES E FUNÇÕES
       * L1351-L1413 def synthesize_dialogue_preview(dialogue, accent_engine, out_mp3, colab_url, colab_token) — Synthesize rapid multi-character or single-line MP3 audio preview (48kHz Stereo SoXR).
 
 ### tools/hyperframes/novela_lipsync_animator.py
-    VPS Equiv.: /opt/ai-media-studio/tools/hyperframes/novela_lipsync_animator.py | Tamanho: 54.3 KB (55564 bytes) | Linhas: 1349
-    Papel     : Cascata GPU Generativa Real v2.9 (Colab GPU T4 -> ZeroGPU A10G com HF_TOKEN: MoDA/LongCat/EchoMimic/Wan2.2/LTX/LatentSync; Distorção 2D banida)
+    VPS Equiv.: /opt/ai-media-studio/tools/hyperframes/novela_lipsync_animator.py | Tamanho: 61.9 KB (63408 bytes) | Linhas: 1513
+    Papel     : Cascata GPU Generativa Real v3.0-turbo (Colab L4/T4 2-Stage LivePortrait -> LatentSync 1.5 <=2.85s anti-524 -> ZeroGPU A10G; Distorção 2D banida)
     Docstring : True GPU Generative Video & Lip-Sync Cascade Engine (v2.9).
     Símbolos principais:
       * L54-L69   def _probe_duration(media_path)
@@ -322,17 +326,20 @@ SEÇÃO 1 · INVENTÁRIO COMPLETO DE ARQUIVOS, MÓDULOS, CLASSES E FUNÇÕES
       * L375-L483  def _precompute_roi_weights(roi_h, roi_w, local_rig, roi_src) — Precompute vectorized Gaussian spatial influence maps inside the cropped head/torso ROI.
       * L486-L505  def _animate_local_viseme_take(image_path, audio_wav, out_mp4, emotion, emotion_preset, camera_action, lead_in_pause, is_silent_reaction...) — Permanently banned in v2.9: 2D CPU cv2.remap / mouth ellipse distortion is disabled.
       * L508-L748  def _unused_legacy_local_viseme_removed(image_path, audio_wav, out_mp4, emotion, emotion_preset, camera_action, lead_in_pause, is_silent_reaction...) — Render genuine 30fps 2.5D phonetic lip-sync + glasses-safe blink + head/reaction acting locally on CPU.
-      * L751-L843  def _try_tier1_colab_animate(image_path, audio_wav, out_mp4, prompt, colab_url, colab_token, colab_engine, emotion_preset...)
-      * L846-L854  def _get_qt()
-      * L857-L881  def _resolve_hf_token(env_map)
-      * L884-L921  def _normalize_gpu_clip(raw_mp4, audio_wav, out_mp4, width, height, fps) — Scale/crop generative GPU MP4 to 1080x1920 30fps yuv420p and mux full dialogue WAV cleanly.
-      * L924-L943  def _extract_video_path_from_gradio(res, work_dir)
-      * L946-L952  def _prepare_raster_image(image_path, work_dir, width, height)
-      * L955-L965  def _map_moda_emotion(emotion, cut_role)
-      * L968-L1037 def _run_zerogpu_i2v(src_img, prompt, duration_s, work_dir, hf_token, errors_out)
-      * L1040-L1093 def zerogpu_lipsync_video(video_mp4, audio_wav, out_mp4, env_map, width, height, errors_out) — Run neural video-to-video LatentSync lip-sync via ZeroGPU (`fffiloni/LatentSync`).
-      * L1096-L1284 def _try_zerogpu_cloud_animate(image_path, audio_wav, out_mp4, prompt, emotion, emotion_preset, is_silent_reaction, env_map...) — Tier 1A Real GPU Generative Video via Hugging Face ZeroGPU A10G Spaces.
-      * L1287-L1349 def animate_character_talking_take(image_path, audio_wav, out_mp4, prompt, emotion, emotion_preset, camera_action, lead_in_pause...) — Strict Real GPU Generative Video Cascade (v2.9): Colab T4 -> ZeroGPU A10G. No 2D fake distortion.
+      * L751-L772  def _post_colab_json(url, payload, headers, timeout)
+      * L775-L973  def _try_tier1_colab_animate(image_path, audio_wav, out_mp4, prompt, colab_url, colab_token, colab_engine, emotion_preset...) — Two-stage Colab L4/T4 worker call (LivePortrait fp16 -> LatentSync 1.5 fp16) to beat Cloudflare 100s timeout.
+      * L976-L984  def _get_qt()
+      * L987-L1011 def _resolve_hf_token(env_map)
+      * L1014-L1051 def _normalize_gpu_clip(raw_mp4, audio_wav, out_mp4, width, height, fps) — Scale/crop generative GPU MP4 to 1080x1920 30fps yuv420p and mux full dialogue WAV cleanly.
+      * L1054-L1073 def _extract_video_path_from_gradio(res, work_dir)
+      * L1076-L1082 def _prepare_raster_image(image_path, work_dir, width, height)
+      * L1085-L1095 def _map_moda_emotion(emotion, cut_role)
+      * L1098-L1167 def _run_zerogpu_i2v(src_img, prompt, duration_s, work_dir, hf_token, errors_out)
+      * L1170-L1223 def zerogpu_lipsync_video(video_mp4, audio_wav, out_mp4, env_map, width, height, errors_out) — Run neural video-to-video LatentSync lip-sync via ZeroGPU (`fffiloni/LatentSync`).
+      * L1226-L1233 def _resolve_reaction_style(tone, reaction_style)
+      * L1236-L1248 def _build_reaction_wan_prompt(tone, reaction_style)
+      * L1251-L1440 def _try_zerogpu_cloud_animate(image_path, audio_wav, out_mp4, prompt, emotion, emotion_preset, is_silent_reaction, tone...) — Tier 1A Real GPU Generative Video via Hugging Face ZeroGPU A10G Spaces.
+      * L1443-L1513 def animate_character_talking_take(image_path, audio_wav, out_mp4, prompt, emotion, emotion_preset, camera_action, lead_in_pause...) — Strict Real GPU Generative Video Cascade (v2.9): Colab T4 -> ZeroGPU A10G. No 2D fake distortion.
 
 ### tools/hyperframes/verify_lipsync_motion.py
     VPS Equiv.: /opt/ai-media-studio/tools/hyperframes/verify_lipsync_motion.py | Tamanho: 13.1 KB (13392 bytes) | Linhas: 318
@@ -463,7 +470,7 @@ SEÇÃO 1 · INVENTÁRIO COMPLETO DE ARQUIVOS, MÓDULOS, CLASSES E FUNÇÕES
       * L303-L324  def main()
 
 ### media-control-panel/static/index.html
-    VPS Equiv.: /opt/ai-media-studio/media-control-panel/static/index.html | Tamanho: 380.2 KB (389334 bytes) | Linhas: 6259
+    VPS Equiv.: /opt/ai-media-studio/media-control-panel/static/index.html | Tamanho: 380.3 KB (389384 bytes) | Linhas: 6260
     Papel     : Interface PWA Dark-Glass B2B (Tailwind + Lucide Icons) com Modo Guiado (6 Trilhas) e Modo Hard
     Total de IDs de DOM mapeados: 382
     Abas/Navegação (7): tab-stacks, tab-quick, tab-outputs, tab-jarvis, tab-skills, tab-vault, tab-audit
@@ -515,90 +522,90 @@ SEÇÃO 1 · INVENTÁRIO COMPLETO DE ARQUIVOS, MÓDULOS, CLASSES E FUNÇÕES
       * L3484  function _renderQuotaBadgesHtml()
       * L3517  function renderQuotaModal()
       * L3596  function openQuotaModal()
-      * L3603  function closeQuotaModal()
-      * L3608  function fetchQuotaTelemetry()
-      * L3639  function fetchCascadeStatus()
-      * L3678  function loadKeys()
-      * L3703  function toggleInputVisibility()
-      * L3709  function clearKeyField()
-      * L3717  function saveKeys()
-      * L3760  function runProjectDiagnostic()
-      * L3774  function runGlobalDiagnostics()
-      * L3952  function openLogsModal()
-      * L3970  function refreshCurrentLogs()
-      * L3978  function closeLogsModal()
-      * L3982  function escapeHtml()
-      * L3986  function fetchOutputs()
-      * L4002  function setOutputsFilter()
-      * L4014  function renderOutputs()
-      * L4097  function humanBytesJS()
-      * L4104  function submitQuickMoneyPrinter()
-      * L4168  function pollQuickMptTask()
-      * L4220  function submitQuickVoice()
-      * L4262  function uploadSupoClipFile()
-      * L4321  function submitQuickSupoClip()
-      * L4397  function pollQuickSupoClipTask()
-      * L4429  function submitQuickOpenFilm()
-      * L4471  function hydrateVideoUseSelector()
-      * L4487  function uploadQuickVideoUseFile()
-      * L4509  function submitQuickVideoUse()
-      * L4566  function pollQuickVideoUseTask()
-      * L4610  function submitQuickHyperFrames()
-      * L4676  function pollQuickHyperFramesTask()
-      * L4715  function installPWA()
-      * L4816  function setQuickStudioMode()
-      * L4837  function setGuidedPlatform()
-      * L4851  function fetchPipelineTemplates()
-      * L4869  function renderGuidedTemplates()
-      * L4884  function setGuidedTemplate()
-      * L4915  function renderGuidedStepperInitial()
-      * L4930  function _renderCampaignPreviewBox()
-      * L4948  function onGuidedCampaignChange()
-      * L4969  function _showViralBlueprintCard()
-      * L4985  function uploadGuidedPhotos()
-      * L5007  function uploadGuidedVirals()
-      * L5028  function analyzeGuidedVirals()
-      * L5060  function uploadHardHyperFramesVirals()
-      * L5080  function analyzeHardHyperFramesVirals()
-      * L5109  function _collectGuidedParams()
-      * L5180  function submitGuidedPipeline()
-      * L5217  function pollGuidedPipeline()
-      * L5240  function resumeLastGuidedPipeline()
-      * L5257  function renderGuidedMonitorState()
-      * L5324  function openGuidedResultInHardMode()
-      * L5424  function setGuidedNovelaStyle()
-      * L5438  function addNovelaExprChip()
-      * L5448  function generateGuidedNovelaDialogue()
-      * L5500  function renderHardNovelaRows()
-      * L5561  function addHardNovelaRow()
-      * L5572  function removeHardNovelaRow()
-      * L5581  function generateHardNovelaScript()
-      * L5616  function setNovelaRenderMode()
-      * L5634  function fetchColabStatus()
-      * L5653  function connectColabTunnel()
-      * L5673  function copyVeoPrompt()
-      * L5682  function renderNovFlowPackCards()
-      * L5728  function generateNovelaFlowPack()
-      * L5770  function renderStitchTakesList()
-      * L5783  function uploadNovelaTakes()
-      * L5806  function syncNovAccentEngine()
-      * L5824  function loadRegionalVoiceProfiles()
-      * L5844  function uploadRegionalVoiceSample()
-      * L5870  function previewRegionalVoices()
-      * L5903  function previewSingleNovelaLine()
-      * L5936  function _uploadGuideBlobForLine()
-      * L5951  function uploadGuideFileForLine()
-      * L5961  function toggleGuideAudioForLine()
-      * L5996  function stitchNovelaTakes()
-      * L6058  function submitHardNovela()
-      * L6144  function fetchCampaigns()
-      * L6176  function renderHyperFramesCampaignPreview()
-      * L6183  function uploadQuickHyperFramesPhotos()
-      * L6206  function refreshAll()
-      * L6222  function pollProjectsLoop()
+      * L3604  function closeQuotaModal()
+      * L3609  function fetchQuotaTelemetry()
+      * L3640  function fetchCascadeStatus()
+      * L3679  function loadKeys()
+      * L3704  function toggleInputVisibility()
+      * L3710  function clearKeyField()
+      * L3718  function saveKeys()
+      * L3761  function runProjectDiagnostic()
+      * L3775  function runGlobalDiagnostics()
+      * L3953  function openLogsModal()
+      * L3971  function refreshCurrentLogs()
+      * L3979  function closeLogsModal()
+      * L3983  function escapeHtml()
+      * L3987  function fetchOutputs()
+      * L4003  function setOutputsFilter()
+      * L4015  function renderOutputs()
+      * L4098  function humanBytesJS()
+      * L4105  function submitQuickMoneyPrinter()
+      * L4169  function pollQuickMptTask()
+      * L4221  function submitQuickVoice()
+      * L4263  function uploadSupoClipFile()
+      * L4322  function submitQuickSupoClip()
+      * L4398  function pollQuickSupoClipTask()
+      * L4430  function submitQuickOpenFilm()
+      * L4472  function hydrateVideoUseSelector()
+      * L4488  function uploadQuickVideoUseFile()
+      * L4510  function submitQuickVideoUse()
+      * L4567  function pollQuickVideoUseTask()
+      * L4611  function submitQuickHyperFrames()
+      * L4677  function pollQuickHyperFramesTask()
+      * L4716  function installPWA()
+      * L4817  function setQuickStudioMode()
+      * L4838  function setGuidedPlatform()
+      * L4852  function fetchPipelineTemplates()
+      * L4870  function renderGuidedTemplates()
+      * L4885  function setGuidedTemplate()
+      * L4916  function renderGuidedStepperInitial()
+      * L4931  function _renderCampaignPreviewBox()
+      * L4949  function onGuidedCampaignChange()
+      * L4970  function _showViralBlueprintCard()
+      * L4986  function uploadGuidedPhotos()
+      * L5008  function uploadGuidedVirals()
+      * L5029  function analyzeGuidedVirals()
+      * L5061  function uploadHardHyperFramesVirals()
+      * L5081  function analyzeHardHyperFramesVirals()
+      * L5110  function _collectGuidedParams()
+      * L5181  function submitGuidedPipeline()
+      * L5218  function pollGuidedPipeline()
+      * L5241  function resumeLastGuidedPipeline()
+      * L5258  function renderGuidedMonitorState()
+      * L5325  function openGuidedResultInHardMode()
+      * L5425  function setGuidedNovelaStyle()
+      * L5439  function addNovelaExprChip()
+      * L5449  function generateGuidedNovelaDialogue()
+      * L5501  function renderHardNovelaRows()
+      * L5562  function addHardNovelaRow()
+      * L5573  function removeHardNovelaRow()
+      * L5582  function generateHardNovelaScript()
+      * L5617  function setNovelaRenderMode()
+      * L5635  function fetchColabStatus()
+      * L5654  function connectColabTunnel()
+      * L5674  function copyVeoPrompt()
+      * L5683  function renderNovFlowPackCards()
+      * L5729  function generateNovelaFlowPack()
+      * L5771  function renderStitchTakesList()
+      * L5784  function uploadNovelaTakes()
+      * L5807  function syncNovAccentEngine()
+      * L5825  function loadRegionalVoiceProfiles()
+      * L5845  function uploadRegionalVoiceSample()
+      * L5871  function previewRegionalVoices()
+      * L5904  function previewSingleNovelaLine()
+      * L5937  function _uploadGuideBlobForLine()
+      * L5952  function uploadGuideFileForLine()
+      * L5962  function toggleGuideAudioForLine()
+      * L5997  function stitchNovelaTakes()
+      * L6059  function submitHardNovela()
+      * L6145  function fetchCampaigns()
+      * L6177  function renderHyperFramesCampaignPreview()
+      * L6184  function uploadQuickHyperFramesPhotos()
+      * L6207  function refreshAll()
+      * L6223  function pollProjectsLoop()
 
 ### tools/colab-gpu-worker/ai_studio_colab_novela_gpu.ipynb
-    VPS Equiv.: /opt/ai-media-studio/tools/colab-gpu-worker/ai_studio_colab_novela_gpu.ipynb | Tamanho: 26.1 KB | nbformat: 4
+    VPS Equiv.: /opt/ai-media-studio/tools/colab-gpu-worker/ai_studio_colab_novela_gpu.ipynb | Tamanho: 26.9 KB | nbformat: 4
       * Célula 0 [markdown]: # 🚀 AI Media Studio — Google Colab GPU Worker v2.8 (Dual-World LivePortrait + LatentSync 1.5 / MuseTalk 1.5 + 
       * Célula 1 [code]: # @title 1. Verificar GPU NVIDIA T4 e Instalar Dependências Base + Cloudflared
       * Célula 2 [code]: # @title 2. Instalar Combo Open-Source v2.9 (LivePortrait + LatentSync 1.5 + MuseTalk 1.5 + Checkpoints Reais 
@@ -912,14 +919,15 @@ SEÇÃO 2 · CATÁLOGO COMPLETO DE ROTAS FASTAPI (main.py — 84 endpoints)
 SEÇÃO 3 · ARQUITETURA DOS MOTORES DE PRODUÇÃO, CASCATAS E SEGREDOS
 ------------------------------------------------------------------------------------------------
 
-  1. Novelinhas Multi-Personagem (Live-Action 8K & 3D Pixar · Estrutura Viral 4 Cortes · 100% GPU Real v2.9)
+  1. Novelinhas Multi-Personagem (Live-Action 8K & 3D Pixar · Estrutura Viral 4 Cortes · v3.0-turbo)
     - Fluxo: Roteiro JSON roteado para NVIDIA NIM nemotron via Smart Quota Router (0 gasto RPD Gemini) ->
     -   Saneamento Cultural Nordestino (sanitize_northeast_slang bloqueando 'trem/uai/sô/mano/meo/daora/guri/bah/tchê') ->
     -   Vozes 48kHz Estéreo SoXR via Gemini Live Audio WebSocket (BidiGenerateContent ilimitado) + Cache SHA-256 + Pool Round-Robin 5 REST TTS ->
-    -   Retratos Keyframes 1080x1920 com boca FECHADA/neutra e mãos relaxadas (NVIDIA NIM flux.1-dev) ->
-    -   Vídeo Generativo GPU Real 30fps (Colab GPU T4 LivePortrait+LatentSync 1.5/MuseTalk 1.5 -> ZeroGPU A10G com HF_TOKEN: MoDA-fast-talking-head, LongCat, EchoMimic, Wan 2.2/LTX para Corte 4; distorção 2D cv2.remap banida!) ->
-    -   Concatenação Clean Cinema 1080x1920 @ 30fps + 48kHz AAC loudnorm I=-16.
-    - Estrutura Dramática 4 Cortes ('viral_4_cuts'): Corte 1 Ataque -> Corte 2 Pausa 0.45s (respirar/piscar) + Invertida -> Corte 3 Choque ('O quê?!') -> Corte 4 Reaction Shot Mudo 1.8s-2.2s de vergonha em GPU I2V.
+    -   Retratos Keyframes 1080x1920 Single-Subject Limpo (char_lock nos primeiros 35 tokens do CLIP-L para flux.1-dev, zero dupla cabeça, lábio superior visível no Seu Bastião) ->
+    -   Continuity Lock v3.0 ('v30_single_subject_lock'): 1 retrato mestre por ator/estilo + close-up óptico +14% (1232x2190 -> crop 1080x1920) em reações subsequentes ->
+    -   Vídeo Generativo GPU Real 30fps (Colab L4/T4 2-Stage: Stage 1 LivePortrait fp16 512x896 -> Stage 2 LatentSync 1.5 stage2.yaml --guidance_scale 1.5 --enable_deepcache em chunks <=2.85s anti-524 -> ZeroGPU A10G; distorção 2D cv2.remap banida!) ->
+    -   Design de Som & Mix Contínuo 1080x1920 @ 30fps + 48kHz AAC: cama de ambiente contínua -33 dB + SFX tonal/micro-reação no Corte 4 (zero buraco mudo < -40 dB) + loudnorm I=-16 + legendas .ass bipartidas (>42 chars).
+    - Estrutura Dramática 4 Cortes ('viral_4_cuts'): Corte 1 Ataque -> Corte 2 Pausa rápida 0.12s (respirar) + Invertida -> Corte 3 Choque/Close-Up +14% -> Corte 4 Reaction Shot tonal (comedy_smile vs dramatic_shock) c/ SFX audível.
   2. POV Shopee Anti-Crop 20:9 & Clone Viral (vps_ad_runner.py + viral_reference_analyzer.py)
     - Safe-Zone Shopee 20:9 travada em X=96..884px (largura útil 788px, topo livre Y=0..235px, rodapé livre Y=1210..1920px e coluna direita livre X>=890px).
     - Extração de DNA Viral (cut_cadence, WPM, energia de fala) sobre referências em campaigns/<id>/virals/ + curadoria estrita anti-confusão de kits.
@@ -932,18 +940,18 @@ SEÇÃO 3 · ARQUITETURA DOS MOTORES DE PRODUÇÃO, CASCATAS E SEGREDOS
     - MoneyPrinterTurbo (8501/8080): geração de vídeos faceless com B-roll + legendas.
     - VoiceStudio & OpenFilm (3005) & Open-Higgsfield: ligados via /api/projects/{id}/start com stop-all automático pelo GuidedPipelineOrchestrator (RAM Relay).
 
-3.1 Cascatas de Fallback & Smart Quota Router por Especialidade (v2.9):
+3.1 Cascatas de Fallback & Smart Quota Router por Especialidade (v3.0):
   - LLM Texto/Roteiro (main.py -> call_ai_cascade): NVIDIA NIM (nemotron-3.5-lightning-30b-a3b -> nemotron-3-ultra-550b-a55b -> kimi-k3.1-pro) -> OpenRouter :free -> Gemma 4 31B -> Gemini Flash-Lite -> Groq/OpenAI/Anthropic (gemini-2.5-flash último recurso; check_gemini_api 0 tokens via GET /v1beta/models)
   - LLM Visão Multimodal: Gemini 3.5 Flash-Lite -> Gemini 3.1 Flash-Lite -> Gemini 2.5 Flash-Lite -> OpenRouter
   - Voz Nordestina (regional_voice_engine.py): Cache Disco SHA-256 (<5ms) -> Gemini Live Audio WebSocket (BidiGenerateContent ilimitado) -> Round-Robin Pool 5 TTS REST (3.8-flash-tts, 3.8-flash-lite-tts, 2.5-flash-preview-tts, 3.1-flash-tts-preview, 2.5-pro-preview-tts) -> Edge-TTS fonético (offline only)
-  - Imagem/Ingrediente (vps_novela_runner.py): NVIDIA NIM black-forest-labs/flux.1-dev (768x1344 -> scale/crop Lanczos 1080x1920) -> SVG vetorial rsvg-convert Clean Cinema
-  - Animação/Vídeo GPU Real (novela_lipsync_animator.py): Colab GPU T4 fp16 (LivePortrait + LatentSync 1.5 / MuseTalk 1.5 c/ checkpoints via snapshot_download) -> ZeroGPU A10G Cloud com HF_TOKEN (MoDA-fast-talking-head, LongCat-Video-Avatar, EchoMimic, Wan 2.2/LTX I2V + LatentSync) — Distorção 2D cv2.remap permanentemente banida!
+  - Imagem/Ingrediente (vps_novela_runner.py): NVIDIA NIM black-forest-labs/flux.1-dev c/ char_lock nos primeiros 35 tokens + Continuity Lock (+14% crop) -> SVG vetorial rsvg-convert Clean Cinema
+  - Animação/Vídeo GPU Real (novela_lipsync_animator.py): Colab L4/T4 v3.0-turbo 2-Stage (Stage 1 LivePortrait fp16 -> Stage 2 LatentSync 1.5 stage2.yaml --guidance_scale 1.5 --enable_deepcache em chunks <=2.85s; Corte 4 guiado por tom comedy_smile/dramatic_shock) -> ZeroGPU A10G Cloud com HF_TOKEN (MoDA/LongCat/EchoMimic/Wan 2.2/LTX) — Distorção 2D banida!
 
 3.2 Variáveis de Ambiente e Chaves no Cofre da VPS (apenas nome e status SET=True/False):
   - ANTHROPIC_API_KEY                SET=False
   - ANTHROPIC_BASE_URL               SET=True
   - COLAB_GPU_TOKEN                  SET=False
-  - COLAB_GPU_URL                    SET=False
+  - COLAB_GPU_URL                    SET=True
   - GEMINI_API_KEY                   SET=True
   - GOOGLE_API_KEY                   SET=True
   - GROQ_API_KEY                     SET=False

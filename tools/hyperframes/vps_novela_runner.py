@@ -155,18 +155,20 @@ CAST_REGISTRY: Dict[str, Dict[str, str]] = {
         "prop": "straw_hat",
         "lock_3d": (
             "jovial 68-year-old countryside shopkeeper gentleman wearing a woven light straw brimmed hat, "
-            "open unbuttoned blue plaid shirt over a white tee, neat silver mustache, arms relaxed naturally down"
+            "open unbuttoned blue plaid shirt over a white tee, "
+            "neatly trimmed short gray mustache positioned above a clearly visible upper lip and expressive mouth, arms relaxed naturally down"
         ),
         "lock_tv": (
             "photorealistic 65-year-old Brazilian gentleman wearing a well-ironed open blue plaid cotton shirt over a white tee, "
-            "neat trimmed silver mustache, natural tanned skin pores and realistic wrinkles, arms resting comfortably down"
+            "neatly trimmed short gray mustache positioned above a clearly visible upper lip and expressive mouth, "
+            "natural tanned skin pores and realistic wrinkles, arms resting comfortably down"
         ),
         "veo_desc": (
             "Seu Bastião, a witty 65-year-old countryside shopkeeper wearing a woven straw hat and open blue plaid shirt "
-            "over a white cotton tee, neat silver mustache"
+            "over a white cotton tee, neatly trimmed short gray mustache positioned above a clearly visible upper lip and expressive mouth"
         ),
         "veo_live": (
-            "a real 65-year-old Brazilian man with weathered warm face, trimmed silver mustache, wearing an open blue plaid linen shirt"
+            "a real 65-year-old Brazilian man with weathered warm face, neatly trimmed short gray mustache positioned above a clearly visible upper lip and expressive mouth, wearing an open blue plaid linen shirt"
         ),
     },
     "enzo": {
@@ -296,34 +298,35 @@ EMOTION_DIRECTIONS: Dict[str, Tuple[str, str, str]] = {
 
 SHOT_FRAMINGS: Dict[str, Dict[str, str]] = {
     "over_shoulder": {
-        "label": "Plano · Over-the-Shoulder (Por cima do ombro)",
-        "lens_mm": "35mm",
+        "label": "Plano · Single-Subject Shot-Reverse-Shot",
+        "lens_mm": "85mm",
         "flux_cue": (
-            "cinematic over-the-shoulder medium close-up framing looking slightly past the blurred foreground shoulder edge "
-            "of another person on the lower-left frame, curious village onlookers softly out of focus behind"
+            "solo single-subject 85mm close-up vertical 9:16 portrait looking 15 degrees right, "
+            "empty blurred sunlit bokeh background, only one person in frame"
         ),
         "veo_cue": (
-            "Over-the-shoulder medium close-up camera shot (35mm lens) looking past the foreground listener's shoulder, "
-            "background bystanders turning their heads subtly in reaction"
+            "Solitary single-subject medium close-up camera shot (85mm f/1.8 shallow bokeh) of speaker angled 15 degrees to the right, "
+            "strictly one person alone in frame, natural handheld breathing"
         ),
     },
     "reverse_over_shoulder": {
-        "label": "Contraplano · Reverse Over-the-Shoulder",
-        "lens_mm": "35mm",
+        "label": "Contraplano · Reverse Single-Subject",
+        "lens_mm": "85mm",
         "flux_cue": (
-            "reverse-angle over-the-shoulder medium close-up framing facing the opposite angle, soft blurred shoulder corner "
-            "on lower-right foreground, character responding across the conversation"
+            "solo single-subject 85mm reverse close-up vertical 9:16 portrait looking 15 degrees left, "
+            "empty blurred sunlit bokeh background, only one person in frame"
         ),
         "veo_cue": (
-            "Reverse-angle over-the-shoulder medium close-up (35mm lens) cutting sharply from the opposite conversational perspective"
+            "Solitary single-subject reverse-angle medium close-up shot (85mm f/1.8 shallow bokeh) of speaker angled 15 degrees to the left, "
+            "strictly one person alone in frame, cutting cleanly from the opposite perspective"
         ),
     },
     "reaction_closeup": {
         "label": "Close-Up · Reação Dramática",
         "lens_mm": "50mm",
         "flux_cue": (
-            "dramatic tight reaction close-up portrait framed from chest up, intense expressive face looking just off-lens, "
-            "50mm crisp shallow bokeh"
+            "tight solo close-up portrait framed from chest up, expressive face looking slightly off-lens, "
+            "50mm crisp shallow bokeh, only one person in frame"
         ),
         "veo_cue": (
             "Tight dramatic reaction close-up (50mm lens, shallow depth of field), sharp eye focus with natural handheld breathing"
@@ -412,17 +415,27 @@ def compile_dramatic_cuts(
     raw_dialogue: List[Dict[str, Any]],
     dramatic_structure: str = "viral_4_cuts",
 ) -> List[Dict[str, Any]]:
-    """Structure raw turns into either 4 viral dramatic cuts (with 0.45s Cut-2 pause + Cut-4 Silent Shame Reaction) or classic dialogue."""
+    """Structure raw turns into either 4 viral dramatic cuts (0.12s Cut-2 pause + Cut-4 tone-matched reaction) or classic dialogue."""
     structure = normalize_dramatic_structure(dramatic_structure)
     turns = [dict(t) for t in (raw_dialogue or []) if isinstance(t, dict)]
     if not turns:
         return []
+
+    def _sync_sub_full(row: Dict[str, Any]) -> None:
+        if bool(row.get("is_silent_reaction")):
+            return
+        tts = rve.sanitize_northeast_slang(str(row.get("tts_text") or row.get("subtitle_text") or row.get("text") or "").strip())
+        sub = rve.sanitize_northeast_slang(str(row.get("subtitle_text") or tts).strip())
+        row["tts_text"] = tts
+        # v3.0: Never let subtitle_text drop the second sentence/half of spoken dialogue
+        row["subtitle_text"] = tts if (not sub or len(sub.split()) < len(tts.split())) else sub
 
     if structure == "classic_3_cuts":
         out = []
         for idx, t in enumerate(turns):
             if not str(t.get("tts_text") or t.get("subtitle_text") or t.get("text") or "").strip() and not bool(t.get("is_silent_reaction")):
                 continue
+            _sync_sub_full(t)
             t.setdefault("cut_role", "dialogue")
             t.setdefault("lead_in_pause", 0.0)
             t.setdefault("is_silent_reaction", False)
@@ -430,13 +443,14 @@ def compile_dramatic_cuts(
         return out
 
     # viral_4_cuts ("Quem Passou Vergonha"):
-    # Cut 1: Attack (Speaker A) -> Cut 2: 0.45s inhale pause + Comeback (Speaker B) -> Cut 3: Shock ("O quê?!") -> Cut 4: Silent Shame Reaction (Speaker A)
+    # Cut 1: Attack (Speaker A) -> Cut 2: 0.12s quick beat + Comeback (Speaker B) -> Cut 3: Shock -> Cut 4: Reaction (Speaker A)
     spoken = [t for t in turns if not bool(t.get("is_silent_reaction")) and str(t.get("tts_text") or t.get("subtitle_text") or t.get("text") or "").strip()]
     silent_existing = next((t for t in turns if bool(t.get("is_silent_reaction"))), None)
     if not spoken:
         return turns
 
     cut1 = dict(spoken[0])
+    _sync_sub_full(cut1)
     cut1["cut_role"] = str(cut1.get("cut_role") or "attack_angry")
     cut1["lead_in_pause"] = float(cut1.get("lead_in_pause") or 0.0)
     cut1["is_silent_reaction"] = False
@@ -445,14 +459,17 @@ def compile_dramatic_cuts(
     result = [cut1]
     if len(spoken) >= 2:
         cut2 = dict(spoken[1])
+        _sync_sub_full(cut2)
         cut2["cut_role"] = str(cut2.get("cut_role") or "calm_inhale_comeback")
-        cut2["lead_in_pause"] = max(0.45, float(cut2.get("lead_in_pause") or 0.45))
+        raw_lp = float(cut2.get("lead_in_pause") or 0.0)
+        cut2["lead_in_pause"] = 0.12 if (raw_lp <= 0.0 or raw_lp >= 0.35) else round(min(0.18, max(0.08, raw_lp)), 2)
         cut2["is_silent_reaction"] = False
         cut2.setdefault("shot_framing", "reverse_over_shoulder")
         result.append(cut2)
 
     if len(spoken) >= 3:
         cut3 = dict(spoken[2])
+        _sync_sub_full(cut3)
         cut3["cut_role"] = str(cut3.get("cut_role") or "shock_what")
         cut3["lead_in_pause"] = 0.0
         cut3["is_silent_reaction"] = False
@@ -462,7 +479,7 @@ def compile_dramatic_cuts(
         cut3 = {
             "speaker": "Enzo" if _normalize_speaker_key(str(cut1.get("speaker") or "")) != "enzo" else "Seu Bastião",
             "tts_text": "O quê?! Eita peste!",
-            "subtitle_text": "O quê?!",
+            "subtitle_text": "O quê?! Eita peste!",
             "emotion": "shocked",
             "shot_framing": "reaction_closeup",
             "cut_role": "shock_what",
@@ -833,23 +850,31 @@ def _resolve_turn_visual(
     force_jpg: bool = False,
     is_silent_reaction: bool = False,
 ) -> Tuple[Path, str, str, str]:
-    """Generate/resolve a clean 1080x1920 closed-mouth, calm-arms portrait image for one turn."""
+    """Generate/resolve a clean 1080x1920 portrait with v3.0 Identity & Set Continuity Lock."""
     style_norm = normalize_visual_style(visual_style)
     is_3d = style_norm == "stylized_3d_pixar"
-    emo_bucket = "shame" if is_silent_reaction else ("shocked" if emotion in ("shocked", "confused", "dramatic") else "warm")
-    # Versioned v28_closed_mouth cache key guarantees old open-mouth/raised-arms assets are never reused
-    cache_key = ("v28_closed_v2", speaker_key, emo_bucket, style_norm, shot_framing)
+    # v3.0 Single-Subject Continuity Lock: key ONLY on (speaker_key, style_norm) so ONE clean actor & set persist!
+    master_cache_key = ("v30_single_subject_lock", speaker_key, style_norm)
 
     base_name = target_filename or f"shot_{turn_idx}.jpg"
-    if cache_key in shot_cache:
-        src_path, prov = shot_cache[cache_key]
+    if master_cache_key in shot_cache:
+        src_path, prov = shot_cache[master_cache_key]
         suffix = ".jpg" if force_jpg else src_path.suffix
         dst = assets_dir / Path(base_name).with_suffix(suffix).name
         if src_path.suffix == ".svg" and force_jpg:
             _svg_to_clean_jpg(src_path, dst)
-        else:
-            shutil.copy2(src_path, dst)
-        return dst, f"assets/{dst.name}", prov, ""
+            return dst, f"assets/{dst.name}", f"{prov}+continuity_svg2jpg", ""
+        if src_path.suffix != ".svg" and (shot_framing == "reaction_closeup" or is_silent_reaction):
+            dst = assets_dir / Path(base_name).with_suffix(".jpg").name
+            _run_checked([
+                FFMPEG_BIN, "-y", "-i", str(src_path),
+                "-vf", "scale=1232:2190:flags=lanczos,crop=1080:1920:76:95",
+                "-q:v", "2",
+                str(dst),
+            ], timeout=30)
+            return dst, f"assets/{dst.name}", f"{prov}+continuity_closeup_14pct", ""
+        shutil.copy2(src_path, dst)
+        return dst, f"assets/{dst.name}", f"{prov}+continuity_reuse", ""
 
     style_prefix = (
         "Stylized 3D animated CG comedy film shot, theatrical feature CGI animation quality, sculpted expressive character lighting, rich warm colors, clean frame"
@@ -866,8 +891,8 @@ def _resolve_turn_visual(
         "calm relaxed lowered shoulders and hands resting naturally down at sides"
     )
     prompt = (
-        f"{style_prefix}. {framing_meta['flux_cue'].format(speaker_en=spec['label'])}. "
-        f"{char_lock}, {emo_desc}, {closed_mouth_mandate}. "
+        f"{char_lock}. {framing_meta['flux_cue'].format(speaker_en=spec['label'])}. "
+        f"{style_prefix}. {emo_desc}, {closed_mouth_mandate}. "
         f"Background setting: {setting}, vertical 9:16 portrait composition."
     )
 
@@ -876,8 +901,8 @@ def _resolve_turn_visual(
     ok, prov = _call_nvidia_flux_image(prompt, nv_key, out_jpg, "black-forest-labs/flux.1-dev")
     if not ok and prov == "content_filtered":
         safe_prompt = (
-            f"{style_prefix}. Over-the-shoulder vertical 9:16 portrait of expressive Brazilian character in "
-            f"{spec.get('shirt_color', 'colorful')} attire, {closed_mouth_mandate}, sunny countryside plaza."
+            f"{char_lock}, {style_prefix}, solo medium close-up vertical 9:16 portrait, "
+            f"{closed_mouth_mandate}, sunny countryside plaza."
         )
         ok, prov = _call_nvidia_flux_image(safe_prompt, nv_key, out_jpg, "black-forest-labs/flux.1-dev")
     if not ok:
@@ -889,7 +914,7 @@ def _resolve_turn_visual(
         ok, prov = _call_nvidia_flux_image(retry_prompt, nv_key, out_jpg, "black-forest-labs/flux.1-schnell")
 
     if ok and out_jpg.exists():
-        shot_cache[cache_key] = (out_jpg, f"nvidia:{prov}")
+        shot_cache[master_cache_key] = (out_jpg, f"nvidia:{prov}")
         return out_jpg, f"assets/{out_jpg.name}", f"nvidia:{prov}", prompt
 
     # Deterministic clean vector artwork fallback
@@ -899,11 +924,11 @@ def _resolve_turn_visual(
         try:
             _svg_to_clean_jpg(out_svg, out_jpg)
             out_svg.unlink(missing_ok=True)
-            shot_cache[cache_key] = (out_jpg, f"svg_jpg_fallback:{prov}")
+            shot_cache[master_cache_key] = (out_jpg, f"svg_jpg_fallback:{prov}")
             return out_jpg, f"assets/{out_jpg.name}", f"svg_jpg_fallback:{prov}", prompt
         except Exception:
             pass
-    shot_cache[cache_key] = (out_svg, f"svg_fallback:{prov}")
+    shot_cache[master_cache_key] = (out_svg, f"svg_fallback:{prov}")
     return out_svg, f"assets/{out_svg.name}", f"svg_fallback:{prov}", prompt
 
 
@@ -918,8 +943,9 @@ def build_veo_take_prompt(
     cut_role: str = "dialogue",
     lead_in_pause: float = 0.0,
     is_silent_reaction: bool = False,
+    tone: str = "Comédia Leve",
 ) -> str:
-    """Compose second-by-second bilingual Veo 3.1 technical camera + acting prompt with exact Portuguese line or Silent Reaction."""
+    """Compose second-by-second bilingual Veo 3.1 technical camera + acting prompt matching episode tone."""
     style_norm = normalize_visual_style(visual_style)
     is_3d = style_norm == "stylized_3d_pixar"
     style_desc = (
@@ -939,19 +965,25 @@ def build_veo_take_prompt(
     )
 
     if is_silent_reaction or cut_role == "silent_shame_reaction":
+        low_t = (tone or "Comédia Leve").lower()
+        is_drama = any(k in low_t for k in ("drama", "traiç", "traic", "vergonha", "tenso", "suspense", "choque"))
+        if is_drama:
+            return (
+                f"{style_desc}, set on {setting}. {framing_cue}. "
+                f"0.0s-2.0s: {veo_char} gasps in dramatic shock and mortified embarrassment, raising both hands to head and lowering gaze in disbelief, shoulders slumping. "
+                f"No subtitles, no text overlay, no watermarks."
+            )
         return (
             f"{style_desc}, set on {setting}. {framing_cue}. "
-            f"0.0s-0.8s: {veo_char} freezes in stunned disbelief, eyebrows knitting as realization hits. "
-            f"0.8s-2.0s: {acting_en}, swallows hard with lips tightly pressed closed, shoulders subtly dropping in quiet humiliation while out-of-focus bystanders react behind. "
-            f"STRICTLY NO spoken dialogue, silent reaction shot with natural subtle breathing and eye blink. "
+            f"0.0s-2.0s: {veo_char} breaks into an awkward sheepish smile and warm chuckle, raising one hand to scratch the back of head while shaking head in funny disbelief. "
             f"No subtitles, no text overlay, no watermarks."
         )
 
     clean_speech = rve.sanitize_northeast_slang(tts_text).replace('"', "'").strip()
-    if lead_in_pause >= 0.3 or cut_role == "calm_inhale_comeback":
+    if lead_in_pause >= 0.08 or cut_role == "calm_inhale_comeback":
         timeline = (
-            f"0.0s-{lead_in_pause:.2f}s: {veo_char} closes eyes briefly, inhales deeply and raises chin calmly before responding. "
-            f"{lead_in_pause:.2f}s-4.0s: opens eyes sharp, {acting_en}, speaking in Brazilian Portuguese with an authentic, warm Northeastern Sertão accent "
+            f"0.0s-{lead_in_pause:.2f}s: {veo_char} gives a quick natural beat and calm knowing nod before replying. "
+            f"{lead_in_pause:.2f}s-3.6s: {acting_en}, speaking in Brazilian Portuguese with an authentic, warm Northeastern Sertão accent "
             f"(sotaque nordestino arretado, crisp energetic comeback cadence): \"{clean_speech}\" "
         )
     else:
@@ -1955,17 +1987,161 @@ def _call_colab_animate_take(
     return data
 
 
+def _tone_is_dramatic(tone: str = "Comédia Leve") -> bool:
+    low = (tone or "").strip().lower()
+    return any(k in low for k in ("drama", "traiç", "traic", "vergonha", "tenso", "suspense", "choque", "sério", "serio"))
+
+
 def _synthesize_silent_ambient_wav(out_wav: Path, dur_sec: float = 2.0) -> float:
-    """Create subtle 48kHz Stereo room-tone/sigh ambient audio for Silent Reaction Shot."""
-    dur = max(0.3, float(dur_sec))
+    """Create natural -32 dB room-tone/street ambience WAV (eliminates -73 dB dead air)."""
+    dur = max(0.08, float(dur_sec))
     _run_checked([
         FFMPEG_BIN, "-y", "-hide_banner", "-loglevel", "error",
-        "-f", "lavfi", "-t", f"{dur:.3f}", "-i", "anoisesrc=color=pink:amplitude=0.004:sample_rate=48000",
-        "-af", "highpass=f=120,lowpass=f=600,aresample=48000:resampler=soxr,aformat=sample_fmts=s16:channel_layouts=stereo",
+        "-f", "lavfi", "-t", f"{dur:.3f}", "-i", "anoisesrc=color=pink:amplitude=0.075:sample_rate=48000",
+        "-af", "highpass=f=90,lowpass=f=2200,aresample=48000:resampler=soxr,aformat=sample_fmts=s16:channel_layouts=stereo",
         "-ar", "48000", "-ac", "2", "-c:a", "pcm_s16le",
         str(out_wav),
     ], timeout=30)
     return _probe_duration(out_wav)
+
+
+def _create_master_ambience_bed_wav(out_wav: Path, dur_sec: float, target_lufs: float = -33.0) -> float:
+    """Build a continuous -33 dBFS street/room-tone bed across the full episode so no 0.25s window falls below -40 dB."""
+    dur = max(0.5, float(dur_sec))
+    _run_checked([
+        FFMPEG_BIN, "-y", "-hide_banner", "-loglevel", "error",
+        "-f", "lavfi", "-t", f"{dur:.3f}", "-i", "anoisesrc=color=pink:amplitude=0.085:sample_rate=48000",
+        "-af", f"highpass=f=90,lowpass=f=2400,loudnorm=I={target_lufs:.1f}:TP=-6.0:LRA=4,aresample=48000:resampler=soxr",
+        "-ar", "48000", "-ac", "2", "-c:a", "pcm_s16le",
+        str(out_wav),
+    ], timeout=45)
+    return _probe_duration(out_wav)
+
+
+def _synthesize_reaction_soundtrack_wav(
+    out_wav: Path,
+    dur_sec: float = 2.0,
+    tone: str = "Comédia Leve",
+    speaker: str = "Dona Socorro",
+    env_map: Optional[Dict[str, str]] = None,
+    work_dir: Optional[Path] = None,
+) -> float:
+    """Generate dynamic Cut 4 audio (-22 dB to -14 dB active peak): tone-matched SFX + micro vocal reaction + street bed."""
+    dur = max(1.2, float(dur_sec))
+    is_drama = _tone_is_dramatic(tone)
+    tmp_dir = (work_dir / f"react_sfx_{uuid.uuid4().hex[:6]}") if work_dir else Path(f"/tmp/react_sfx_{uuid.uuid4().hex[:6]}")
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        bed_wav = tmp_dir / "bed.wav"
+        sfx_wav = tmp_dir / "sfx.wav"
+        _create_master_ambience_bed_wav(bed_wav, dur, target_lufs=-28.0)
+
+        if is_drama:
+            sfx_expr = "0.26*(sin(2*PI*(112-56*min(1,t/0.95))*t)+0.42*sin(2*PI*(224-112*min(1,t/0.95))*t))*exp(-1.7*t)"
+        else:
+            # Playful comic pizzicato chord (C5 -> E5 -> upward slide)
+            sfx_expr = (
+                "0.22*(sin(2*PI*523.25*t)*exp(-7.0*max(0,t-0.02))*between(t,0.02,0.55)"
+                "+sin(2*PI*659.25*t)*exp(-5.5*max(0,t-0.16))*between(t,0.16,0.95)"
+                "+0.65*sin(2*PI*(440+280*max(0,t-0.30))*t)*exp(-3.8*max(0,t-0.30))*between(t,0.30,1.60))"
+            )
+        _run_checked([
+            FFMPEG_BIN, "-y", "-hide_banner", "-loglevel", "error",
+            "-f", "lavfi", "-t", f"{dur:.3f}", "-i", f"aevalsrc=exprs='{sfx_expr}':s=48000:c=stereo",
+            "-af", "loudnorm=I=-16:TP=-2:LRA=8,aresample=48000:resampler=soxr",
+            "-ar", "48000", "-ac", "2", "-c:a", "pcm_s16le",
+            str(sfx_wav),
+        ], timeout=30)
+
+        vox_wav = tmp_dir / "react_vox.wav"
+        vox_ok = False
+        try:
+            react_phrase = "Vixe Maria!" if is_drama else "Eita lasqueira!"
+            rve.synthesize_regional_turn(
+                tts_text=react_phrase,
+                speaker=speaker,
+                emotion="shocked" if is_drama else "laughing",
+                accent_engine="nordestino_raiz",
+                out_wav=vox_wav,
+                lead_pad=0.01,
+                tail_pad=0.04,
+            )
+            vox_ok = vox_wav.is_file() and vox_wav.stat().st_size > 4000
+        except Exception:
+            vox_ok = False
+
+        if vox_ok:
+            vox_fit = tmp_dir / "react_vox_fit.wav"
+            vox_dur = _probe_duration(vox_wav)
+            max_vox_slot = max(0.75, dur - 0.36)
+            atempo = max(1.0, min(1.55, vox_dur / max_vox_slot))
+            _run_checked([
+                FFMPEG_BIN, "-y", "-hide_banner", "-loglevel", "error",
+                "-i", str(vox_wav),
+                "-af", f"atempo={atempo:.3f},loudnorm=I=-17:TP=-2:LRA=8,adelay=320|320,apad=whole_dur={dur:.3f}",
+                "-t", f"{dur:.3f}", "-ar", "48000", "-ac", "2", "-c:a", "pcm_s16le",
+                str(vox_fit),
+            ], timeout=30)
+            _run_checked([
+                FFMPEG_BIN, "-y", "-hide_banner", "-loglevel", "error",
+                "-i", str(bed_wav), "-i", str(sfx_wav), "-i", str(vox_fit),
+                "-filter_complex", "[0:a][1:a][2:a]amix=inputs=3:duration=first:normalize=0,alimiter=limit=0.92[outa]",
+                "-map", "[outa]", "-t", f"{dur:.3f}", "-ar", "48000", "-ac", "2", "-c:a", "pcm_s16le",
+                str(out_wav),
+            ], timeout=30)
+        else:
+            _run_checked([
+                FFMPEG_BIN, "-y", "-hide_banner", "-loglevel", "error",
+                "-i", str(bed_wav), "-i", str(sfx_wav),
+                "-filter_complex", "[0:a][1:a]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.92[outa]",
+                "-map", "[outa]", "-t", f"{dur:.3f}", "-ar", "48000", "-ac", "2", "-c:a", "pcm_s16le",
+                str(out_wav),
+            ], timeout=30)
+        return _probe_duration(out_wav)
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+
+
+def _split_subtitle_events(start_t: float, end_t: float, text: str, max_chars: int = 42) -> List[Tuple[float, float, str]]:
+    """Split subtitles > max_chars into 2 sequential timed ASS events so 100% of spoken audio is shown dynamically."""
+    clean = re.sub(r"\s+", " ", (text or "").strip())
+    if not clean or end_t <= start_t:
+        return []
+    if len(clean) <= max_chars or len(clean.split()) <= 4:
+        return [(start_t, end_t, clean)]
+
+    total = end_t - start_t
+    if total < 0.75:
+        return [(start_t, end_t, clean)]
+
+    mid_char = len(clean) // 2
+    best_split = -1
+    best_dist = len(clean)
+    # Prefer natural punctuation break near center
+    for m in re.finditer(r"[,!?.;:]\s+", clean):
+        idx = m.end() - 1
+        words_l = clean[:idx].strip().split()
+        words_r = clean[idx:].strip().split()
+        if len(words_l) >= 2 and len(words_r) >= 2:
+            dist = abs(idx - mid_char)
+            if dist < best_dist:
+                best_dist = dist
+                best_split = idx
+
+    if best_split != -1:
+        p1 = clean[:best_split].strip()
+        p2 = clean[best_split:].strip()
+    else:
+        words = clean.split()
+        w_mid = max(2, len(words) // 2)
+        p1 = " ".join(words[:w_mid]).strip()
+        p2 = " ".join(words[w_mid:]).strip()
+
+    if not p1 or not p2:
+        return [(start_t, end_t, clean)]
+    ratio = min(0.70, max(0.30, len(p1) / float(len(p1) + len(p2))))
+    mid_t = start_t + total * ratio
+    return [(start_t, mid_t, p1), (mid_t, end_t, p2)]
 
 
 def _prepend_lead_silence_wav(src_wav: Path, lead_sec: float) -> float:
@@ -2043,6 +2219,7 @@ def render_novela_episode(cfg: Dict[str, Any]) -> Dict[str, Any]:
         out_path = NOVELA_EXPORT_DIR / f"novela_{slug}_{visual_style}_{int(time.time())}_{job_id}.mp4"
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
+    episode_tone = str(cfg.get("tone") or "Comédia Leve").strip()
     env_map = _load_secrets_env()
     shot_cache: Dict[Tuple[Any, ...], Tuple[Path, str]] = {}
     compiled_turns: List[TurnCompiled] = []
@@ -2055,12 +2232,11 @@ def render_novela_episode(cfg: Dict[str, Any]) -> Dict[str, Any]:
         is_silent = bool(raw_turn.get("is_silent_reaction", False))
         cut_role = str(raw_turn.get("cut_role") or ("silent_shame_reaction" if is_silent else "dialogue")).strip().lower()
         lead_pause = float(raw_turn.get("lead_in_pause") or 0.0)
-        subtitle_text = "" if is_silent else rve.sanitize_northeast_slang(str(raw_turn.get("subtitle_text") or raw_turn.get("text") or "").strip())
-        tts_text = "" if is_silent else rve.sanitize_northeast_slang(str(raw_turn.get("tts_text") or subtitle_text).strip())
+        tts_text = "" if is_silent else rve.sanitize_northeast_slang(str(raw_turn.get("tts_text") or raw_turn.get("subtitle_text") or raw_turn.get("text") or "").strip())
         if not tts_text and not is_silent:
             continue
-        if not subtitle_text and not is_silent:
-            subtitle_text = tts_text
+        raw_sub = "" if is_silent else rve.sanitize_northeast_slang(str(raw_turn.get("subtitle_text") or tts_text).strip())
+        subtitle_text = "" if is_silent else (tts_text if (not raw_sub or len(raw_sub.split()) < len(tts_text.split())) else raw_sub)
 
         emotion = "shame" if is_silent else str(raw_turn.get("emotion") or "warm").strip().lower()
         _, default_cam, _ = EMOTION_DIRECTIONS.get(emotion, EMOTION_DIRECTIONS["warm"])
@@ -2077,8 +2253,15 @@ def render_novela_episode(cfg: Dict[str, Any]) -> Dict[str, Any]:
 
         clean_wav = audio_dir / f"turn_{idx}.wav"
         if is_silent:
-            slot_dur = _synthesize_silent_ambient_wav(clean_wav, dur_sec=float(raw_turn.get("silent_duration") or 2.0))
-            v_engine_used = "silent_reaction_ambient"
+            slot_dur = _synthesize_reaction_soundtrack_wav(
+                clean_wav,
+                dur_sec=float(raw_turn.get("silent_duration") or 2.0),
+                tone=episode_tone,
+                speaker=spk_raw,
+                env_map=env_map,
+                work_dir=work_dir,
+            )
+            v_engine_used = f"reaction_sfx_{'drama' if _tone_is_dramatic(episode_tone) else 'comedy'}"
         else:
             guide_raw = str(raw_turn.get("guide_audio_path") or "").strip()
             guide_path = Path(guide_raw) if guide_raw and Path(guide_raw).is_file() else None
@@ -2238,6 +2421,7 @@ def render_novela_episode(cfg: Dict[str, Any]) -> Dict[str, Any]:
                 cut_role=t.cut_role,
                 lead_in_pause=t.lead_in_pause,
                 is_silent_reaction=t.is_silent_reaction,
+                tone=episode_tone,
             )
             take_mp4 = work_dir / f"lipsync_take_{t.index:02d}.mp4"
             anim_meta = nla.animate_character_talking_take(
@@ -2250,6 +2434,7 @@ def render_novela_episode(cfg: Dict[str, Any]) -> Dict[str, Any]:
                 emotion_preset=t.cut_role,
                 lead_in_pause=t.lead_in_pause,
                 is_silent_reaction=t.is_silent_reaction,
+                tone=episode_tone,
                 colab_url=colab_url,
                 colab_token=colab_token,
                 colab_engine=colab_engine,
@@ -2261,6 +2446,7 @@ def render_novela_episode(cfg: Dict[str, Any]) -> Dict[str, Any]:
             t.animation_engine_used = str(anim_meta.get("animation_engine_used") or "local_viseme_30fps")
             t.lipsync_peak_open = float(anim_meta.get("peak_mouth_open") or 0.0)
             animated_clips.append(take_mp4)
+            actual_turn_dur = float(anim_meta.get("duration") or t.slot_dur)
             lipsync_turns.append({
                 "index": t.index,
                 "speaker": t.speaker_label,
@@ -2270,11 +2456,13 @@ def render_novela_episode(cfg: Dict[str, Any]) -> Dict[str, Any]:
                 "animation_engine": t.animation_engine_used,
                 "voice_engine": t.voice_engine_used,
                 "peak_mouth_open": t.lipsync_peak_open,
-                "duration": anim_meta.get("duration", t.slot_dur),
+                "duration": actual_turn_dur,
             })
             if subtitles_mode == "minimal" and t.subtitle_text and not t.is_silent_reaction:
-                ass_events.append((tl_t + max(0.04, t.lead_in_pause), tl_t + max(0.3, float(anim_meta.get("duration") or t.slot_dur) - 0.04), t.subtitle_text))
-            tl_t += float(anim_meta.get("duration") or t.slot_dur)
+                ev_start = tl_t + max(0.02, t.lead_in_pause)
+                ev_end = tl_t + max(0.35, actual_turn_dur - 0.02)
+                ass_events.extend(_split_subtitle_events(ev_start, ev_end, t.subtitle_text))
+            tl_t += actual_turn_dur
 
         concat_list = work_dir / "lipsync_clips.txt"
         concat_list.write_text("\n".join(f"file '{p}'" for p in animated_clips) + "\n", encoding="utf-8")
@@ -2303,13 +2491,26 @@ def render_novela_episode(cfg: Dict[str, Any]) -> Dict[str, Any]:
             ass_path.write_text(ass_header + "\n".join(ev_lines) + "\n", encoding="utf-8")
             vf_list.append(f"ass={ass_path}")
 
-        final_cmd = [FFMPEG_BIN, "-y", "-i", str(concat_mp4)]
+        concat_dur = _probe_duration(concat_mp4)
+        master_bed_wav = work_dir / "master_ambience_bed.wav"
+        _create_master_ambience_bed_wav(master_bed_wav, concat_dur + 0.5, target_lufs=-33.0)
+
+        final_cmd = [FFMPEG_BIN, "-y", "-i", str(concat_mp4), "-i", str(master_bed_wav)]
+        audio_fc = "[0:a]loudnorm=I=-16:TP=-1.5:LRA=11[speech_a];[1:a]aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo[bed_a];[speech_a][bed_a]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.95[outa]"
         if vf_list:
-            final_cmd.extend(["-vf", ",".join(vf_list), "-c:v", "libx264", "-preset", "fast", "-crf", "18"])
+            filter_complex = f"[0:v]{','.join(vf_list)}[outv];{audio_fc}"
+            final_cmd.extend([
+                "-filter_complex", filter_complex,
+                "-map", "[outv]", "-map", "[outa]",
+                "-c:v", "libx264", "-preset", "fast", "-crf", "18",
+            ])
         else:
-            final_cmd.extend(["-c:v", "copy"])
+            final_cmd.extend([
+                "-filter_complex", audio_fc,
+                "-map", "0:v:0", "-map", "[outa]",
+                "-c:v", "copy",
+            ])
         final_cmd.extend([
-            "-af", "loudnorm=I=-16:TP=-1.5:LRA=11,aresample=48000:resampler=soxr",
             "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2",
             "-movflags", "+faststart",
             str(out_path),
@@ -2327,7 +2528,9 @@ def render_novela_episode(cfg: Dict[str, Any]) -> Dict[str, Any]:
             "render_mode": render_mode,
             "visual_style": visual_style,
             "dramatic_structure": dramatic_structure,
-            "prompt_rules": "v28_closed_mouth",
+            "tone": episode_tone,
+            "prompt_rules": "v30_single_subject_lock",
+            "ass_events": [{"start": round(s, 2), "end": round(e, 2), "text": txt} for s, e, txt in ass_events],
             "platform_preset": platform_preset,
             "clean_cinema_mode": clean_cinema_mode,
             "subtitles_mode": subtitles_mode,
