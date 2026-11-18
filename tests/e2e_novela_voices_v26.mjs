@@ -123,20 +123,31 @@ async function runDesktop(browser) {
   const defaultAccent = await page.locator('#nov-accent-engine').inputValue();
   assert(defaultAccent === 'nordestino_raiz', `Default #nov-accent-engine inesperado: ${defaultAccent}`);
 
+  await page.waitForSelector('#nov-badge-voice', { state: 'visible' });
+  await page.waitForSelector('#nov-badge-lipsync', { state: 'visible' });
+  const badgeVoiceTxt = await page.locator('#nov-badge-voice').innerText();
+  const badgeLipTxt = await page.locator('#nov-badge-lipsync').innerText();
+  assert(badgeVoiceTxt.includes('100% Gemini Native TTS'), `Selo voz inesperado: ${badgeVoiceTxt}`);
+  assert(badgeLipTxt.includes('Lip-Sync & Movimento Ativo'), `Selo lip-sync inesperado: ${badgeLipTxt}`);
+
   const optVals = await page.locator('#nov-accent-engine option').evaluateAll((opts) => opts.map((o) => o.value));
   for (const needed of ['nordestino_raiz', 'f5_tts_clone', 'seed_vc_guide']) {
     assert(optVals.includes(needed), `Opção ausente em #nov-accent-engine: ${needed}`);
   }
 
-  // 1) Botão "Testar Vozes Nordestinas" -> preview-voice 48kHz MP3
+  // 1) Botão "Testar Vozes Nordestinas" -> preview-voice 48kHz MP3 (100% Gemini Native TTS, 0 edge-tts!)
   const pvWait = page.waitForResponse(
     (r) => r.url().includes('/api/quick/novela/preview-voice') && r.request().method() === 'POST' && r.status() === 200,
-    { timeout: 90000 }
+    { timeout: 120000 }
   );
   await page.locator('#btn-nov-preview-voice').click();
   const pvRes = await pvWait;
   const pvJson = await pvRes.json();
   assert(pvJson.ok && pvJson.audio_url, `Resposta inválida preview-voice: ${JSON.stringify(pvJson)}`);
+  assert(
+    Array.isArray(pvJson.engines_used) && pvJson.engines_used.length > 0 && pvJson.engines_used.every((e) => String(e).startsWith('gemini_tts:')),
+    `Esperado 100% gemini_tts no preview-voice, veio: ${JSON.stringify(pvJson.engines_used)}`
+  );
   await page.waitForSelector('#nov-voice-preview-player:not(.hidden)', { state: 'visible', timeout: 15000 });
   const playerSrc = await page.locator('#nov-voice-preview-player').getAttribute('src');
   assert(playerSrc && playerSrc.includes('/api/quick/novela/preview-audio/'), `Player src inválido: ${playerSrc}`);
@@ -171,10 +182,13 @@ async function runDesktop(browser) {
   console.log(`[PASS] Costurador UI + Redublagem Regional (#nov-stitch-redub): vídeo final HTTP ${stitchDl.status()}`);
   await checkLayout(page, 'Desktop Guided Trilha 6 + Stitch Redub');
 
-  // 3) Modo Hard: seletor sincronizado, "Ouvir Fala" individual e upload "Áudio Guia"
+  // 3) Modo Hard: seletor sincronizado, selos v2.7, "Ouvir Fala" individual e upload "Áudio Guia"
   await page.locator('#btn-quick-mode-hard').click();
   await page.waitForSelector('#card-hard-novela', { state: 'visible' });
   await page.waitForSelector('#qnv-accent-engine', { state: 'visible' });
+  await page.waitForSelector('#qnv-badge-voice', { state: 'visible' });
+  await page.waitForSelector('#qnv-badge-lipsync', { state: 'visible' });
+  await page.waitForSelector('#qnv-dialogue-list :text("Lip-Sync & Movimento Ativo")', { state: 'visible' });
 
   const linePlayWait = page.waitForResponse(
     (r) => r.url().includes('/api/quick/novela/preview-voice') && r.request().method() === 'POST' && r.status() === 200,

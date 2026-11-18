@@ -41,6 +41,7 @@ _THIS_DIR = str(Path(__file__).resolve().parent)
 if _THIS_DIR not in sys.path:
     sys.path.insert(0, _THIS_DIR)
 import regional_voice_engine as rve  # noqa: E402
+import novela_lipsync_animator as nla  # noqa: E402
 
 
 for _env_k, _env_v in (("OMP_NUM_THREADS", "2"), ("MKL_NUM_THREADS", "2"), ("CT2_NUM_THREADS", "2")):
@@ -229,34 +230,34 @@ SPEAKER_ALIASES: Dict[str, str] = {
 }
 
 EMOTION_DIRECTIONS: Dict[str, Tuple[str, str, str]] = {
-    # (flux_desc, default_cam, veo_acting)
+    # (flux_desc [neutral/ready-to-speak mouth for Lip-Sync & Veo], default_cam, veo_acting)
     "shocked": (
-        "eyes wide open, jaw dropped, hands raised in comical disbelief",
+        "eyes wide open in comic astonishment, eyebrows raised high, expressive face with lips gently closed ready to speak, hands raised energetically",
         "shake",
         "widens eyes in shock, throws both hands up energetically",
     ),
     "confused": (
-        "head tilted, squinting suspiciously, eyebrows knotted in puzzlement",
+        "head tilted, squinting suspiciously, eyebrows knotted in puzzlement, closed neutral lips ready to speak",
         "zoom_in",
         "blinks rapidly, tilts head sideways squinting in baffled city-kid panic",
     ),
     "laughing": (
-        "bursting out laughing warmly, shoulders shaking joyfully",
+        "warm amused eyes crinkling joyfully, relaxed closed-lip grin ready to speak, cheerful posture",
         "whip_pan",
         "bursts into hearty amused laughter with a teasing wink",
     ),
     "proud": (
-        "chest puffed out, wise amused grin, wagging one finger playfully",
+        "chest puffed out, wise amused closed-lip smirk ready to speak, wagging one finger playfully",
         "zoom_in",
         "leans forward with a proud knowing smirk wagging one finger playfully",
     ),
     "dramatic": (
-        "hand over chest in hilarious telenovela gasping dramatization",
+        "hand over chest in comical telenovela dramatization, expressive eyes, relaxed closed lips ready to speak",
         "dramatic_push",
         "puts hands on hips then dramatically gasps in pure soap-opera exaggeration",
     ),
     "warm": (
-        "friendly welcoming smile, leaning forward mid-story",
+        "friendly welcoming smile with relaxed closed lips ready to speak, leaning forward mid-story",
         "zoom_in",
         "smiles warmly nodding animatedly mid-conversation",
     ),
@@ -324,6 +325,8 @@ class TurnCompiled:
     shot_abs_path: Path
     asset_source: str
     voice_engine_used: str = "nordestino_raiz"
+    animation_engine_used: str = ""
+    lipsync_peak_open: float = 0.0
 
 
 def _normalize_speaker_key(raw: str) -> str:
@@ -712,7 +715,8 @@ def _resolve_turn_visual(
     action_clause = f", {physical_action_en}" if physical_action_en else ""
     prompt = (
         f"{style_prefix}. {framing_meta['flux_cue'].format(speaker_en=spec['label'])}. "
-        f"{char_lock}, {emo_desc}{action_clause}. Background setting: {setting}, vertical 9:16 portrait composition."
+        f"{char_lock}, {emo_desc}{action_clause}. Natural expressive face, ready to speak with calm neutral closed lips (no frozen screaming open mouth). "
+        f"Background setting: {setting}, vertical 9:16 portrait composition."
     )
 
     nv_key = env_map.get("NVIDIA_API_KEY") or env_map.get("NIM_API_KEY") or ""
@@ -764,13 +768,14 @@ def build_veo_take_prompt(
     _, _, default_acting = EMOTION_DIRECTIONS.get(emotion, EMOTION_DIRECTIONS["warm"])
     acting_en = (physical_action_en or "").strip() or default_acting
     veo_char = speaker_spec.get("veo_desc") or speaker_spec.get("lock_tv") or speaker_spec["label"]
-    clean_speech = tts_text.replace('"', "'").strip()
+    clean_speech = rve.sanitize_northeast_slang(tts_text).replace('"', "'").strip()
     return (
         f"{style_desc}, set on a {setting}. {framing_cue}. "
-        f"{veo_char}, {acting_en}, speaking in Brazilian Portuguese with an authentic, warm Northeastern Sertão accent "
-        f"(sotaque nordestino arretado, open vowels, musical cadence): "
+        f"{veo_char}, {acting_en}, starting from a relaxed neutral ready-to-speak expression and breaking into lively speech, "
+        f"speaking in Brazilian Portuguese with an authentic, warm Northeastern Sertão accent "
+        f"(sotaque nordestino arretado, fast energetic comedy cadence, open vowels, zero slow dragging): "
         f"\"{clean_speech}\" "
-        f"Natural subtle handheld camera motion, authentic facial lip-sync and expressive gestures. "
+        f"Natural subtle handheld camera motion, authentic facial lip-sync, eye blinking and expressive gestures. "
         f"No subtitles, no text overlay, no watermarks, realistic lip-sync speech in Brazilian Portuguese."
     )
 
@@ -804,8 +809,8 @@ def generate_flow_veo_pack(cfg: Dict[str, Any]) -> Dict[str, Any]:
     for idx, raw_turn in enumerate(raw_dialogue):
         spk_raw = str(raw_turn.get("speaker") or "Narrador")
         spk_key, spec = _get_character_spec(spk_raw)
-        subtitle_text = str(raw_turn.get("subtitle_text") or raw_turn.get("text") or "").strip()
-        tts_text = str(raw_turn.get("tts_text") or subtitle_text).strip()
+        subtitle_text = rve.sanitize_northeast_slang(str(raw_turn.get("subtitle_text") or raw_turn.get("text") or "").strip())
+        tts_text = rve.sanitize_northeast_slang(str(raw_turn.get("tts_text") or subtitle_text).strip())
         if not tts_text:
             continue
         if not subtitle_text:
@@ -1606,11 +1611,10 @@ def stitch_novela_takes(cfg: Dict[str, Any]) -> Dict[str, Any]:
             ass_path.write_text(ass_header + "\n".join(ev_lines) + "\n", encoding="utf-8")
             vf_filters.append(f"ass={ass_path}")
 
-        af_filter = "aresample=48000:resampler=soxr,loudnorm=I=-16:TP=-1.5:LRA=11"
+        af_filter = "loudnorm=I=-16:TP=-1.5:LRA=11,aresample=48000:resampler=soxr"
         if ambient_bed:
             af_filter = (
-                "aresample=48000:resampler=soxr,"
-                "highpass=f=65,loudnorm=I=-16:TP=-1.5:LRA=11"
+                "highpass=f=65,loudnorm=I=-16:TP=-1.5:LRA=11,aresample=48000:resampler=soxr"
             )
 
         final_cmd = [FFMPEG_BIN, "-y", "-i", str(concat_mp4)]
@@ -1739,8 +1743,8 @@ def render_novela_episode(cfg: Dict[str, Any]) -> Dict[str, Any]:
     for idx, raw_turn in enumerate(raw_dialogue):
         spk_raw = str(raw_turn.get("speaker") or "Narrador")
         spk_key, spec = _get_character_spec(spk_raw)
-        subtitle_text = str(raw_turn.get("subtitle_text") or raw_turn.get("text") or "").strip()
-        tts_text = str(raw_turn.get("tts_text") or subtitle_text).strip()
+        subtitle_text = rve.sanitize_northeast_slang(str(raw_turn.get("subtitle_text") or raw_turn.get("text") or "").strip())
+        tts_text = rve.sanitize_northeast_slang(str(raw_turn.get("tts_text") or subtitle_text).strip())
         if not tts_text:
             continue
         if not subtitle_text:
@@ -1774,8 +1778,8 @@ def render_novela_episode(cfg: Dict[str, Any]) -> Dict[str, Any]:
             guide_audio_path=guide_path,
             colab_url=colab_url_eff,
             colab_token=colab_tok_eff,
-            lead_pad=0.03 if clean_cinema_mode else 0.05,
-            tail_pad=0.09 if clean_cinema_mode else 0.22,
+            lead_pad=0.02 if clean_cinema_mode else 0.04,
+            tail_pad=0.05 if clean_cinema_mode else 0.14,
             voice_override=str(raw_turn.get("voice") or ""),
         )
         slot_dur = float(tts_meta["duration"])
@@ -1858,6 +1862,7 @@ def render_novela_episode(cfg: Dict[str, Any]) -> Dict[str, Any]:
                 colab_engine=colab_engine,
                 out_mp4=take_mp4,
             )
+            t.animation_engine_used = f"tier1_colab:{colab_engine}"
             colab_clips.append(take_mp4)
 
         stitch_res = stitch_novela_takes({
@@ -1875,8 +1880,132 @@ def render_novela_episode(cfg: Dict[str, Any]) -> Dict[str, Any]:
             "colab_engine": colab_engine,
             "visual_style": visual_style,
             "clean_cinema_mode": clean_cinema_mode,
+            "lipsync_enabled": True,
+            "animation_engines_used": sorted({t.animation_engine_used for t in compiled_turns if t.animation_engine_used}),
+            "voice_engines_used": sorted({t.voice_engine_used for t in compiled_turns}),
             "speakers": sorted({t.speaker_label for t in compiled_turns}),
             "asset_sources": sorted({f"{t.asset_source}+colab:{colab_engine}" for t in compiled_turns}),
+            "elapsed_sec": round(time.time() - t_start_wall, 2),
+        }
+
+    # Mode 3 (Default v2.7): True Lip-Sync & Facial Motion Cascade via novela_lipsync_animator.py
+    enable_lipsync = bool(cfg.get("enable_lipsync", True))
+    if enable_lipsync:
+        colab_url = str(cfg.get("colab_url") or env_map.get("COLAB_GPU_URL") or "").strip()
+        colab_token = str(cfg.get("colab_token") or env_map.get("COLAB_GPU_TOKEN") or "").strip()
+        colab_engine = str(cfg.get("colab_engine") or "echomimic_v3").strip().lower()
+        animated_clips: List[Path] = []
+        lipsync_turns: List[Dict[str, Any]] = []
+        ass_events: List[Tuple[float, float, str]] = []
+        tl_t = 0.0
+
+        for t in compiled_turns:
+            _, spk_spec = _get_character_spec(t.speaker_label)
+            v_prompt = build_veo_take_prompt(
+                speaker_spec=spk_spec,
+                tts_text=t.tts_text,
+                visual_style=visual_style,
+                shot_framing=t.shot_framing,
+                emotion=t.emotion,
+                physical_action_en=t.physical_action_en,
+                setting=setting,
+            )
+            take_mp4 = work_dir / f"lipsync_take_{t.index:02d}.mp4"
+            anim_meta = nla.animate_character_talking_take(
+                image_path=t.shot_abs_path,
+                audio_wav=t.audio_wav,
+                out_mp4=take_mp4,
+                prompt=v_prompt,
+                emotion=t.emotion,
+                camera_action=t.camera_action,
+                colab_url=colab_url,
+                colab_token=colab_token,
+                colab_engine=colab_engine,
+                env_map=env_map,
+                width=1080,
+                height=1920,
+                fps=30,
+            )
+            t.animation_engine_used = str(anim_meta.get("animation_engine_used") or "local_viseme_30fps")
+            t.lipsync_peak_open = float(anim_meta.get("peak_mouth_open") or 0.0)
+            animated_clips.append(take_mp4)
+            lipsync_turns.append({
+                "index": t.index,
+                "speaker": t.speaker_label,
+                "animation_engine": t.animation_engine_used,
+                "voice_engine": t.voice_engine_used,
+                "peak_mouth_open": t.lipsync_peak_open,
+                "duration": anim_meta.get("duration", t.slot_dur),
+            })
+            if subtitles_mode == "minimal" and t.subtitle_text:
+                ass_events.append((tl_t + 0.04, tl_t + max(0.3, float(anim_meta.get("duration") or t.slot_dur) - 0.04), t.subtitle_text))
+            tl_t += float(anim_meta.get("duration") or t.slot_dur)
+
+        # Concat animated clips seamlessly + optional minimal ASS + 48kHz SoXR final pass
+        concat_list = work_dir / "lipsync_clips.txt"
+        concat_list.write_text("\n".join(f"file '{p}'" for p in animated_clips) + "\n", encoding="utf-8")
+        concat_mp4 = work_dir / "lipsync_concat.mp4"
+        _run_checked([
+            FFMPEG_BIN, "-y",
+            "-f", "concat", "-safe", "0", "-i", str(concat_list),
+            "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2",
+            str(concat_mp4),
+        ], timeout=120)
+
+        vf_list: List[str] = []
+        if subtitles_mode == "minimal" and ass_events:
+            margin_v = max(80, 1920 - int(safe_zone["safe_bottom"]) + 20)
+            margin_r = max(60, 1080 - int(safe_zone["safe_right"]))
+            ass_path = work_dir / "lipsync_caps.ass"
+            ass_header = (
+                "[Script Info]\nScriptType: v4.00+\nPlayResX: 1080\nPlayResY: 1920\n\n"
+                "[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, "
+                "Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, "
+                "MarginL, MarginR, MarginV, Encoding\n"
+                f"Style: CleanMin,DejaVu Sans,42,&H00FFFFFF,&H0000FFFF,&H00000000,&H00000000,-1,0,0,0,100,100,0,0,1,3,1,2,56,{margin_r},{margin_v},1\n\n"
+                "[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
+            )
+            ev_lines = [f"Dialogue: 0,{_format_ass_ts(s)},{_format_ass_ts(e)},CleanMin,,0,0,0,,{txt}" for s, e, txt in ass_events]
+            ass_path.write_text(ass_header + "\n".join(ev_lines) + "\n", encoding="utf-8")
+            vf_list.append(f"ass={ass_path}")
+
+        final_cmd = [FFMPEG_BIN, "-y", "-i", str(concat_mp4)]
+        if vf_list:
+            final_cmd.extend(["-vf", ",".join(vf_list), "-c:v", "libx264", "-preset", "fast", "-crf", "18"])
+        else:
+            final_cmd.extend(["-c:v", "copy"])
+        final_cmd.extend([
+            "-af", "loudnorm=I=-16:TP=-1.5:LRA=11,aresample=48000:resampler=soxr",
+            "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2",
+            "-movflags", "+faststart",
+            str(out_path),
+        ])
+        _run_checked(final_cmd, timeout=180)
+        final_dur = _probe_duration(out_path)
+
+        if not bool(cfg.get("keep_work_dir")):
+            shutil.rmtree(work_dir, ignore_errors=True)
+
+        return {
+            "ok": True,
+            "output_path": str(out_path),
+            "filename": out_path.name,
+            "render_mode": render_mode,
+            "visual_style": visual_style,
+            "platform_preset": platform_preset,
+            "clean_cinema_mode": clean_cinema_mode,
+            "subtitles_mode": subtitles_mode,
+            "lipsync_enabled": True,
+            "duration": round(final_dur, 2),
+            "scenes": len(compiled_turns),
+            "turns": len(compiled_turns),
+            "speakers": sorted({t.speaker_label for t in compiled_turns}),
+            "shot_framings": [t.shot_framing for t in compiled_turns],
+            "accent_engine": str(cfg.get("accent_engine") or cfg.get("accent_preset") or "nordestino_raiz"),
+            "voice_engines_used": sorted({t.voice_engine_used for t in compiled_turns}),
+            "animation_engines_used": sorted({t.animation_engine_used for t in compiled_turns if t.animation_engine_used}),
+            "lipsync_turns": lipsync_turns,
+            "asset_sources": sorted({t.asset_source for t in compiled_turns}),
             "elapsed_sec": round(time.time() - t_start_wall, 2),
         }
 

@@ -18,6 +18,7 @@ micro-series and regional comedy, supporting three engines cleanly:
 from __future__ import annotations
 
 import base64
+import io
 import json
 import os
 import re
@@ -27,6 +28,7 @@ import time
 import urllib.error
 import urllib.request
 import uuid
+import wave
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -40,7 +42,19 @@ EDGE_TTS_BIN = os.environ.get(
 )
 FFMPEG_BIN = shutil.which("ffmpeg") or "ffmpeg"
 FFPROBE_BIN = shutil.which("ffprobe") or "ffprobe"
-GEMINI_TTS_MODEL = "gemini-2.5-flash-preview-tts"
+GEMINI_TTS_MODEL = "gemini-3.1-flash-tts-preview"
+GEMINI_TTS_MODELS: Tuple[str, ...] = (
+    "gemini-3.1-flash-tts-preview",
+    "gemini-2.5-flash-preview-tts",
+    "gemini-3.8-flash-tts",
+    "gemini-3.8-flash-lite-tts",
+)
+
+NORDESTE_FAST_DIRECTOR_PROMPT = (
+    "Atue em português brasileiro com sotaque nordestino autêntico do interior (Piauí/Ceará), "
+    "ritmo RÁPIDO, vibrante, energético e espontâneo de comédia popular de calçada, "
+    "fala ágil sem arrastar sílabas, entonação viva e natural."
+)
 
 
 # ---------------------------------------------------------------------------
@@ -55,30 +69,29 @@ DEFAULT_REGIONAL_PROFILES: Dict[str, Dict[str, Any]] = {
         "gemini_voice": "Kore",
         "gemini_alt_voice": "Aoede",
         "edge_voice": "pt-BR-FranciscaNeural",
-        "edge_rate": "+12%",
+        "edge_rate": "+16%",
         "edge_pitch": "+5Hz",
         "style_instruction": (
-            "Fale em português brasileiro com sotaque nordestino autêntico de senhora arretada do interior "
-            "(Ceará/Pernambuco), vogais pré-tônicas bem abertas (é, ó), cadência cantada e expressividade "
-            "teatral de comédia popular com indignação bem-humorada."
+            f"{NORDESTE_FAST_DIRECTOR_PROMPT} "
+            "Interprete Dona Socorro, senhora nordestina arretada, direta e afiada, com vogais abertas e reação imediata."
         ),
-        "default_sample_text": "Ôxêênte, minino! Tu veio botar bonéco logo na minha calçada hoje?!",
+        "default_sample_text": "Oxente, minino! Tu veio botar boneco logo na minha calçada hoje?!",
     },
     "seu_bastiao": {
         "id": "seu_bastiao",
         "label": "Seu Bastião",
         "role": "Comerciante maduro, debochado e bom de prosa",
-        "region": "Sertão de Pernambuco / Bahia",
+        "region": "Sertão do Piauí / Ceará / Pernambuco",
         "gemini_voice": "Charon",
         "gemini_alt_voice": "Fenrir",
         "edge_voice": "pt-BR-AntonioNeural",
-        "edge_rate": "+6%",
-        "edge_pitch": "-6Hz",
+        "edge_rate": "+14%",
+        "edge_pitch": "-5Hz",
         "style_instruction": (
-            "Fale em português brasileiro com sotaque nordestino masculino maduro e tranquilo do sertão, "
-            "timbre grave e risonho, vogais abertas, ritmo malandro e pausas cômicas de contador de causos."
+            f"{NORDESTE_FAST_DIRECTOR_PROMPT} "
+            "Interprete Seu Bastião, dono de bodega esperto, voz masculina madura, tirada rápida e riso debochado."
         ),
-        "default_sample_text": "Hahaha! Deixe de cunvérsa, cabra leso! Aqui no sertão isso é café pequeno!",
+        "default_sample_text": "Hahaha! Deixe de cunversa, cabra leso! Aqui na bodega o negócio é arretado mesmo!",
     },
     "enzo": {
         "id": "enzo",
@@ -88,13 +101,13 @@ DEFAULT_REGIONAL_PROFILES: Dict[str, Dict[str, Any]] = {
         "gemini_voice": "Puck",
         "gemini_alt_voice": "Zephyr",
         "edge_voice": "pt-BR-AntonioNeural",
-        "edge_rate": "+5%",
-        "edge_pitch": "+7Hz",
+        "edge_rate": "+14%",
+        "edge_pitch": "+6Hz",
         "style_instruction": (
-            "Fale em português brasileiro jovem, apressado e meio afobado, com leve cadência nordestina urbana "
-            "misturada com surpresa dramática."
+            f"{NORDESTE_FAST_DIRECTOR_PROMPT} "
+            "Interprete Enzo, sobrinho jovem apressado e meio afobado tentando responder rápido com surpresa."
         ),
-        "default_sample_text": "Meu Deus, Tia Socorro! Que horas é esse negócio?! Tô passado!",
+        "default_sample_text": "Tia Socorro, calma! Eu só tava pedindo um café sem frescura!",
     },
     "narrador_sertao": {
         "id": "narrador_sertao",
@@ -104,13 +117,13 @@ DEFAULT_REGIONAL_PROFILES: Dict[str, Dict[str, Any]] = {
         "gemini_voice": "Sulafat",
         "gemini_alt_voice": "Algenib",
         "edge_voice": "pt-BR-ThalitaMultilingualNeural",
-        "edge_rate": "+6%",
+        "edge_rate": "+14%",
         "edge_pitch": "-2Hz",
         "style_instruction": (
-            "Fale como um narrador carismático de causos nordestinos, cadência musical de cordel, "
-            "vogais bem abertas e entusiasmo teatral."
+            f"{NORDESTE_FAST_DIRECTOR_PROMPT} "
+            "Interprete um narrador ágil de causos nordestinos com ritmo dinâmico de repente e entusiasmo."
         ),
-        "default_sample_text": "Eita lá! Mais um dia tranquilo na bodega até a confusão começar!",
+        "default_sample_text": "Eita lá! Mais um dia agitado na bodega antes da presepada começar!",
     },
 }
 
@@ -130,12 +143,12 @@ SPEAKER_KEY_ALIASES: Dict[str, str] = {
 }
 
 EMOTION_ACTING_CUES_PT: Dict[str, str] = {
-    "shocked": "Tom de espanto máximo e exclamação imediata, voz subindo na surpresa.",
-    "confused": "Tom perplexo e hesitante, sobrancelhas erguidas em dúvida genuína.",
-    "laughing": "Rindo de verdade entre as palavras com alegria debochada e calorosa.",
-    "proud": "Tom convencido de quem entende tudo da vida no sertão, firme e irônico.",
-    "dramatic": "Dramaticidade exagerada de novela mexicana popular, com pausa teatral.",
-    "warm": "Tom acolhedor, cantado e animado de conversa boa na calçada.",
+    "shocked": "Reação imediata e rápida de espanto, voz firme e expressiva sem arrastar.",
+    "confused": "Tom perplexo, resposta ágil de quem foi pego de surpresa.",
+    "laughing": "Rindo de verdade com tirada rápida, alegre e debochada.",
+    "proud": "Tom convencido e esperto, resposta na ponta da língua.",
+    "dramatic": "Dramaticidade cômica acelerada de barraco bem-humorado.",
+    "warm": "Tom animado, direto e caloroso de conversa rápida na calçada.",
 }
 
 
@@ -154,25 +167,62 @@ def normalize_character_id(speaker_raw: str) -> str:
     return "narrador_sertao"
 
 
+def sanitize_northeast_slang(text: str) -> str:
+    """Enforce authentic Northeast (PI/CE/PE/BA) vocabulary and punchy non-dragged cadence.
+
+    Blocks out-of-region slang ('trem', 'uai', 'sô', 'mano', 'meo', 'daora', 'guri', 'bah', 'tchê')
+    and removes vowel-stretching spellings ('Oxêêênte' -> 'Oxente') that cause slow narration.
+    """
+    txt = (text or "").strip()
+    if not txt:
+        return ""
+
+    # 1) Block out-of-region slang (Mineirês / Paulistês / Gauchês)
+    replacements = [
+        (r"\b(?:um|esse|aquele|o)\s+trem\b", lambda m: m.group(0).rsplit(None, 1)[0] + " negócio"),
+        (r"\b(?:nessa|nesse|dessa|desse)\s+trem\b", "nesse negócio"),
+        (r"\btrem\b", "negócio"),
+        (r"\btrens\b", "negócios"),
+        (r"\buai\b", "oxe"),
+        (r"\bs[oô]\b", "visse"),
+        (r"\bmano\b", "rapaz"),
+        (r"\bmeo\b", "cabra"),
+        (r"\bda\s*hora\b|\bdaora\b", "arretado"),
+        (r"\bguri\b", "minino"),
+        (r"\bguria\b", "minina"),
+        (r"\bbah\b", "vixe"),
+        (r"\btch[eê]\b", "oxente"),
+    ]
+    for pat, rep in replacements:
+        txt = re.sub(pat, rep, txt, flags=re.IGNORECASE)
+
+    # 2) Collapse exaggerated repeated vowels (e.g. Oxêêênte -> Oxente, Viixe -> Vixe)
+    # without breaking legitimate Portuguese double vowels like 'caatinga' or 'preencher'
+    txt = re.sub(r"\b[oô]+x[eê]+n+t+e+\b", "Oxente", txt, flags=re.IGNORECASE)
+    txt = re.sub(r"\bv[iî]+x[eê]+\b", "Vixe", txt, flags=re.IGNORECASE)
+    txt = re.sub(r"([áéíóúâêîôûà])\1{1,}", r"\1", txt, flags=re.IGNORECASE)
+    txt = re.sub(r"([aeiou])\1{2,}", r"\1", txt, flags=re.IGNORECASE)
+    txt = re.sub(r"\.{3,}", ",", txt)
+    txt = re.sub(r"\s+", " ", txt).strip()
+    return txt
+
+
 def apply_nordestino_prosody(
     text: str,
     character: str = "dona_socorro",
     emotion: str = "warm",
     mode: str = "gemini",
 ) -> str:
-    """Apply authentic Brazilian Northeast phonetic, open-vowel & colloquial prosody rules.
+    """Apply authentic Brazilian Northeast prosody without dragging syllables.
 
-    - ``mode='gemini'`` enhances natural interjections, comedic pauses and colloquial gerund reductions
-      without distorted spelling that confuses LLM-backed native TTS models.
-    - ``mode='phonetic'`` injects explicit open-vowel diacritics (``é``, ``ó``, ``ê``) and rhythmic pauses
-      to push standard neural TTS (``edge-tts`` fallback) toward open pre-tonic Nordeste cadence.
+    - ``mode='gemini'`` enforces cultural sanitation, crisp colloquial contractions,
+      and tight punctuation so Gemini Native TTS speaks fast and punchily.
+    - ``mode='phonetic'`` injects subtle open-vowel cues ONLY for neural fallback engines.
     """
-    txt = (text or "").strip()
+    txt = sanitize_northeast_slang(text)
     if not txt:
-        return "..."
+        return "Oxente!"
 
-    # 1) Reduce formal gerund (-ando / -endo / -indo -> -ano / -eno / -ino) on common colloquial verbs
-    # Keep natural in Northeast vernacular except Enzo's city-kid lines if desired
     char_id = normalize_character_id(character)
     if char_id != "enzo":
         gerund_rules = [
@@ -191,42 +241,37 @@ def apply_nordestino_prosody(
         for pat, rep in gerund_rules:
             txt = re.sub(pat, rep, txt, flags=re.IGNORECASE)
 
-    # 2) Colloquial contractions & Northeast expressions
     colloq = [
         (r"\bpara\s+eu\b", "pr'eu" if mode == "gemini" else "pru eu"),
-        (r"\bpara\b", "prá"),
+        (r"\bpara\b", "pra"),
         (r"\bestou\b", "tô"),
         (r"\bestá\b", "tá"),
         (r"\bmeu filho\b", "meu fí"),
         (r"\bmenino\b", "minino"),
         (r"\bsenhora\b", "sinhóra"),
-        (r"\bconversa\b", "cunvérsa"),
+        (r"\bconversa\b", "cunversa"),
         (r"\bvocê\b", "ocê"),
     ]
     for pat, rep in colloq:
         txt = re.sub(pat, rep, txt, flags=re.IGNORECASE)
 
-    # 3) Elongated expressivity on classic Sertão interjections & comedic comma timing
-    txt = re.sub(r"\boxente\b", "Ôxêênte," if mode == "phonetic" else "Ôxente!", txt, flags=re.IGNORECASE)
-    txt = re.sub(r"\bvixe\s+maria\b", "Vîîxe Maríia," if mode == "phonetic" else "Vixe Maria!", txt, flags=re.IGNORECASE)
-    txt = re.sub(r"\beita\b", "Êita," if mode == "phonetic" else "Eita!", txt, flags=re.IGNORECASE)
+    # Crisp interjections (NO elongated vowels that drag Gemini speech!)
+    txt = re.sub(r"\b[oô]xente\b", "Oxente", txt, flags=re.IGNORECASE)
+    txt = re.sub(r"\bvixe\s+maria\b", "Vixe Maria", txt, flags=re.IGNORECASE)
+    txt = re.sub(r"\beita\b", "Eita", txt, flags=re.IGNORECASE)
 
     if mode == "phonetic":
-        # Open pre-tonic vowels for edge-tts fallback cadence
         open_vowels = [
             (r"\bboneco\b", "bonéco"),
-            (r"\bpre[aá]\b", "Preáá"),
-            (r"\bvel[oó]rio\b", "velóório"),
-            (r"\bcora[cç][aã]o\b", "córação"),
-            (r"\bcelular\b", "celulá"),
-            (r"\bcaf[eé]\b", "caféé"),
+            (r"\bpre[aá]\b", "Preá"),
+            (r"\bcaf[eé]\b", "café"),
             (r"\bn[aã]o\b", "num"),
         ]
         for pat, rep in open_vowels:
             txt = re.sub(pat, rep, txt, flags=re.IGNORECASE)
 
-    # Micro-pause after comedic triggers so TTS breathes naturally
-    txt = re.sub(r"([!?])\s+(?=[A-Za-zÀ-ÿ])", r"\1 ... ", txt)
+    txt = re.sub(r"([!?])\s*,", r"\1", txt)
+    txt = re.sub(r"([!?])\1+", r"\1", txt)
     return re.sub(r"\s+", " ", txt).strip()
 
 
@@ -283,22 +328,30 @@ def _pcm_to_48k_stereo_wav(
     raw_pcm_bytes: bytes,
     src_rate: int,
     out_wav: Path,
-    lead_pad: float = 0.03,
-    tail_pad: float = 0.09,
+    lead_pad: float = 0.02,
+    tail_pad: float = 0.05,
     codec: str = "s16le",
+    src_channels: int = 1,
+    comedy_fast: bool = True,
 ) -> float:
-    """Convert raw PCM stream (24kHz s16le mono from Gemini TTS) into normalized 48kHz Stereo SoXR WAV."""
+    """Convert raw PCM (or RIFF WAV) stream into agile 48kHz Stereo SoXR WAV."""
     raw_pcm_bytes = raw_pcm_bytes[: len(raw_pcm_bytes) - (len(raw_pcm_bytes) % 2)]
     tmp_pcm = out_wav.with_suffix(".raw.pcm")
     tmp_pcm.write_bytes(raw_pcm_bytes)
+    speed_chain = (
+        "silenceremove=start_periods=1:start_duration=0.05:start_threshold=-38dB:"
+        "stop_periods=-1:stop_duration=0.18:stop_threshold=-36dB,atempo=1.16,"
+        if comedy_fast
+        else ""
+    )
     try:
         _run_checked([
             FFMPEG_BIN, "-y",
             "-f", "lavfi", "-t", f"{lead_pad:.3f}", "-i", "anullsrc=channel_layout=stereo:sample_rate=48000",
-            "-f", codec, "-ar", str(src_rate), "-ac", "1", "-i", str(tmp_pcm),
+            "-f", codec, "-ar", str(src_rate), "-ac", str(max(1, int(src_channels))), "-i", str(tmp_pcm),
             "-f", "lavfi", "-t", f"{tail_pad:.3f}", "-i", "anullsrc=channel_layout=stereo:sample_rate=48000",
             "-filter_complex",
-            "[1:a]highpass=f=70,loudnorm=I=-16:TP=-1.5:LRA=11,"
+            f"[1:a]{speed_chain}highpass=f=70,loudnorm=I=-16:TP=-1.5:LRA=11,"
             "aresample=48000:resampler=soxr,aformat=sample_fmts=s16:channel_layouts=stereo[sp];"
             "[0:a][sp][2:a]concat=n=3:v=0:a=1[outa]",
             "-map", "[outa]",
@@ -358,7 +411,12 @@ def ensure_regional_voice_bank() -> Dict[str, Any]:
             changed = True
         else:
             for k, v in defaults.items():
-                saved[cid].setdefault(k, v)
+                if k in ("style_instruction", "edge_rate", "edge_pitch", "default_sample_text"):
+                    if saved[cid].get(k) != v:
+                        saved[cid][k] = v
+                        changed = True
+                else:
+                    saved[cid].setdefault(k, v)
         # Validate reference path still exists
         ref_rel = saved[cid].get("reference_file") or ""
         if ref_rel and not (VOICES_REGIONAL_DIR / ref_rel).is_file():
@@ -495,6 +553,73 @@ def _ensure_character_seed_reference(character_id: str, env_map: Dict[str, str])
 # Engine Implementations: Gemini Native TTS / Edge Fallback / F5-TTS / Seed-VC
 # ---------------------------------------------------------------------------
 
+_EXHAUSTED_RPD_KEYS: set[Tuple[str, str]] = set()
+_LAST_GEMINI_CALL_TS: float = 0.0
+
+
+def _collect_gemini_keys(env_map: Dict[str, str]) -> List[str]:
+    """Collect distinct Gemini API keys configured in env/vault in priority order."""
+    out: List[str] = []
+    raw_multi = str(env_map.get("GEMINI_API_KEYS") or "").strip()
+    if raw_multi:
+        for part in re.split(r"[,;\s]+", raw_multi):
+            if part and part not in out:
+                out.append(part)
+    for kname in (
+        "GEMINI_API_KEY",
+        "GEMINI_API_KEY_2",
+        "GEMINI_API_KEY_3",
+        "GEMINI_API_KEY_4",
+        "GOOGLE_API_KEY",
+    ):
+        val = str(env_map.get(kname) or "").strip()
+        if val and val not in out:
+            out.append(val)
+    return out
+
+
+def _extract_audio_from_gemini_resp(data: Dict[str, Any]) -> Tuple[bytes, int, str, int]:
+    parts = ((data.get("candidates") or [{}])[0].get("content") or {}).get("parts") or []
+    for p in parts:
+        inline = p.get("inlineData") or {}
+        if inline.get("data"):
+            mime = str(inline.get("mimeType") or "audio/L16;codec=pcm;rate=24000")
+            rate_m = re.search(r"rate=(\d+)", mime)
+            srate = int(rate_m.group(1)) if rate_m else 24000
+            raw = base64.b64decode(inline["data"])
+            if len(raw) < 1000:
+                raise RuntimeError("Gemini TTS retornou áudio vazio")
+            if raw[:4] == b"RIFF" or "wav" in mime.lower():
+                with wave.open(io.BytesIO(raw), "rb") as wf:
+                    pcm = wf.readframes(wf.getnframes())
+                    return pcm, int(wf.getframerate() or srate), "s16le", int(wf.getnchannels() or 1)
+            return raw, srate, "s16le", 1
+    raise RuntimeError("Resposta do Gemini TTS sem inlineData de áudio")
+
+
+def _post_gemini_tts_payload(
+    *,
+    payload: Dict[str, Any],
+    api_key: str,
+    model: str = GEMINI_TTS_MODEL,
+) -> Tuple[bytes, int, str, int]:
+    global _LAST_GEMINI_CALL_TS
+    gap = time.time() - _LAST_GEMINI_CALL_TS
+    if gap < 0.45:
+        time.sleep(0.45 - gap)
+    _LAST_GEMINI_CALL_TS = time.time()
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=55) as resp:
+        data = json.loads(resp.read().decode("utf-8"))
+    return _extract_audio_from_gemini_resp(data)
+
+
 def _call_gemini_native_tts(
     *,
     text: str,
@@ -502,18 +627,18 @@ def _call_gemini_native_tts(
     style_prompt: str,
     emotion: str,
     api_key: str,
-) -> Tuple[bytes, int, str]:
-    """Call Gemini 2.5 Flash Preview TTS and return (raw_pcm_bytes, sample_rate, ffmpeg_codec)."""
+    model: str = GEMINI_TTS_MODEL,
+) -> Tuple[bytes, int, str, int]:
+    """Call Gemini Native TTS and return (raw_pcm_bytes, sample_rate, ffmpeg_codec, channels)."""
     if not api_key:
         raise RuntimeError("GEMINI_API_KEY não configurada")
 
     emo_cue = EMOTION_ACTING_CUES_PT.get(emotion, EMOTION_ACTING_CUES_PT["warm"])
     director_prompt = (
         f"{style_prompt} {emo_cue} "
-        f"Leia exatamente a fala abaixo com ritmo ágil e naturalidade nordestina, sem acrescentar comentários: "
+        f"Leia exatamente a fala abaixo com cadência rápida, viva e naturalidade nordestina, sem arrastar palavras e sem comentários: "
         f"\"{text}\""
     )
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_TTS_MODEL}:generateContent?key={api_key}"
     payload = {
         "contents": [{"parts": [{"text": director_prompt}]}],
         "generationConfig": {
@@ -527,27 +652,134 @@ def _call_gemini_native_tts(
             },
         },
     }
-    req = urllib.request.Request(
-        url,
-        data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-    with urllib.request.urlopen(req, timeout=45) as resp:
-        data = json.loads(resp.read().decode("utf-8"))
+    return _post_gemini_tts_payload(payload=payload, api_key=api_key, model=model)
 
-    parts = ((data.get("candidates") or [{}])[0].get("content") or {}).get("parts") or []
-    for p in parts:
-        inline = p.get("inlineData") or {}
-        if inline.get("data"):
-            mime = str(inline.get("mimeType") or "audio/L16;codec=pcm;rate=24000")
-            rate_m = re.search(r"rate=(\d+)", mime)
-            srate = int(rate_m.group(1)) if rate_m else 24000
-            raw = base64.b64decode(inline["data"])
-            if len(raw) < 1000:
-                raise RuntimeError("Gemini TTS retornou áudio vazio")
-            return raw, srate, "s16le"
-    raise RuntimeError("Resposta do Gemini TTS sem inlineData de áudio")
+
+def _call_gemini_resilient(
+    *,
+    env_map: Dict[str, str],
+    build_payload_fn: Any,
+    models: Tuple[str, ...] = GEMINI_TTS_MODELS,
+) -> Tuple[bytes, int, str, int, str]:
+    """Invoke Gemini TTS across rotated keys & models with anti-429 exponential backoff (2s -> 4s -> 8s)."""
+    keys = _collect_gemini_keys(env_map)
+    if not keys:
+        raise RuntimeError("Nenhuma GEMINI_API_KEY configurada")
+
+    last_err: Optional[Exception] = None
+    for model in models:
+        for key in keys:
+            pair = (key[-6:], model)
+            if pair in _EXHAUSTED_RPD_KEYS:
+                continue
+            for wait_s in (2.0, 4.0, 8.0):
+                try:
+                    payload = build_payload_fn(model)
+                    pcm, sr, codec, ch = _post_gemini_tts_payload(payload=payload, api_key=key, model=model)
+                    return pcm, sr, codec, ch, model
+                except urllib.error.HTTPError as exc:
+                    err_body = ""
+                    try:
+                        err_body = exc.read().decode("utf-8", errors="ignore")
+                    except Exception:
+                        pass
+                    last_err = RuntimeError(f"{model} HTTP {exc.code}: {err_body[:240]}")
+                    low_err = err_body.lower()
+                    # Daily quota exhausted or invalid multi-speaker schema on this model -> switch immediately
+                    if exc.code == 429 and ("perday" in low_err or "requests per day" in low_err):
+                        _EXHAUSTED_RPD_KEYS.add(pair)
+                        break
+                    if exc.code == 400:
+                        break
+                    if exc.code in (429, 500, 502, 503, 504):
+                        delay_m = re.search(r'"retryDelay"\s*:\s*"(\d+)s"', err_body)
+                        sleep_for = min(12.0, float(delay_m.group(1))) if delay_m else wait_s
+                        time.sleep(sleep_for)
+                        continue
+                    break
+                except Exception as exc:
+                    last_err = exc
+                    time.sleep(wait_s)
+    raise RuntimeError(f"Todos os modelos/chaves Gemini TTS falharam: {last_err}")
+
+
+def synthesize_gemini_multispeaker_dialogue(
+    *,
+    dialogue: List[Dict[str, Any]],
+    out_wav: Path,
+    lead_pad: float = 0.02,
+    tail_pad: float = 0.05,
+) -> Dict[str, Any]:
+    """Synthesize a multi-character conversation in ONE Gemini Multi-Speaker Native TTS API call."""
+    env_map = _load_secrets_env()
+    profiles = ensure_regional_voice_bank()
+    speaker_configs: List[Dict[str, Any]] = []
+    seen_speakers: set[str] = set()
+    script_lines: List[str] = []
+
+    for row in dialogue[:8]:
+        spk_raw = str(row.get("speaker") or "Dona Socorro").strip()
+        cid = normalize_character_id(spk_raw)
+        prof = profiles.get(cid) or profiles["dona_socorro"]
+        spk_label = prof.get("label") or spk_raw
+        txt = apply_nordestino_prosody(
+            str(row.get("tts_text") or row.get("subtitle_text") or row.get("text") or ""),
+            character=cid,
+            emotion=str(row.get("emotion") or "warm"),
+            mode="gemini",
+        )
+        if not txt:
+            continue
+        if spk_label not in seen_speakers:
+            seen_speakers.add(spk_label)
+            speaker_configs.append({
+                "speaker": spk_label,
+                "voiceConfig": {"prebuiltVoiceConfig": {"voiceName": prof.get("gemini_voice") or "Kore"}},
+            })
+        script_lines.append(f"{spk_label}: {txt}")
+
+    if not script_lines:
+        raise ValueError("Diálogo vazio para síntese multi-speaker")
+
+    prompt = f"{NORDESTE_FAST_DIRECTOR_PROMPT}\nInterpretando em ritmo rápido e cômico:\n" + "\n".join(script_lines)
+
+    def _build_ms_payload(_model: str) -> Dict[str, Any]:
+        return {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {
+                "responseModalities": ["AUDIO"],
+                "speechConfig": {
+                    "multiSpeakerVoiceConfig": {"speakerVoiceConfigs": speaker_configs}
+                },
+            },
+        }
+
+    # Note: 3+ speakers work natively on gemini-3.1-flash-tts-preview
+    ms_models = ("gemini-3.1-flash-tts-preview", "gemini-2.5-flash-preview-tts") if len(speaker_configs) <= 2 else ("gemini-3.1-flash-tts-preview",)
+    pcm, srate, codec, ch, used_model = _call_gemini_resilient(
+        env_map=env_map,
+        build_payload_fn=_build_ms_payload,
+        models=ms_models,
+    )
+    out_wav.parent.mkdir(parents=True, exist_ok=True)
+    dur = _pcm_to_48k_stereo_wav(
+        pcm,
+        srate,
+        out_wav,
+        lead_pad=lead_pad,
+        tail_pad=tail_pad,
+        codec=codec,
+        src_channels=ch,
+        comedy_fast=True,
+    )
+    return {
+        "ok": True,
+        "voice_engine_used": f"gemini_tts:multi_speaker:{used_model}",
+        "gemini_model": used_model,
+        "speakers": [s["speaker"] for s in speaker_configs],
+        "duration": round(dur, 3),
+        "wav_path": str(out_wav),
+    }
 
 
 def _synthesize_edge_regional_fallback(
@@ -722,33 +954,73 @@ def synthesize_regional_turn(
             except Exception:
                 pass
 
-    # 3) Primary & Universal Fallback: Gemini Native Audio TTS (gemini-2.5-flash-preview-tts)
-    gem_key = env_map.get("GEMINI_API_KEY") or env_map.get("GOOGLE_API_KEY") or ""
+    # 3) Primary Engine: 100% Gemini Native Audio TTS with Multi-Model + Key Rotation + Backoff
+    gem_keys = _collect_gemini_keys(env_map)
     gem_voice = (voice_override or prof.get("gemini_voice") or "Kore").strip()
-    if gem_key:
-        for attempt in range(2):
-            try:
-                pcm_bytes, srate, codec = _call_gemini_native_tts(
-                    text=processed_text,
-                    voice_name=gem_voice,
-                    style_prompt=prof.get("style_instruction") or DEFAULT_REGIONAL_PROFILES["dona_socorro"]["style_instruction"],
-                    emotion=emotion,
-                    api_key=gem_key,
-                )
-                dur = _pcm_to_48k_stereo_wav(pcm_bytes, srate, out_wav, lead_pad=lead_pad, tail_pad=tail_pad, codec=codec)
-                return {
-                    "ok": True,
-                    "character_id": cid,
-                    "accent_engine_requested": eff_engine,
-                    "voice_engine_used": f"gemini_tts:{gem_voice}",
-                    "processed_text": processed_text,
-                    "duration": round(dur, 3),
-                    "wav_path": str(out_wav),
-                }
-            except Exception:
-                time.sleep(0.5)
+    if gem_keys:
+        emo_cue = EMOTION_ACTING_CUES_PT.get(emotion, EMOTION_ACTING_CUES_PT["warm"])
+        style_inst = prof.get("style_instruction") or NORDESTE_FAST_DIRECTOR_PROMPT
+        director_prompt = (
+            f"{style_inst} {emo_cue} "
+            f"Leia exatamente a fala abaixo com cadência rápida, viva e naturalidade nordestina, sem arrastar palavras e sem comentários: "
+            f"\"{processed_text}\""
+        )
 
-    # 4) Offline / Quota Resilient Edge-TTS Phonetic Fallback
+        def _build_turn_payload(model_name: str) -> Dict[str, Any]:
+            # Prompt-capable 2.5/3.1 models take short acting direction; 3.8 raw TTS models take pure text ONLY!
+            if "3.8" in (model_name or ""):
+                prompt_text = processed_text
+            else:
+                prompt_text = (
+                    f"{style_inst} {emo_cue} "
+                    f"Fale somente o texto entre aspas com ritmo rápido nordestino, sem comentários: "
+                    f"\"{processed_text}\""
+                )
+            return {
+                "contents": [{"parts": [{"text": prompt_text}]}],
+                "generationConfig": {
+                    "responseModalities": ["AUDIO"],
+                    "speechConfig": {
+                        "voiceConfig": {
+                            "prebuiltVoiceConfig": {
+                                "voiceName": gem_voice,
+                            }
+                        }
+                    },
+                },
+            }
+
+        try:
+            pcm_bytes, srate, codec, src_ch, used_model = _call_gemini_resilient(
+                env_map=env_map,
+                build_payload_fn=_build_turn_payload,
+                models=GEMINI_TTS_MODELS,
+            )
+            dur = _pcm_to_48k_stereo_wav(
+                pcm_bytes,
+                srate,
+                out_wav,
+                lead_pad=lead_pad,
+                tail_pad=tail_pad,
+                codec=codec,
+                src_channels=src_ch,
+                comedy_fast=True,
+            )
+            return {
+                "ok": True,
+                "character_id": cid,
+                "accent_engine_requested": eff_engine,
+                "voice_engine_used": f"gemini_tts:{gem_voice}",
+                "gemini_model": used_model,
+                "processed_text": processed_text,
+                "duration": round(dur, 3),
+                "wav_path": str(out_wav),
+            }
+        except Exception as gem_exc:
+            # Log failure transparently before falling back ONLY when all Gemini keys/models failed
+            print(f"[RVE WARNING] Gemini TTS falhou em todos os modelos para {cid}: {gem_exc}", flush=True)
+
+    # 4) Offline / Unconfigured Key Edge-TTS Phonetic Fallback
     dur = _synthesize_edge_regional_fallback(
         tts_text=tts_text,
         character_id=cid,

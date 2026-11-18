@@ -149,6 +149,27 @@ def _extract_json_block(raw_text: str) -> Optional[Dict[str, Any]]:
         return None
 
 
+def _sanitize_northeast_text(text: str) -> str:
+    """Delegate regional slang/cadence sanitization cleanly to regional_voice_engine when present."""
+    try:
+        rve_dir = str(Path(__file__).resolve().parent.parent / "tools/hyperframes")
+        if rve_dir not in sys.path:
+            sys.path.insert(0, rve_dir)
+        import regional_voice_engine as _rve  # noqa: WPS433
+        return _rve.sanitize_northeast_slang(text)
+    except Exception:
+        t = re.sub(r"\btrem\b", "negócio", text or "", flags=re.IGNORECASE)
+        t = re.sub(r"\b(?:uai|tch[eê])\b", "oxe", t, flags=re.IGNORECASE)
+        t = re.sub(r"\bs[oô]\b", "visse", t, flags=re.IGNORECASE)
+        t = re.sub(r"\b(?:mano|meo)\b", "rapaz", t, flags=re.IGNORECASE)
+        t = re.sub(r"\b(?:daora|da hora)\b", "arretado", t, flags=re.IGNORECASE)
+        t = re.sub(r"\bguri\b", "minino", t, flags=re.IGNORECASE)
+        t = re.sub(r"\bbah\b", "vixe", t, flags=re.IGNORECASE)
+        t = re.sub(r"([áéíóúâêîôûà])\1{1,}", r"\1", t, flags=re.IGNORECASE)
+        t = re.sub(r"([aeiou])\1{2,}", r"\1", t, flags=re.IGNORECASE)
+        return re.sub(r"\s+", " ", t).strip()
+
+
 def build_fallback_novela_script(
     theme: str = "Enzo da capital confundindo gírias nordestinas na bodega de Seu Bastião",
     expressions: Optional[List[str]] = None,
@@ -161,9 +182,9 @@ def build_fallback_novela_script(
         "Botar Boneco",
         "Deixe de cunversa",
     ]
-    main_expr = exprs[0]
-    second_expr = exprs[1] if len(exprs) > 1 else "Botar Boneco"
-    clean_theme = (theme or "Confusão na Bodega do Sertão").strip()
+    main_expr = _sanitize_northeast_text(exprs[0])
+    second_expr = _sanitize_northeast_text(exprs[1] if len(exprs) > 1 else "Botar Boneco")
+    clean_theme = _sanitize_northeast_text((theme or "Confusão na Bodega do Sertão").strip())
     return {
         "title": f"{clean_theme[:46]} — Ep. 01",
         "episode_badge": "🌵 NOVELINHA DO SERTÃO • EP. 01",
@@ -176,8 +197,8 @@ def build_fallback_novela_script(
         "dialogue": [
             {
                 "speaker": "Dona Socorro",
-                "tts_text": f"Oxêêênte, Enzo! {clean_theme[:65]}?! Larga esse celular, minino!",
-                "subtitle_text": f"Oxente, Enzo! {clean_theme[:65]}?! Larga esse celular!",
+                "tts_text": f"Oxente, Enzo! {clean_theme[:60]}?! Larga esse celular, minino!",
+                "subtitle_text": f"Oxente, Enzo! {clean_theme[:60]}?! Larga esse celular!",
                 "emotion": "shocked",
                 "camera_action": "shake",
                 "shot_framing": "over_shoulder",
@@ -196,8 +217,8 @@ def build_fallback_novela_script(
             },
             {
                 "speaker": "Seu Bastião",
-                "tts_text": "Hahaha! Deixe de cunversa, cabra leso! Aqui no sertão isso é café pequeno!",
-                "subtitle_text": "Hahaha! Deixe de cunversa! Aqui no sertão isso é café pequeno!",
+                "tts_text": "Hahaha! Deixe de cunversa, cabra leso! Aqui na bodega isso é café pequeno!",
+                "subtitle_text": "Hahaha! Deixe de cunversa! Aqui isso é café pequeno!",
                 "emotion": "laughing",
                 "camera_action": "whip_pan",
                 "shot_framing": "over_shoulder",
@@ -914,16 +935,19 @@ class GuidedPipelineOrchestrator:
             expr_list = ["Oxente", "Morreu Maria Preá", "Botar Boneco", "Deixe de cunversa"]
 
         sys_prompt = (
-            "Você é roteirista e diretor cinematográfico de micro-séries de humor nordestino viral para Reels/TikTok (12 a 28 segundos, takes rápidos de 4s a 7s em corte seco plano/contraplano). "
+            "Você é roteirista e diretor cinematográfico de micro-séries de humor nordestino viral para Reels/TikTok (11 a 20 segundos no total, falas muito rápidas de 3s a 5s em corte seco plano/contraplano). "
             "Personagens fixos disponíveis: 'Dona Socorro' (matriarca dramática), 'Seu Bastião' (comerciante sábio debochado), "
             "'Enzo' (sobrinho da capital confuso), 'Narrador'. "
+            "REGRA CULTURAL INEGOCIÁVEL: é PROIBIDO usar gírias mineiras, paulistas ou gaúchas como 'trem', 'uai', 'sô', 'mano', 'meo', 'daora', 'guri', 'bah', 'tchê'. "
+            "Use apenas vocabulário legítimo do Nordeste/Piauí/Ceará ('oxente', 'oxe', 'vixe', 'esse negócio', 'essa marmota', 'essa presepada', 'cabra', 'mangar', 'botar boneco', 'morreu Maria Preá', 'deixe de cunversa', 'arretado'). "
+            "NUNCA alongue vogais repetidas ('Oxêêênte' é proibido; escreva 'Oxente!'). Frases curtas, afiadas e rápidas! "
             "Responda EXCLUSIVAMENTE um JSON válido com as chaves:\n"
             "- title (string curta)\n"
             "- episode_badge (string)\n"
             "- setting (descrição curta em inglês do cenário externo iluminado com figurantes discretos ao fundo)\n"
             "- dictionary (array de 2 objetos {term, meaning} explicando as gírias usadas em português claro e engraçado)\n"
             "- dialogue (array com 3 a 5 takes curtos e velozes alternando personagens em plano e contraplano; cada item com: "
-            "speaker, tts_text [fala curta de 4s a 7s com grafia fonética expressiva nordestina para TTS/Veo], "
+            "speaker, tts_text [fala curta e ágil de 3s a 5s sem vogais alongadas para Gemini TTS/Veo], "
             "subtitle_text [grafia limpa e curta], "
             "emotion [uma de: shocked, confused, laughing, proud, dramatic, warm], "
             "camera_action [uma de: shake, whip_pan, zoom_in, dramatic_push], "
@@ -950,8 +974,8 @@ class GuidedPipelineOrchestrator:
         for d_idx, row in enumerate(parsed["dialogue"][:8]):
             if not isinstance(row, dict):
                 continue
-            sub = str(row.get("subtitle_text") or row.get("text") or "").strip()
-            tts = str(row.get("tts_text") or sub).strip()
+            sub = _sanitize_northeast_text(str(row.get("subtitle_text") or row.get("text") or "").strip())
+            tts = _sanitize_northeast_text(str(row.get("tts_text") or sub).strip())
             if not sub:
                 continue
             framing = str(row.get("shot_framing") or default_framings[d_idx % len(default_framings)]).strip().lower()
@@ -965,7 +989,7 @@ class GuidedPipelineOrchestrator:
                 "camera_action": str(row.get("camera_action") or "zoom_in").strip().lower(),
                 "shot_framing": framing,
                 "physical_action_en": str(row.get("physical_action_en") or "").strip(),
-                "expression_highlight": str(row.get("expression_highlight") or "").strip(),
+                "expression_highlight": _sanitize_northeast_text(str(row.get("expression_highlight") or "").strip()),
             })
         if len(cleaned_dialogue) < 2:
             fallback["source"] = "fallback_deterministic"

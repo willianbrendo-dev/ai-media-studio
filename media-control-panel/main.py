@@ -3115,7 +3115,7 @@ async def _execute_novela_job(task_id: str, out_path: Path, cfg_payload: Dict[st
         job["message"] = (
             f"Pack Veo 3.1 pronto ({res.get('total_takes', 0)} takes, {res.get('total_credits_lite', 0)} créd Lite)!"
             if rmode == "flow_pack"
-            else f"Novelinha Clean Cinema '{out_path.name}' ({cfg_payload.get('visual_style')}) renderizada!"
+            else f"Novelinha v2.7 Lip-Sync 30fps '{out_path.name}' ({cfg_payload.get('visual_style')}) renderizada!"
         )
     except Exception as exc:
         job["status"] = "error"

@@ -905,8 +905,12 @@
                   <!-- MOTOR DE SOTAQUE & VOZES NORDESTINAS (v2.6) -->
                   <div class="rounded-xl bg-[#0d1210] border border-emerald-500/25 p-2.5 space-y-2">
                     <div class="flex flex-wrap items-center justify-between gap-2">
-                      <span class="text-[11px] font-extrabold uppercase tracking-wider text-emerald-300">🎙️ Motor de Sotaque &amp; Vozes Nordestinas</span>
+                      <span class="text-[11px] font-extrabold uppercase tracking-wider text-emerald-300">🎙️ Motor de Sotaque &amp; Lip-Sync (v2.7)</span>
                       <span id="nov-profiles-summary" class="text-[10px] font-mono text-slate-400">4 vozes regionais prontas</span>
+                    </div>
+                    <div id="nov-engine-status-badges" class="flex flex-wrap gap-1.5 text-[10px]">
+                      <span id="nov-badge-voice" class="px-2 py-0.5 rounded-full font-semibold bg-emerald-500/15 text-emerald-200 border border-emerald-400/35">🎙️ 100% Gemini Native TTS · Sotaque Sertão Ágil</span>
+                      <span id="nov-badge-lipsync" class="px-2 py-0.5 rounded-full font-semibold bg-cyan-500/15 text-cyan-200 border border-cyan-400/35">👄 Lip-Sync &amp; Movimento Ativo</span>
                     </div>
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       <select id="nov-accent-engine" onchange="syncNovAccentEngine(this.value)"
@@ -954,8 +958,8 @@
                     </button>
                     <button id="gp-nov-mode-vps_preview" type="button" onclick="setNovelaRenderMode('vps_preview')"
                       class="touch-btn min-h-[52px] px-3 py-2 rounded-xl border text-left transition cursor-pointer bg-white/[0.03] border-white/10 text-slate-300 hover:bg-white/[0.07] min-w-0">
-                      <div class="text-xs font-extrabold leading-tight break-words">⚡ Modo 3: Preview Rápido VPS</div>
-                      <div class="text-[10px] opacity-80 leading-tight mt-0.5">Storyboard Clean Cinema CPU</div>
+                      <div class="text-xs font-extrabold leading-tight break-words">⚡ Modo 3: Render VPS c/ Lip-Sync</div>
+                      <div class="text-[10px] opacity-80 leading-tight mt-0.5">👄 Lip-Sync MediaPipe + Piscar 30fps</div>
                     </button>
                   </div>
 
@@ -1955,7 +1959,11 @@
 
               <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 items-center rounded-2xl bg-[#070a08] border border-emerald-500/25 p-3">
                 <div class="sm:col-span-2 space-y-1">
-                  <label class="text-[11px] font-semibold text-emerald-300 block">🎙️ Motor de Sotaque Nordestino</label>
+                  <div class="flex flex-wrap items-center gap-1.5 mb-1">
+                    <label class="text-[11px] font-semibold text-emerald-300">🎙️ Motor de Sotaque Nordestino</label>
+                    <span id="qnv-badge-voice" class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/15 text-emerald-200 border border-emerald-400/35">🎙️ 100% Gemini Native TTS · Sotaque Sertão Ágil</span>
+                    <span id="qnv-badge-lipsync" class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-cyan-500/15 text-cyan-200 border border-cyan-400/35">👄 Lip-Sync &amp; Movimento Ativo</span>
+                  </div>
                   <select id="qnv-accent-engine" onchange="syncNovAccentEngine(this.value)"
                     class="w-full min-h-[44px] bg-[#0d1210] border border-white/10 rounded-xl px-2.5 text-xs text-white outline-none">
                     <option value="nordestino_raiz" selected>🌵 Nordestino Raiz (Gemini Native TTS · SoXR 48kHz)</option>
@@ -5211,9 +5219,15 @@
         if (cntEl) cntEl.textContent = `${data.dialogue.length} falas (${data.source || 'ai'})`;
         if (linesEl) {
           linesEl.innerHTML = data.dialogue.map(d => `
-            <div class="p-2 rounded-xl bg-white/[0.03] border border-white/10">
-              <span class="font-extrabold text-amber-300">${escapeHtml(d.speaker)}:</span>
-              <span class="text-slate-200">${escapeHtml(d.subtitle_text)}</span>
+            <div class="p-2 rounded-xl bg-white/[0.03] border border-white/10 space-y-1">
+              <div>
+                <span class="font-extrabold text-amber-300">${escapeHtml(d.speaker)}:</span>
+                <span class="text-slate-200">${escapeHtml(d.subtitle_text)}</span>
+              </div>
+              <div class="flex flex-wrap gap-1.5 text-[10px]">
+                <span class="px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-200 border border-emerald-400/30">🎙️ 100% Gemini Native TTS · Sotaque Sertão Ágil</span>
+                <span class="px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-200 border border-cyan-400/30">👄 Lip-Sync &amp; Movimento Ativo</span>
+              </div>
             </div>
           `).join('');
         }
@@ -5270,6 +5284,8 @@
               class="px-2 py-1.5 rounded-lg text-[11px] font-semibold bg-white/[0.04] hover:bg-white/[0.09] text-slate-300 border border-white/10 cursor-pointer" title="Subir arquivo de áudio-guia">
               📁 Áudio
             </button>
+            <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/15 text-emerald-200 border border-emerald-400/30">${row.guide_audio_path ? '🎤 Seed-VC Guia Ativo' : '🎙️ 100% Gemini Native TTS · Sotaque Sertão Ágil'}</span>
+            <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-cyan-500/15 text-cyan-200 border border-cyan-400/30">👄 Lip-Sync &amp; Movimento Ativo</span>
             ${row.guide_audio_path ? `<span class="px-2 py-1 rounded-md text-[10px] font-mono bg-emerald-500/15 text-emerald-300 border border-emerald-400/30">✅ Guia (${escapeHtml(String(row.guide_duration || 'OK'))}s)</span>` : ''}
           </div>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -5413,6 +5429,8 @@
                 <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold text-slate-950" style="background:${escapeHtml(tk.badge_bg || '#f59e0b')}">Take #${tk.take_number} · ${escapeHtml(tk.speaker)}</span>
                 <span class="px-2 py-0.5 rounded-full text-[10px] font-mono bg-white/5 text-slate-300">${escapeHtml(tk.shot_framing)} · ~${tk.estimated_duration_sec}s</span>
                 <span class="px-2 py-0.5 rounded-full text-[10px] font-mono bg-amber-500/15 text-amber-300">${tk.credits_veo_lite} Lite / ${tk.credits_veo_fast} Fast créd</span>
+                <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/15 text-emerald-200">🎙️ Sotaque Sertão Ágil</span>
+                <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-cyan-500/15 text-cyan-200">👄 Pose Neutra p/ Lip-Sync</span>
               </div>
               <div class="text-[11px] font-semibold text-white">“${escapeHtml(tk.tts_text)}”</div>
               <textarea readonly rows="3" class="w-full bg-[#070a08] border border-white/10 rounded-lg p-2 text-[10px] font-mono text-slate-300 outline-none">${escapeHtml(tk.veo_prompt)}</textarea>
@@ -5529,6 +5547,16 @@
       const s2 = document.getElementById('qnv-accent-engine');
       if (s1 && s1.value !== v) s1.value = v;
       if (s2 && s2.value !== v) s2.value = v;
+      const labelMap = {
+        nordestino_raiz: '🎙️ 100% Gemini Native TTS · Sotaque Sertão Ágil',
+        f5_tts_clone: '🧬 F5-TTS-PT-BR Clone (Colab GPU Zero-Shot)',
+        seed_vc_guide: '🎤 Seed-VC Guia de Voz (Seu Mic + Timbre)',
+      };
+      const lbl = labelMap[v] || labelMap.nordestino_raiz;
+      const b1 = document.getElementById('nov-badge-voice');
+      const b2 = document.getElementById('qnv-badge-voice');
+      if (b1) b1.textContent = lbl;
+      if (b2) b2.textContent = lbl;
     }
 
     async function loadRegionalVoiceProfiles() {
@@ -5819,7 +5847,13 @@
           if (st.ready && st.download_url) {
             if (ttl) ttl.textContent = `Concluído! (${st.duration || ''}s)`;
             if (dlEl) {
+              const vEng = Array.isArray(st.voice_engines_used) && st.voice_engines_used.length ? st.voice_engines_used.join(', ') : 'gemini_tts';
+              const aEng = Array.isArray(st.animation_engines_used) && st.animation_engines_used.length ? st.animation_engines_used.join(', ') : 'local_viseme_30fps';
               dlEl.innerHTML = `
+                <div class="flex flex-wrap gap-1.5 text-[10px] mb-1">
+                  <span class="px-2 py-0.5 rounded-full font-semibold bg-emerald-500/15 text-emerald-200 border border-emerald-400/35">🎙️ ${escapeHtml(vEng)}</span>
+                  <span class="px-2 py-0.5 rounded-full font-semibold bg-cyan-500/15 text-cyan-200 border border-cyan-400/35">👄 ${escapeHtml(aEng)}</span>
+                </div>
                 <video src="${escapeHtml(st.preview_url)}" controls preload="metadata" class="w-full rounded-xl border border-white/10 bg-black max-h-64"></video>
                 <a href="${escapeHtml(st.download_url)}" download class="touch-btn min-h-[44px] px-4 rounded-xl text-xs font-bold bg-amber-500/20 text-amber-200 border border-amber-400/40 flex items-center justify-center gap-2">Baixar Episódio MP4 (${escapeHtml(st.size_human || '')})</a>
               `;
