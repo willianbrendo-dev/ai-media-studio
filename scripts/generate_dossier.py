@@ -344,13 +344,16 @@ def build_dossier() -> str:
     hw = vps_info.get("hardware") or {}
 
     key_modules = [
-        ("media-control-panel/main.py", "Servidor FastAPI central (porta 9000 VPS), Vault, orquestração Docker RAM-safe, AI Cascade Gateway & Rotas de Estúdio"),
-        ("media-control-panel/guided_pipelines.py", "Orquestrador assíncrono das 6 Trilhas Guiadas (RAM Relay, Checkpoints JSON em disco, Safe-Zones, Roteirista IA)"),
+        ("media-control-panel/main.py", "Servidor FastAPI central (porta 9000 VPS), Vault, orquestração Docker RAM-safe, AI Cascade Gateway & Rotas de Estúdio (v4/v3.1)"),
+        ("media-control-panel/guided_pipelines.py", "Orquestrador assíncrono das 6 Trilhas Guiadas (RAM Relay, Checkpoints JSON em disco, Safe-Zones, Roteirista IA Cinema v4/v3.1)"),
         ("tools/hyperframes/quota_telemetry.py", "Rastreador persistente RPM/RPD/cooldowns/cache hits por processo (fcntl.flock + quota_telemetry.json)"),
-        ("tools/hyperframes/vps_novela_runner.py", "Motor Clean Cinema v3.1 Multi-Personagem: Frontal Eye-Contact Lock (+14% crop), Single-Subject, Mix Contínuo -33dB, Legendas Bipartidas (.ass) & Flow Veo 3.1"),
-        ("tools/hyperframes/regional_voice_engine.py", "Motor de Voz Nordestina v3.1: Cache SHA-256 (<5ms), Gemini Live Audio (BidiGenerateContent), Pool Round-Robin 5 TTS REST, F5-TTS & Seed-VC"),
-        ("tools/hyperframes/novela_lipsync_animator.py", "Cascata GPU Generativa Real v3.1 (Tier 1 Colab MoDA-L4 LiveVASAPipeline emo=4 Happiness ~11s -> Colab LivePortrait+LatentSync 1.5 -> ZeroGPU A10G; Distorção 2D banida)"),
-        ("tools/hyperframes/verify_lipsync_motion.py", "Auditor Computer Vision frame a frame (estabilização por âncora nasal, mouth ROI speech vs silence, piscar sem oclusão e Reaction Shot)"),
+        ("tools/hyperframes/cinema_v4_director.py", "Cinema Engine v4.0: Bíblia Visual, Shot Compiler (OTS/Contraplano/Reação/Conjunto, Eixo 180°), Stitcher J/L-Cut (LRA >= 5 LU, -16 LUFS) & Flow Pack v4"),
+        ("tools/hyperframes/vps_novela_runner.py", "Motor Novela Studio Dual-Engine (cinema_engine='v4' c/ Colab/Flow full-scene ou fallback legado 'v3.1' MoDA Frontal)"),
+        ("tools/hyperframes/regional_voice_engine.py", "Motor de Voz Nordestina v4.0: Audio Quality Gate (RMS/ZCR stdlib + Whisper INT8 anti-aliasing), Cache SHA-256, Gemini Live & Seed-VC"),
+        ("tools/colab-gpu-worker/colab_v4_cinema_server.py", "Worker FastAPI Colab Pro L4 v4.0: Dual-venv Seed-VC + WanGP shared.api persistente, Fila Assíncrona /jobs/animate_scene & /health real"),
+        ("tools/hyperframes/novela_lipsync_animator.py", "Cascata GPU Legada v3.1 (Tier 1 Colab MoDA-L4 LiveVASAPipeline -> LivePortrait+LatentSync 1.5 -> ZeroGPU A10G)"),
+        ("tools/hyperframes/verify_lipsync_motion.py", "Auditor Computer Vision frame a frame (estabilização por âncora nasal, mouth ROI speech vs silence, piscar e Reaction Shot)"),
+        ("tests/cinema_qa.py", "Auditor Cinema Objective QA (13 critérios calibrados contra docs/refs/espectativa.mp4: Gaze yaw, OTS, LRA/LUFS/TP, silêncios, crop reuse & ASR)"),
         ("tools/hyperframes/vps_ad_runner.py", "Motor HyperFrames POV Cinema Multi-Imagem Shopee 20:9 Anti-Crop & L'Oréal Gold Luxury"),
         ("tools/hyperframes/viral_reference_analyzer.py", "Extrator de DNA Viral (cut_cadence, WPM, energia de áudio e recomendações roteirizadas)"),
         ("tools/video-use/vps_zero_cost_runner.py", "Pipeline Zero-RAM Video Use Jump-Cut + faster-whisper INT8 + Correção de Cor FFmpeg + Legendas ASS"),
@@ -363,12 +366,12 @@ def build_dossier() -> str:
     add = out.append
 
     add("=" * 100)
-    add("AI MEDIA STUDIO — DOSSIÊ TÉCNICO, OPERACIONAL E ARQUITETURAL COMPLETO (v3.1)")
+    add("AI MEDIA STUDIO — DOSSIÊ TÉCNICO, OPERACIONAL E ARQUITETURAL COMPLETO (v4.0-cinema)")
     add(f"Gerado por introspecção em : {now_str}")
-    add(f"Commit Git Atual (main)   : {git_head}")
+    add(f"Commit Git Atual          : {git_head} (branch feat/v4-cinema)")
     add(f"Repositório Local         : {REPO_ROOT}")
     add("VPS Produção              : root@187.77.202.176:/opt/ai-media-studio/ (https://187.77.202.176.sslip.io)")
-    add("Worker GPU Remoto (v3.1)  : Google Colab Pro NVIDIA L4 (24GB VRAM fp16) via túnel Cloudflare (COLAB_GPU_URL)")
+    add("Worker GPU Remoto (v4.0)  : Google Colab Pro NVIDIA L4 (24GB VRAM + RAM alta, Zero-Drive) via túnel Cloudflare (COLAB_GPU_URL)")
     add("Política de Segurança     : Zero valores de segredos/tokens exibidos; apenas nomes de chaves e status SET=True/False.")
     add("=" * 100)
     add("")
@@ -387,10 +390,11 @@ def build_dossier() -> str:
     add(f"      - Serviço Core      : systemd media-panel.service -> status={hw.get('panel_service', 'active')} (uvicorn 127.0.0.1:9000, SEM Docker, ~90 MB RAM)")
     add(f"      - Contêineres Ociosos: docker ps -q = {hw.get('docker_active', '0')} (Política RAM Guard: 0/7 ativos em repouso)")
     add(f"      - Cache Vocal SHA256: {hw.get('cache_wavs', 0)} clipes WAV regionais cacheados em /opt/ai-media-studio/voices/cache/")
-    add("  [B] Worker GPU Remoto Colab Pro (`COLAB_GPU_URL` dinâmico via trycloudflare.com):")
-    add("      - Versão ativa v3.1 : 3.1.0-moda-l4 em NVIDIA L4 (24GB VRAM, fp16)")
-    add("      - Servidor pré-aquecido (/content/moda_l4_server.py): mantém `LiveVASAPipeline` (`TalkingHeadDiT` + 12 camadas HuBERT) em VRAM (~11s/take)")
-    add("      - Engines extras    : Legacy Stage-1 LivePortrait fp16 -> Stage-2 LatentSync 1.5 (`stage2.yaml` + DeepCache), F5-TTS-PT-BR (`/tts-clone`), Seed-VC (`/voice-convert`)")
+    add("  [B] Worker GPU Remoto Colab Pro v4.0 (`COLAB_GPU_URL` dinâmico via trycloudflare.com):")
+    add("      - Versão alvo v4.0    : `4.0.0-clean-l4` em NVIDIA L4 (24GB VRAM + RAM Alta) — Clean-Slate local NVMe `/content/ai_studio_v4` (ZERO Google Drive)")
+    add("      - Ambientes Isolados   : Dual Python 3.10 via `uv` (`envs/seedvc` c/ numpy 1.26.4 + transformers 4.46.3; `envs/wangp` c/ FastAPI + WanGP v20.00 numpy 2.1.2 + transformers 4.54.0)")
+    add("      - Contrato de Rotas    : `GET /health` (flags reais + VRAM livre), `POST /voice-convert` (Seed-VC `--f0-condition False`, HTTP 500 se falhar), `POST /jobs/animate_scene` + `GET /jobs/{job_id}` (WanGP `shared/api.py` persistente INT8 Profile 4), `POST /admin/exec` (token-gated)")
+    add("      - Legado fallback v3.1 : Mantido atrás de feature flag (`cinema_engine='v3.1'`, `novela_lipsync_animator.py`: MoDA-L4 / LivePortrait+LatentSync)")
     add("  [C] Estação Local Desktop (`wbrendo-pc`):")
     add("      - Desenvolvimento, suíte Playwright E2E (Chrome 1440x900 + 390x844), sync bidirecional, backup DR atômico (`chmod 600` + `unzip -tq`)")
     add("      - OpenJarvis Operador Master (`~/open-jarvis/`): servidor `:8090` apontando `OPENAI_BASE_URL=https://187.77.202.176.sslip.io/v1`, daemon de 2 palmas (`clap_listener.py`), webcam (`webcam_vision.py`), voz local (`jarvis-falar`) e MCP `studio_controller_mcp.py`.")
@@ -405,7 +409,7 @@ def build_dossier() -> str:
 
     add("1.3 As 9 Capacidades Oficiais do Estúdio (2 Motores Nativos Zero-RAM + 7 Stacks Docker Sob Demanda):")
     capacities = [
-        ("1. HyperFrames + Novela v3.1", "Nativo Zero-Idle-RAM", "9000 (CLI)", "Anúncios HTML/GSAP Shopee 20:9, Clone Viral & Novelinhas Multi-Personagem (Flux + Gemini Live + Colab MoDA-L4)"),
+        ("1. HyperFrames + Novela v4.0 / v3.1", "Nativo Zero-Idle-RAM", "9000 (CLI)", "Cinema v4.0 OTS/Flow/WanGP + Fallback v3.1, Anúncios HTML/GSAP Shopee 20:9 & Clone Viral"),
         ("2. Video Use Pro", "Nativo Zero-Idle-RAM", "9000 (CLI)", "Jump-Cut automático (`faster-whisper` INT8 CPU), remoção de silêncios/vícios, LUT FFmpeg, ASS e 48kHz SoXR"),
         ("3. SupoClip", "Docker (Postgres+Redis+ARQ)", "3107 / 8000 / 9100", "Cortes automáticos de vídeos longos em partes sequenciais (`novela`), `highlights`, `viral`, `recap`, `trailer`"),
         ("4. MoneyPrinterTurbo", "Docker (Streamlit+FastAPI)", "8501 / 8080", "Vídeos faceless narrados com roteiro IA, B-roll Pexels/Pixabay/Local e legendas dinâmicas (`shopee_safe`)"),
@@ -428,7 +432,51 @@ def build_dossier() -> str:
     add("-" * 100)
     add("")
 
-    add("2.1 Motor 1 · Fábrica de Novelinhas & Micro-Séries Multi-Personagem (Arquitetura Clean Cinema v3.1):")
+    add("2.1 Motor 1 · Fábrica de Novelinhas — Dual Engine (Cinema v4.0 Padrão UI + Legado v3.1 por Feature Flag):")
+    v4_notes = [
+        "=== ARQUITETURA CINEMA ENGINE v4.0 (`cinema_engine='v4'` — Fase 6 Concluída / Fase 5 & 7 Aguardando Colab L4 ou Flow Veo 3.1) ===",
+        "  1. Auditoria Quantitativa (`tests/cinema_qa.py` calibrado contra referência `espectativa.mp4` 720x1280 @ 24fps):",
+        "     * `espectativa.mp4`: 13/13 critérios aprovados (shots variados, 96.6% gaze fora da lente, OTS/two-shot/figurantes, LRA >= 5.0 LU, -16 LUFS, 0 janelas <-45 dBFS).",
+        "     * `hoje.mp4` (v3.1 talking-head frontal): 3/13 critérios aprovados (preso em close frontal 100%, crop estático +14%, LRA esmagado em 2.3 LU, corte mudo).",
+        "     * `novela_stitched_segredo-no-altar-r2` (Cinema v4 `stitch-takes` sem difusão de vídeo): 9/13 critérios aprovados (`shots=[2.58, 4.04, 1.12, 3.42]`, `non_frontal=100.0%`, `multi_person_or_ots=3`, `lufs=-15.8`, `lra=9.9 LU`, `tp=-2.0 dBTP`, `zero_static_crop_reuse=true`, `no_corrupted_mute_dialogue_shot=true`).",
+        "     * `v4_e2e_nordeste_render_r2.mp4` (Cinema v4 storyboard animado sem difusão): 8/13 critérios (`whisper_full_transcript` 100% fiel em cada corte, `non_frontal=100.0%`, `ots_cnt=4`, `lufs=-15.9`, `lra=10.0 LU`).",
+        "     * Os 4 critérios pendentes (`motion_mean>=3.0`, `motion_median>=2.5`, `identity_similarity>=0.80`, `landmark_lipsync_modulation_ok`) dependem de geração de vídeo por difusão (Google Flow Veo 3.1 Lite OU Colab L4 v4.0).",
+        "  2. Bíblia Visual, Shot Compiler & Prompts v4 (`tools/hyperframes/cinema_v4_director.py`):",
+        "     * Verificação empírica NVIDIA NIM: `black-forest-labs/flux.1-kontext-dev` rejeita `9:16`, `guidance_scale`, `seed` e base64 (`HTTP 422`), e `nvcf/assets` retorna `410 Gone`. `flux.1-dev` aceita 768x1344 com sanitização (`_sanitize_nim_prompt`).",
+        "     * Estrutura de prompt v4: composição (`over_shoulder`, `reverse_over_shoulder`, `reaction_closeup`, `wide_ensemble`, `two_shot`) nos primeiros tokens, direção positiva de olhar fora da lente (sem tokens negativos `camera lens`), detecção de contexto `is_wedding` e gênero PT-BR (`CONVIDADA 1` etc.).",
+        "     * `stitch_cinema_v4_episode`: alinha cortes pela duração real medida via `ffprobe` nos WAVs sintetizados, aplica L-cut (<=0.18s) c/ pausa automática pós-bleed para não atropelar falas curtas (`O quê?!`), cama -38 dBFS calibrada em NumPy + stingers estéreo e ganho linear único (`alimiter=limit=0.83:level=false`).",
+        "  3. Audio Quality Gate v4 (`tools/hyperframes/regional_voice_engine.py`):",
+        "     * `validate_generated_speech_wav`: valida `RMS >= -32 dBFS` e `ZCR >= 0.025` inclusive em Python stdlib puro (`array`+`math`) no `.venv` enxuto do painel web (`/api/quick/novela/preview-voice`), mantendo `faster-whisper` INT8 + polyphase/boxcar anti-aliasing no pipeline completo.",
+        "     * Purga cache corrompido automaticamente e rejeita retornos falsos `fallback`/`copy` do Colab `/voice-convert`.",
+        "  4. Feature Flag & UI (`vps_novela_runner.py`, `guided_pipelines.py`, `main.py`, `static/index.html`):",
+        "     * `_resolve_cinema_engine` resolve `'v4'` vs fallback `'v3.1'` (padrão default para callers legados='v3.1', seletores sincronizados `#nov-cinema-engine` e `#qnv-cinema-engine` na UI com padrão `'v4'`).",
+        "     * E2E Playwright (`tests/e2e_novela_voices_v26.mjs`) 100% aprovado (Desktop 1440x900 + Mobile 390x844); `secret-scan.py` 0 violações; VPS idle `CONTAINERS=0`, `PANEL=active`.",
+        "",
+        "=== STATUS & DESCOBERTAS EMPÍRICAS DO COLAB PRO L4 WORKER v4.0 (CRÍTICO P/ CORREÇÃO DO .IPYNB) ===",
+        "  - Contrato esperado pela VPS (`vps_novela_runner.py` L2423-2457 & `regional_voice_engine.py` & `main.py` `_probe_colab_tunnel`):",
+        "     * `GET /health` -> JSON c/ `ok`, `ready`, `version`, `gpu`, `vram_gb`, `vram_free_gb`, `cuda_ok`, `seed_vc_ready`, `wangp_ready`, `ltx2_ready`, `longcat_ready`, `active_jobs`, `default_video_model` (headers opcionais: `X-Colab-Token`).",
+        "     * `POST /voice-convert` -> JSON `VoiceConvertReq(guide_audio_b64, target_timbre_b64, character_id, diffusion_steps, semi_tone_shift, f0_condition)` -> `{ok, engine, elapsed_s, duration, audio_b64}` (WAV 48kHz stereo PCM; erro real -> HTTP 500, proibido fallback silencioso).",
+        "     * `POST /jobs/animate_scene` + `GET /jobs/{job_id}` -> JSON `AnimateSceneReq(image_b64, audio_b64, prompt, negative_prompt, backend, steps, guidance_scale, duration_sec, width, height, fps, seed)` -> job assíncrono evitando timeout Cloudflare 524 (~100s) -> `{status: 'completed', ok: True, backend, elapsed_s, duration, vram_peak_gb, video_b64}`.",
+        "     * `POST /admin/exec` -> protegido obrigatoriamente por `COLAB_AUTH_TOKEN`.",
+        "  - Requisitos de ambiente descobertos na prática (Colab L4 + RAM Alta, CUDA 12.8+, PyTorch 2.10.0+cu128):",
+        "     1. Preferência explícita do usuário: ZERO montagem Google Drive; limpar tudo e instalar em NVMe local `/content/ai_studio_v4`; zero caixas vermelhas/avisos `stderr`.",
+        "     2. `Plachtaa/seed-vc`: `inference.py` usa `--f0-condition False --auto-f0-adjust True --fp16 True`, gruda `HF_HUB_CACHE='./checkpoints/hf_cache'`, precisa de `numpy==1.26.4` + `transformers==4.46.3` + `descript-audio-codec==1.0.0`. `SEEDVC_ENV_OK 2.10.0+cu128 NVIDIA L4` JÁ PASSOU 100% em venv isolado Python 3.10 via `uv`.",
+        "     3. `deepbeepmeep/WanGP` (`v20.00`, `mmgp 4.6.3`):",
+        "        * `wgp.py:3008` chama `migrate_extension_defaults` que importa **todos os 51 `family_handlers`** no boot -> não se pode podar `WanGP/requirements.txt` (`smplfitter`, `chumpy`, `xatlas`, `taichi` etc. são exigidos no import time).",
+        "        * Em Python 3.10, removendo apenas `--extra-index-url ort-cuda-13-nightly`, pins duplicados de `torch`/`numpy` e compilando `insightface==0.7.3` com `--no-build-isolation` + `numpy==2.1.2 cython setuptools wheel`, todos os **109 pacotes** instalaram sem erro no Colab L4 (32.0s + 9.4s).",
+        "        * `shared/api.py:1461` exige `config_path` terminando exatamente em `wgp_config.json`.",
+        "        * `WanGPSession.submit_task` usa chaves `model_type` (`ltx2_25_22B_distilled`, `longcat_avatar_v1_5`, `infinitetalk`, `i2v_2_2`), `image_start`, `image_prompt_type='S'`, `audio_guide`, `audio_prompt_type='AS'` (LTX-2.5) / `'A'` (LongCat/InfiniteTalk), `overrides=\"attention_mode='sdpa', memory_profile=4, transformer_quantization='int8'\"`.",
+        "     4. **ÚLTIMO ERRO OBSERVADO NO COLAB L4 (Célula 2, self-check `shared.api.init`):**",
+        "        * Triton compilou os dois kernels smoke no L4 sem erro, e durante o import de `models/wan/scail/scail_pose_draw.py:17 -> import matplotlib` lançou:",
+        "          `ValueError: Key backend: 'module://matplotlib_inline.backend_inline' is not a valid value for backend`.",
+        "        * Causa raiz: o kernel Jupyter do Colab exporta `MPLBACKEND=module://matplotlib_inline.backend_inline` no `os.environ` herdado pelo subprocesso do `venv` Python 3.10 isolado (que não possui `matplotlib_inline`). É obrigatório sobrescrever `MPLBACKEND=Agg` (e sanitizar variáveis de ambiente do kernel Colab/Jupyter ao invocar venvs isolados).",
+        "",
+        "=== ARQUITETURA LEGADA PRESERVADA ATRÁS DE FEATURE FLAG (`cinema_engine='v3.1'`) ===",
+    ]
+    for line in v4_notes:
+        add(f"  {line}")
+    add("")
+    add("2.1A Fluxo Legado v3.1 (Mantido como Fallback `cinema_engine='v3.1'`):")
     novela_steps = [
         "Passo 1 · Roteiro & Saneamento Cultural (`guided_pipelines.py -> generate_novela_script` + `compile_dramatic_cuts`):",
         "  - Usa Smart Quota Router (NVIDIA NIM Nemotron em Tier 1, ZERO gasto de RPD Gemini) para estruturar 4 cortes virais (`viral_4_cuts`): Corte 1 (ataque/pergunta) -> Corte 2 (`lead_in_pause=0.12s` + resposta) -> Corte 3 (`close_up` reação) -> Corte 4 (`is_reaction`/`is_silent_reaction` c/ `emotion='happiness'`, preservando `reaction_phrase`).",
@@ -518,9 +566,9 @@ def build_dossier() -> str:
     add("3.1 Estrutura de Diretórios (/opt/ai-media-studio/ & Repositório Git):")
     stacks = [
         ("media-control-panel/", "Painel SaaS PWA + FastAPI (porta 9000 loopback behind Nginx TLS), sem Docker (sempre ativo)"),
-        ("tools/hyperframes/", "Motores Zero-Idle-RAM de Motion Graphics, Novelinhas Multi-Personagem v3.1, Vozes Regionais e Lip-Sync GPU/CV"),
+        ("tools/hyperframes/", "Motores Zero-Idle-RAM de Motion Graphics, Novelinhas Cinema Engine v4.0 + Fallback v3.1, Vozes Regionais + AudioGate v4 e Lip-Sync"),
         ("tools/video-use/", "Utilitário adaptado browser-use/video-use (MIT) com .venv Python 3.12, faster-whisper INT8 e OpenCV/MediaPipe"),
-        ("tools/colab-gpu-worker/", "Notebook 1-clique Google Colab L4/T4 v3.1 (`MoDA LiveVASAPipeline` + patches Py3.13/SPADE + LatentSync 1.5 + F5-TTS + Seed-VC)"),
+        ("tools/colab-gpu-worker/", "Worker & Notebook Colab L4 v4.0 (`colab_v4_cinema_server.py` + `ai_studio_colab_novela_gpu.ipynb` Zero-Drive dual-venv Seed-VC + WanGP)"),
         ("notebooks/", "Cópia sincronizada de `ai_studio_colab_novela_gpu.ipynb` no repositório"),
         ("campaigns/", "Assets curados por campanha (ex: campaigns/elseve-kit2/ com 8 fotos curadas + viral_blueprint.json)"),
         ("voices/regional/", f"Banco de perfis vocais regionais na VPS: {', '.join(vps_info.get('voices_dir') or ['dona_socorro', 'seu_bastiao', 'enzo', 'narrador_sertao', 'profiles.json'])}"),
@@ -608,7 +656,7 @@ def build_dossier() -> str:
         eng_hint = "Painel/Infra"
         p = r["path"]
         if "/quick/novela" in p or "/colab" in p or "/voices/regional" in p:
-            eng_hint = "Novela Studio v3.1 (MoDA-L4) / Regional Voice / Lip-Sync / Colab"
+            eng_hint = "Novela Studio (Cinema v4.0 + Fallback v3.1) / Regional Voice + AudioGate / Colab L4"
         elif "/quick/hyperframes" in p or "/campaigns" in p:
             eng_hint = "HyperFrames POV / Clone Viral Shopee 20:9"
         elif "/quick/videouse" in p:

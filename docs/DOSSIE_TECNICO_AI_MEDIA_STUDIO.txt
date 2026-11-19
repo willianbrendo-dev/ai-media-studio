@@ -1,10 +1,10 @@
 ====================================================================================================
-AI MEDIA STUDIO — DOSSIÊ TÉCNICO, OPERACIONAL E ARQUITETURAL COMPLETO (v3.1)
-Gerado por introspecção em : 2026-11-19 05:17:51 -03
-Commit Git Atual (main)   : 7e066b4 feat(v3.1): MoDA LiveVASAPipeline native L4 worker, direct frontal eye-contact portraits & emo=4 happiness
+AI MEDIA STUDIO — DOSSIÊ TÉCNICO, OPERACIONAL E ARQUITETURAL COMPLETO (v4.0-cinema)
+Gerado por introspecção em : 2026-11-19 12:11:11 -03
+Commit Git Atual          : 8814aa9 fix(colab-v4): install complete WanGP requirements tree so all 51 family_handlers boot cleanly (branch feat/v4-cinema)
 Repositório Local         : /home/wbrendo/.gemini/antigravity/scratch/ai-media-studio
 VPS Produção              : root@187.77.202.176:/opt/ai-media-studio/ (https://187.77.202.176.sslip.io)
-Worker GPU Remoto (v3.1)  : Google Colab Pro NVIDIA L4 (24GB VRAM fp16) via túnel Cloudflare (COLAB_GPU_URL)
+Worker GPU Remoto (v4.0)  : Google Colab Pro NVIDIA L4 (24GB VRAM + RAM alta, Zero-Drive) via túnel Cloudflare (COLAB_GPU_URL)
 Política de Segurança     : Zero valores de segredos/tokens exibidos; apenas nomes de chaves e status SET=True/False.
 ====================================================================================================
 
@@ -14,15 +14,16 @@ SEÇÃO 1 · TOPOLOGIA DE PRODUÇÃO, INFRAESTRUTURA VPS, NGINX TLS & POLÍTICA 
 
 1.1 Nós de Computação e Estado Verificado em Runtime:
   [A] VPS Cloud Produção (Contabo/Ubuntu Linux — Loopback FastAPI + Docker Sob Demanda):
-      - CPUs / RAM / Swap : 2 vCPUs | 7935 MB total (6931 MB available, 1004 MB used) | 4095 MB total (3968 MB free)
+      - CPUs / RAM / Swap : 2 vCPUs | 7935 MB total (6722 MB available, 1212 MB used) | 4095 MB total (3957 MB free)
       - Armazenamento (/) : 96G total, 49G used (51%), 48G free
       - Serviço Core      : systemd media-panel.service -> status=active (uvicorn 127.0.0.1:9000, SEM Docker, ~90 MB RAM)
       - Contêineres Ociosos: docker ps -q = 0 (Política RAM Guard: 0/7 ativos em repouso)
-      - Cache Vocal SHA256: 42 clipes WAV regionais cacheados em /opt/ai-media-studio/voices/cache/
-  [B] Worker GPU Remoto Colab Pro (`COLAB_GPU_URL` dinâmico via trycloudflare.com):
-      - Versão ativa v3.1 : 3.1.0-moda-l4 em NVIDIA L4 (24GB VRAM, fp16)
-      - Servidor pré-aquecido (/content/moda_l4_server.py): mantém `LiveVASAPipeline` (`TalkingHeadDiT` + 12 camadas HuBERT) em VRAM (~11s/take)
-      - Engines extras    : Legacy Stage-1 LivePortrait fp16 -> Stage-2 LatentSync 1.5 (`stage2.yaml` + DeepCache), F5-TTS-PT-BR (`/tts-clone`), Seed-VC (`/voice-convert`)
+      - Cache Vocal SHA256: 58 clipes WAV regionais cacheados em /opt/ai-media-studio/voices/cache/
+  [B] Worker GPU Remoto Colab Pro v4.0 (`COLAB_GPU_URL` dinâmico via trycloudflare.com):
+      - Versão alvo v4.0    : `4.0.0-clean-l4` em NVIDIA L4 (24GB VRAM + RAM Alta) — Clean-Slate local NVMe `/content/ai_studio_v4` (ZERO Google Drive)
+      - Ambientes Isolados   : Dual Python 3.10 via `uv` (`envs/seedvc` c/ numpy 1.26.4 + transformers 4.46.3; `envs/wangp` c/ FastAPI + WanGP v20.00 numpy 2.1.2 + transformers 4.54.0)
+      - Contrato de Rotas    : `GET /health` (flags reais + VRAM livre), `POST /voice-convert` (Seed-VC `--f0-condition False`, HTTP 500 se falhar), `POST /jobs/animate_scene` + `GET /jobs/{job_id}` (WanGP `shared/api.py` persistente INT8 Profile 4), `POST /admin/exec` (token-gated)
+      - Legado fallback v3.1 : Mantido atrás de feature flag (`cinema_engine='v3.1'`, `novela_lipsync_animator.py`: MoDA-L4 / LivePortrait+LatentSync)
   [C] Estação Local Desktop (`wbrendo-pc`):
       - Desenvolvimento, suíte Playwright E2E (Chrome 1440x900 + 390x844), sync bidirecional, backup DR atômico (`chmod 600` + `unzip -tq`)
       - OpenJarvis Operador Master (`~/open-jarvis/`): servidor `:8090` apontando `OPENAI_BASE_URL=https://187.77.202.176.sslip.io/v1`, daemon de 2 palmas (`clap_listener.py`), webcam (`webcam_vision.py`), voz local (`jarvis-falar`) e MCP `studio_controller_mcp.py`.
@@ -34,7 +35,7 @@ SEÇÃO 1 · TOPOLOGIA DE PRODUÇÃO, INFRAESTRUTURA VPS, NGINX TLS & POLÍTICA 
   - Rewriting SPAs       : `/app/openfilm/` injeta shim `<script>` + `sub_filter` para interceptar `fetch`, `XHR`, `WebSocket`, `EventSource` e `localhost:3006` -> `/app/openfilm-film`, mantendo Vite/Node operando sob subpath TLS seguro.
 
 1.3 As 9 Capacidades Oficiais do Estúdio (2 Motores Nativos Zero-RAM + 7 Stacks Docker Sob Demanda):
-  - 1. HyperFrames + Novela v3.1 | Nativo Zero-Idle-RAM       | Portas: 9000 (CLI)         | Anúncios HTML/GSAP Shopee 20:9, Clone Viral & Novelinhas Multi-Personagem (Flux + Gemini Live + Colab MoDA-L4)
+  - 1. HyperFrames + Novela v4.0 / v3.1 | Nativo Zero-Idle-RAM       | Portas: 9000 (CLI)         | Cinema v4.0 OTS/Flow/WanGP + Fallback v3.1, Anúncios HTML/GSAP Shopee 20:9 & Clone Viral
   - 2. Video Use Pro             | Nativo Zero-Idle-RAM       | Portas: 9000 (CLI)         | Jump-Cut automático (`faster-whisper` INT8 CPU), remoção de silêncios/vícios, LUT FFmpeg, ASS e 48kHz SoXR
   - 3. SupoClip                  | Docker (Postgres+Redis+ARQ) | Portas: 3107 / 8000 / 9100 | Cortes automáticos de vídeos longos em partes sequenciais (`novela`), `highlights`, `viral`, `recap`, `trailer`
   - 4. MoneyPrinterTurbo         | Docker (Streamlit+FastAPI) | Portas: 8501 / 8080        | Vídeos faceless narrados com roteiro IA, B-roll Pexels/Pixabay/Local e legendas dinâmicas (`shopee_safe`)
@@ -49,7 +50,47 @@ SEÇÃO 1 · TOPOLOGIA DE PRODUÇÃO, INFRAESTRUTURA VPS, NGINX TLS & POLÍTICA 
 SEÇÃO 2 · FUNCIONAMENTO DETALHADO DOS MOTORES, TRILHAS GUIADAS E CASCATAS DE IA
 ----------------------------------------------------------------------------------------------------
 
-2.1 Motor 1 · Fábrica de Novelinhas & Micro-Séries Multi-Personagem (Arquitetura Clean Cinema v3.1):
+2.1 Motor 1 · Fábrica de Novelinhas — Dual Engine (Cinema v4.0 Padrão UI + Legado v3.1 por Feature Flag):
+  === ARQUITETURA CINEMA ENGINE v4.0 (`cinema_engine='v4'` — Fase 6 Concluída / Fase 5 & 7 Aguardando Colab L4 ou Flow Veo 3.1) ===
+    1. Auditoria Quantitativa (`tests/cinema_qa.py` calibrado contra referência `espectativa.mp4` 720x1280 @ 24fps):
+       * `espectativa.mp4`: 13/13 critérios aprovados (shots variados, 96.6% gaze fora da lente, OTS/two-shot/figurantes, LRA >= 5.0 LU, -16 LUFS, 0 janelas <-45 dBFS).
+       * `hoje.mp4` (v3.1 talking-head frontal): 3/13 critérios aprovados (preso em close frontal 100%, crop estático +14%, LRA esmagado em 2.3 LU, corte mudo).
+       * `novela_stitched_segredo-no-altar-r2` (Cinema v4 `stitch-takes` sem difusão de vídeo): 9/13 critérios aprovados (`shots=[2.58, 4.04, 1.12, 3.42]`, `non_frontal=100.0%`, `multi_person_or_ots=3`, `lufs=-15.8`, `lra=9.9 LU`, `tp=-2.0 dBTP`, `zero_static_crop_reuse=true`, `no_corrupted_mute_dialogue_shot=true`).
+       * `v4_e2e_nordeste_render_r2.mp4` (Cinema v4 storyboard animado sem difusão): 8/13 critérios (`whisper_full_transcript` 100% fiel em cada corte, `non_frontal=100.0%`, `ots_cnt=4`, `lufs=-15.9`, `lra=10.0 LU`).
+       * Os 4 critérios pendentes (`motion_mean>=3.0`, `motion_median>=2.5`, `identity_similarity>=0.80`, `landmark_lipsync_modulation_ok`) dependem de geração de vídeo por difusão (Google Flow Veo 3.1 Lite OU Colab L4 v4.0).
+    2. Bíblia Visual, Shot Compiler & Prompts v4 (`tools/hyperframes/cinema_v4_director.py`):
+       * Verificação empírica NVIDIA NIM: `black-forest-labs/flux.1-kontext-dev` rejeita `9:16`, `guidance_scale`, `seed` e base64 (`HTTP 422`), e `nvcf/assets` retorna `410 Gone`. `flux.1-dev` aceita 768x1344 com sanitização (`_sanitize_nim_prompt`).
+       * Estrutura de prompt v4: composição (`over_shoulder`, `reverse_over_shoulder`, `reaction_closeup`, `wide_ensemble`, `two_shot`) nos primeiros tokens, direção positiva de olhar fora da lente (sem tokens negativos `camera lens`), detecção de contexto `is_wedding` e gênero PT-BR (`CONVIDADA 1` etc.).
+       * `stitch_cinema_v4_episode`: alinha cortes pela duração real medida via `ffprobe` nos WAVs sintetizados, aplica L-cut (<=0.18s) c/ pausa automática pós-bleed para não atropelar falas curtas (`O quê?!`), cama -38 dBFS calibrada em NumPy + stingers estéreo e ganho linear único (`alimiter=limit=0.83:level=false`).
+    3. Audio Quality Gate v4 (`tools/hyperframes/regional_voice_engine.py`):
+       * `validate_generated_speech_wav`: valida `RMS >= -32 dBFS` e `ZCR >= 0.025` inclusive em Python stdlib puro (`array`+`math`) no `.venv` enxuto do painel web (`/api/quick/novela/preview-voice`), mantendo `faster-whisper` INT8 + polyphase/boxcar anti-aliasing no pipeline completo.
+       * Purga cache corrompido automaticamente e rejeita retornos falsos `fallback`/`copy` do Colab `/voice-convert`.
+    4. Feature Flag & UI (`vps_novela_runner.py`, `guided_pipelines.py`, `main.py`, `static/index.html`):
+       * `_resolve_cinema_engine` resolve `'v4'` vs fallback `'v3.1'` (padrão default para callers legados='v3.1', seletores sincronizados `#nov-cinema-engine` e `#qnv-cinema-engine` na UI com padrão `'v4'`).
+       * E2E Playwright (`tests/e2e_novela_voices_v26.mjs`) 100% aprovado (Desktop 1440x900 + Mobile 390x844); `secret-scan.py` 0 violações; VPS idle `CONTAINERS=0`, `PANEL=active`.
+  
+  === STATUS & DESCOBERTAS EMPÍRICAS DO COLAB PRO L4 WORKER v4.0 (CRÍTICO P/ CORREÇÃO DO .IPYNB) ===
+    - Contrato esperado pela VPS (`vps_novela_runner.py` L2423-2457 & `regional_voice_engine.py` & `main.py` `_probe_colab_tunnel`):
+       * `GET /health` -> JSON c/ `ok`, `ready`, `version`, `gpu`, `vram_gb`, `vram_free_gb`, `cuda_ok`, `seed_vc_ready`, `wangp_ready`, `ltx2_ready`, `longcat_ready`, `active_jobs`, `default_video_model` (headers opcionais: `X-Colab-Token`).
+       * `POST /voice-convert` -> JSON `VoiceConvertReq(guide_audio_b64, target_timbre_b64, character_id, diffusion_steps, semi_tone_shift, f0_condition)` -> `{ok, engine, elapsed_s, duration, audio_b64}` (WAV 48kHz stereo PCM; erro real -> HTTP 500, proibido fallback silencioso).
+       * `POST /jobs/animate_scene` + `GET /jobs/{job_id}` -> JSON `AnimateSceneReq(image_b64, audio_b64, prompt, negative_prompt, backend, steps, guidance_scale, duration_sec, width, height, fps, seed)` -> job assíncrono evitando timeout Cloudflare 524 (~100s) -> `{status: 'completed', ok: True, backend, elapsed_s, duration, vram_peak_gb, video_b64}`.
+       * `POST /admin/exec` -> protegido obrigatoriamente por `COLAB_AUTH_TOKEN`.
+    - Requisitos de ambiente descobertos na prática (Colab L4 + RAM Alta, CUDA 12.8+, PyTorch 2.10.0+cu128):
+       1. Preferência explícita do usuário: ZERO montagem Google Drive; limpar tudo e instalar em NVMe local `/content/ai_studio_v4`; zero caixas vermelhas/avisos `stderr`.
+       2. `Plachtaa/seed-vc`: `inference.py` usa `--f0-condition False --auto-f0-adjust True --fp16 True`, gruda `HF_HUB_CACHE='./checkpoints/hf_cache'`, precisa de `numpy==1.26.4` + `transformers==4.46.3` + `descript-audio-codec==1.0.0`. `SEEDVC_ENV_OK 2.10.0+cu128 NVIDIA L4` JÁ PASSOU 100% em venv isolado Python 3.10 via `uv`.
+       3. `deepbeepmeep/WanGP` (`v20.00`, `mmgp 4.6.3`):
+          * `wgp.py:3008` chama `migrate_extension_defaults` que importa **todos os 51 `family_handlers`** no boot -> não se pode podar `WanGP/requirements.txt` (`smplfitter`, `chumpy`, `xatlas`, `taichi` etc. são exigidos no import time).
+          * Em Python 3.10, removendo apenas `--extra-index-url ort-cuda-13-nightly`, pins duplicados de `torch`/`numpy` e compilando `insightface==0.7.3` com `--no-build-isolation` + `numpy==2.1.2 cython setuptools wheel`, todos os **109 pacotes** instalaram sem erro no Colab L4 (32.0s + 9.4s).
+          * `shared/api.py:1461` exige `config_path` terminando exatamente em `wgp_config.json`.
+          * `WanGPSession.submit_task` usa chaves `model_type` (`ltx2_25_22B_distilled`, `longcat_avatar_v1_5`, `infinitetalk`, `i2v_2_2`), `image_start`, `image_prompt_type='S'`, `audio_guide`, `audio_prompt_type='AS'` (LTX-2.5) / `'A'` (LongCat/InfiniteTalk), `overrides="attention_mode='sdpa', memory_profile=4, transformer_quantization='int8'"`.
+       4. **ÚLTIMO ERRO OBSERVADO NO COLAB L4 (Célula 2, self-check `shared.api.init`):**
+          * Triton compilou os dois kernels smoke no L4 sem erro, e durante o import de `models/wan/scail/scail_pose_draw.py:17 -> import matplotlib` lançou:
+            `ValueError: Key backend: 'module://matplotlib_inline.backend_inline' is not a valid value for backend`.
+          * Causa raiz: o kernel Jupyter do Colab exporta `MPLBACKEND=module://matplotlib_inline.backend_inline` no `os.environ` herdado pelo subprocesso do `venv` Python 3.10 isolado (que não possui `matplotlib_inline`). É obrigatório sobrescrever `MPLBACKEND=Agg` (e sanitizar variáveis de ambiente do kernel Colab/Jupyter ao invocar venvs isolados).
+  
+  === ARQUITETURA LEGADA PRESERVADA ATRÁS DE FEATURE FLAG (`cinema_engine='v3.1'`) ===
+
+2.1A Fluxo Legado v3.1 (Mantido como Fallback `cinema_engine='v3.1'`):
   Passo 1 · Roteiro & Saneamento Cultural (`guided_pipelines.py -> generate_novela_script` + `compile_dramatic_cuts`):
     - Usa Smart Quota Router (NVIDIA NIM Nemotron em Tier 1, ZERO gasto de RPD Gemini) para estruturar 4 cortes virais (`viral_4_cuts`): Corte 1 (ataque/pergunta) -> Corte 2 (`lead_in_pause=0.12s` + resposta) -> Corte 3 (`close_up` reação) -> Corte 4 (`is_reaction`/`is_silent_reaction` c/ `emotion='happiness'`, preservando `reaction_phrase`).
     - `sanitize_northeast_slang` limpa automaticamente termos fora da região (`trem`, `uai`, `sô`, `mano`, `meo`, `daora`, `guri`, `bah`, `tchê`) e vogais duplicadas (`aa/oo/ee`) antes do TTS e das legendas.
@@ -73,7 +114,10 @@ SEÇÃO 2 · FUNCIONAMENTO DETALHADO DOS MOTORES, TRILHAS GUIADAS E CASCATAS DE 
   - dona_socorro     | Dona Socorro         | Região: Interior do Ceará / Piauí    | Gemini Live: Kore/Aoede | Edge: pt-BR-FranciscaNeural | Ref. Clone F5: True (6.73s)
   - enzo             | Enzo                 | Região: Urbano / Nordestino Jovem    | Gemini Live: Puck/Zephyr | Edge: pt-BR-AntonioNeural | Ref. Clone F5: False (0s)
   - narrador_sertao  | Narrador do Sertão   | Região: Cariri / Interior Nordestino | Gemini Live: Sulafat/Algenib | Edge: pt-BR-ThalitaMultilingualNeural | Ref. Clone F5: False (0s)
+  - noiva            | Noiva                | Região: Urbano / Drama Brasileiro    | Gemini Live: Aoede/Kore | Edge: pt-BR-FranciscaNeural | Ref. Clone F5: False (0s)
+  - noivo            | Noivo                | Região: Urbano / Drama Brasileiro    | Gemini Live: Puck/Charon | Edge: pt-BR-AntonioNeural | Ref. Clone F5: False (0s)
   - seu_bastiao      | Seu Bastião          | Região: Sertão de Pernambuco / Bahia | Gemini Live: Charon/Fenrir | Edge: pt-BR-AntonioNeural | Ref. Clone F5: False (0s)
+  - sogra            | Sogra                | Região: Urbano / Drama Brasileiro    | Gemini Live: Kore/Leda | Edge: pt-BR-ThalitaMultilingualNeural | Ref. Clone F5: False (0s)
 
 2.3 As 6 Trilhas Guiadas (`guided_pipelines.py` -> Modo Guiado c/ Checkpoints & RAM Relay):
   - shopee_viral_clone       | 🛒 Máquina de Vendas Shopee · Fotos + Clone Viral
@@ -147,12 +191,12 @@ SEÇÃO 3 · INVENTÁRIO COMPLETO DE ARQUIVOS, MÓDULOS PYTHON, FRONTEND SPA, NO
 
 3.1 Estrutura de Diretórios (/opt/ai-media-studio/ & Repositório Git):
   - media-control-panel/         Painel SaaS PWA + FastAPI (porta 9000 loopback behind Nginx TLS), sem Docker (sempre ativo)
-  - tools/hyperframes/           Motores Zero-Idle-RAM de Motion Graphics, Novelinhas Multi-Personagem v3.1, Vozes Regionais e Lip-Sync GPU/CV
+  - tools/hyperframes/           Motores Zero-Idle-RAM de Motion Graphics, Novelinhas Cinema Engine v4.0 + Fallback v3.1, Vozes Regionais + AudioGate v4 e Lip-Sync
   - tools/video-use/             Utilitário adaptado browser-use/video-use (MIT) com .venv Python 3.12, faster-whisper INT8 e OpenCV/MediaPipe
-  - tools/colab-gpu-worker/      Notebook 1-clique Google Colab L4/T4 v3.1 (`MoDA LiveVASAPipeline` + patches Py3.13/SPADE + LatentSync 1.5 + F5-TTS + Seed-VC)
+  - tools/colab-gpu-worker/      Worker & Notebook Colab L4 v4.0 (`colab_v4_cinema_server.py` + `ai_studio_colab_novela_gpu.ipynb` Zero-Drive dual-venv Seed-VC + WanGP)
   - notebooks/                   Cópia sincronizada de `ai_studio_colab_novela_gpu.ipynb` no repositório
   - campaigns/                   Assets curados por campanha (ex: campaigns/elseve-kit2/ com 8 fotos curadas + viral_blueprint.json)
-  - voices/regional/             Banco de perfis vocais regionais na VPS: dona_socorro, enzo, narrador_sertao, profiles.json, seu_bastiao
+  - voices/regional/             Banco de perfis vocais regionais na VPS: dona_socorro, enzo, narrador_sertao, noiva, noivo, profiles.json, seu_bastiao, sogra
   - supoclip/                    Stack Docker (PostgreSQL + Redis + Backend + Worker + Frontend portas 3107/8000) — desligado em repouso
   - MoneyPrinterTurbo/           Stack Docker Streamlit/FastAPI (portas 8501/8080) para vídeos faceless — desligado em repouso
   - VoiceStudio/                 Stack Docker síntese & clonagem de voz (porta 3030) — desligado em repouso
@@ -167,8 +211,8 @@ SEÇÃO 3 · INVENTÁRIO COMPLETO DE ARQUIVOS, MÓDULOS PYTHON, FRONTEND SPA, NO
 3.2 Detalhamento por Módulo Python (AST real com linhas exatas):
 
 ### media-control-panel/main.py
-    VPS Equiv.: /opt/ai-media-studio/media-control-panel/main.py | Tamanho: 277.3 KB (283909 bytes) | Linhas: 6656
-    Papel     : Servidor FastAPI central (porta 9000 VPS), Vault, orquestração Docker RAM-safe, AI Cascade Gateway & Rotas de Estúdio
+    VPS Equiv.: /opt/ai-media-studio/media-control-panel/main.py | Tamanho: 278.8 KB (285521 bytes) | Linhas: 6684
+    Papel     : Servidor FastAPI central (porta 9000 VPS), Vault, orquestração Docker RAM-safe, AI Cascade Gateway & Rotas de Estúdio (v4/v3.1)
     Símbolos principais:
       * L69-L70   def _get_quota_tracker()
       * L86-L105  def get_openfilm_url() — Reads the OpenFilm Studio key so opening the UI logs in automatically.
@@ -254,108 +298,109 @@ SEÇÃO 3 · INVENTÁRIO COMPLETO DE ARQUIVOS, MÓDULOS PYTHON, FRONTEND SPA, NO
       * L2952-L2956 async def api_quick_hyperframes_task(task_id)
       * L2963-L2967 def _normalize_novela_visual_style(raw)
       * L2970-L2974 def _normalize_novela_dramatic_structure(raw)
-      * L2977-L2983 class QuickNovelaScriptRequest(methods=0: )
-      * L2986-L3007 class QuickNovelaRequest(methods=0: )
-      * L3010-L3020 class QuickNovelaFlowPackRequest(methods=0: )
-      * L3023-L3037 class QuickNovelaStitchRequest(methods=0: )
-      * L3040-L3046 class QuickNovelaPreviewVoiceRequest(methods=0: )
-      * L3049-L3051 class ColabConfigRequest(methods=0: )
-      * L3054-L3100 async def _invoke_novela_cli(out_path, cfg_payload, mode)
-      * L3103-L3119 async def _pipeline_run_novela_cli()
-      * L3122-L3169 async def _execute_novela_job(task_id, out_path, cfg_payload)
-      * L3173-L3184 async def api_quick_novela_generate_script(req)
-      * L3188-L3210 async def api_quick_novela_flow_pack(req)
-      * L3214-L3265 async def api_quick_novela_upload_takes(request)
-      * L3268-L3284 async def _execute_novela_stitch_job(task_id, out_path, cfg_payload)
-      * L3288-L3371 async def api_quick_novela_stitch_takes(req)
-      * L3375-L3379 async def api_quick_novela_stitch_task(task_id)
-      * L3382-L3405 async def _probe_colab_tunnel(colab_url, colab_token)
-      * L3409-L3416 async def api_colab_notebook()
-      * L3420-L3424 async def api_colab_status()
-      * L3428-L3435 async def api_colab_config(req)
-      * L3439-L3497 async def api_quick_novela(req)
-      * L3501-L3505 async def api_quick_novela_task(task_id)
-      * L3509-L3525 async def api_voices_regional_profiles()
-      * L3529-L3558 async def api_voices_regional_upload_reference(request)
-      * L3562-L3587 async def api_voices_regional_sample(character_id)
-      * L3591-L3638 async def api_quick_novela_upload_line_audio(request)
-      * L3642-L3692 async def api_quick_novela_preview_voice(req)
-      * L3696-L3701 async def api_quick_novela_preview_audio(filename)
-      * L3715-L3719 class PipelineStartRequest(methods=0: )
-      * L3722-L3723 class PipelineResumeRequest(methods=0: )
-      * L3726-L3728 async def _pipeline_count_containers()
-      * L3731-L3733 async def _pipeline_stop_all()
-      * L3736-L3742 async def _pipeline_run_hyperframes_cli()
-      * L3745-L3763 async def _pipeline_run_videouse_cli(input_path, grade_preset, remove_silences, burn_subtitles, language, platform_preset)
-      * L3766-L3767 async def _pipeline_supoclip_dispatch(payload)
-      * L3770-L3771 async def _pipeline_moneyprinter_dispatch(payload)
-      * L3774-L3789 async def _pipeline_cascade_text(sys_prompt, user_prompt, max_tokens)
-      * L3816-L3823 async def api_pipelines_templates()
-      * L3827-L3839 async def api_pipelines_start(req)
-      * L3843-L3851 async def api_pipelines_status(run_id)
-      * L3855-L3857 async def api_pipelines_runs(limit)
-      * L3861-L3867 async def api_pipelines_resume(run_id, req)
-      * L3874-L3875 async def api_supoclip_subroute_clips()
-      * L3880-L3885 async def api_supoclip_subroute_upload(request, video, file)
-      * L3889-L3980 async def api_stack_standby_view(request, uri)
-      * L3987-L3999 def _resolve_modo_dev_bin()
-      * L4002-L4014 def _resolve_dev_skills_vault()
-      * L4017-L4024 def _modo_dev_env()
-      * L4027-L4036 def _collect_vault_skill_dirs(vault_dir)
-      * L4039-L4059 async def get_modo_dev_status()
-      * L4062-L4064 class ModoDevActionRequest(methods=0: )
-      * L4069-L4079 async def api_get_modo_dev()
-      * L4084-L4120 async def api_toggle_modo_dev(req)
-      * L4124-L4156 async def api_list_skills()
-      * L4163-L4174 def _read_running_pid(pid_file)
-      * L4177-L4241 async def get_openjarvis_status()
-      * L4244-L4246 class OpenJarvisActionRequest(methods=0: )
-      * L4249-L4251 class OpenJarvisAskRequest(methods=0: )
-      * L4255-L4256 async def api_openjarvis_status()
-      * L4260-L4281 async def api_openjarvis_ptt() — Trigger 1 on-demand Push-to-Talk voice listen, transcribe, MCP execution, and 48kHz TTS reply.
-      * L4358-L4543 def _classify_studio_production_plan(query, telemetry, proj_statuses, outputs, campaigns)
-      * L4546-L4643 async def _ask_openjarvis_cloud_strategist(query)
-      * L4648-L4657 async def api_openjarvis_plan(req, goal) — Live studio_plan_production endpoint for cloud panel & integrations.
-      * L4661-L4692 async def api_openjarvis_ask(req) — Execute an active command via Cloud Master Operator on VPS or local OpenJarvis runtime.
-      * L4696-L4708 async def api_openjarvis_audio_test() — Run 48,000 Hz Stereo SoXR self-diagnostic voice test.
-      * L4712-L4723 async def api_openjarvis_webcam_test() — Capture 1 frame from /dev/video0 on demand, release camera immediately, and describe via multimodal cascade.
-      * L4727-L4779 async def api_openjarvis_action(req)
-      * L4783-L4792 async def api_openjarvis_logs()
-      * L4800-L4810 async def api_get_keys()
-      * L4813-L4824 class SaveKeysRequest(methods=0: )
-      * L4828-L4861 async def api_save_keys(req)
-      * L4868-L4874 class ChatCompletionMessage(methods=0: )
-      * L4877-L4886 class ChatCompletionRequest(methods=0: )
-      * L4889-L4943 def _sanitize_gemini_schema(schema) — Strip JSON Schema fields unsupported by Gemini v1beta FunctionDeclaration Schema.
-      * L4946-L4961 def _convert_openai_tools_to_gemini(tools)
-      * L4964-L4984 def _openai_content_to_gemini_parts(content)
-      * L4987-L5043 def _openai_messages_to_gemini(messages)
-      * L5049-L5063 def _openai_msg_to_dict(m)
-      * L5066-L5180 def _openai_to_anthropic_payload(req, model_id, effective_temp, effective_max_tokens) — Convert OpenAI ChatCompletionRequest (including tools & tool_calls) to Anthropic /v1/messages payload.
-      * L5183-L5193 def _request_has_vision_payload(messages) — Detect whether any OpenAI-compatible message includes image_url or inline image blocks.
-      * L5196-L5270 async def _cascade_try_nvidia(req, nvidia_key, nvidia_base, effective_temp, effective_max_tokens, tracker, errors, tier_num)
-      * L5273-L5349 async def _cascade_try_openrouter(req, openrouter_key, openrouter_base, effective_temp, effective_max_tokens, tracker, errors, tier_num)
-      * L5352-L5498 async def _cascade_try_gemini(req, gemini_key, effective_temp, effective_max_tokens, tracker, errors, is_vision, tier_num)
-      * L5501-L5608 async def call_ai_cascade(req) — Smart Specialty-Aware Quota Router (v2.9): NIM/OpenRouter for Text, High-Quota Gemini Pool for Vision.
-      * L5611-L5638 async def _sse_from_completion(data)
-      * L5643-L5647 async def api_chat_completions(req)
-      * L5651-L5661 async def api_v1_models()
-      * L5665-L5675 async def api_ai_quota_telemetry()
-      * L5679-L5749 async def api_ai_cascade_status()
-      * L5756-L5830 async def check_gemini_api(vault) — Zero-Token / Zero-RPD Metadata Ping against Google Gemini /v1beta/models.
-      * L5833-L5916 async def check_nvidia_api(vault)
-      * L5919-L6003 async def check_openrouter_api(vault)
-      * L6006-L6088 async def check_anthropic_api(vault)
-      * L6091-L6137 async def check_ai_cascade() — Executes parallel HTTP health pings across Anthropic Claude (when configured), Gemini, NVIDIA NIM, and OpenRouter.
-      * L6140-L6420 async def diagnose_single_project(project_id, gemini_result, ai_cascade)
-      * L6423-L6447 async def diagnose_skills()
-      * L6450-L6632 async def diagnose_infrastructure() — Valida Nginx/TLS/Basic-Bearer Auth, rotas de proxy das 7 stacks, volumes Docker, Outputs e Swap/Disk sem acordar contêin
-      * L6636-L6650 async def api_diagnostics_all()
-      * L6654-L6656 async def api_diagnostics_project(project_id)
+      * L2977-L2979 def _normalize_novela_cinema_engine(raw)
+      * L2982-L2989 class QuickNovelaScriptRequest(methods=0: )
+      * L2992-L3014 class QuickNovelaRequest(methods=0: )
+      * L3017-L3028 class QuickNovelaFlowPackRequest(methods=0: )
+      * L3031-L3047 class QuickNovelaStitchRequest(methods=0: )
+      * L3050-L3056 class QuickNovelaPreviewVoiceRequest(methods=0: )
+      * L3059-L3061 class ColabConfigRequest(methods=0: )
+      * L3064-L3110 async def _invoke_novela_cli(out_path, cfg_payload, mode)
+      * L3113-L3129 async def _pipeline_run_novela_cli()
+      * L3132-L3180 async def _execute_novela_job(task_id, out_path, cfg_payload)
+      * L3184-L3197 async def api_quick_novela_generate_script(req)
+      * L3201-L3226 async def api_quick_novela_flow_pack(req)
+      * L3230-L3281 async def api_quick_novela_upload_takes(request)
+      * L3284-L3300 async def _execute_novela_stitch_job(task_id, out_path, cfg_payload)
+      * L3304-L3389 async def api_quick_novela_stitch_takes(req)
+      * L3393-L3397 async def api_quick_novela_stitch_task(task_id)
+      * L3400-L3431 async def _probe_colab_tunnel(colab_url, colab_token)
+      * L3435-L3442 async def api_colab_notebook()
+      * L3446-L3450 async def api_colab_status()
+      * L3454-L3461 async def api_colab_config(req)
+      * L3465-L3525 async def api_quick_novela(req)
+      * L3529-L3533 async def api_quick_novela_task(task_id)
+      * L3537-L3553 async def api_voices_regional_profiles()
+      * L3557-L3586 async def api_voices_regional_upload_reference(request)
+      * L3590-L3615 async def api_voices_regional_sample(character_id)
+      * L3619-L3666 async def api_quick_novela_upload_line_audio(request)
+      * L3670-L3720 async def api_quick_novela_preview_voice(req)
+      * L3724-L3729 async def api_quick_novela_preview_audio(filename)
+      * L3743-L3747 class PipelineStartRequest(methods=0: )
+      * L3750-L3751 class PipelineResumeRequest(methods=0: )
+      * L3754-L3756 async def _pipeline_count_containers()
+      * L3759-L3761 async def _pipeline_stop_all()
+      * L3764-L3770 async def _pipeline_run_hyperframes_cli()
+      * L3773-L3791 async def _pipeline_run_videouse_cli(input_path, grade_preset, remove_silences, burn_subtitles, language, platform_preset)
+      * L3794-L3795 async def _pipeline_supoclip_dispatch(payload)
+      * L3798-L3799 async def _pipeline_moneyprinter_dispatch(payload)
+      * L3802-L3817 async def _pipeline_cascade_text(sys_prompt, user_prompt, max_tokens)
+      * L3844-L3851 async def api_pipelines_templates()
+      * L3855-L3867 async def api_pipelines_start(req)
+      * L3871-L3879 async def api_pipelines_status(run_id)
+      * L3883-L3885 async def api_pipelines_runs(limit)
+      * L3889-L3895 async def api_pipelines_resume(run_id, req)
+      * L3902-L3903 async def api_supoclip_subroute_clips()
+      * L3908-L3913 async def api_supoclip_subroute_upload(request, video, file)
+      * L3917-L4008 async def api_stack_standby_view(request, uri)
+      * L4015-L4027 def _resolve_modo_dev_bin()
+      * L4030-L4042 def _resolve_dev_skills_vault()
+      * L4045-L4052 def _modo_dev_env()
+      * L4055-L4064 def _collect_vault_skill_dirs(vault_dir)
+      * L4067-L4087 async def get_modo_dev_status()
+      * L4090-L4092 class ModoDevActionRequest(methods=0: )
+      * L4097-L4107 async def api_get_modo_dev()
+      * L4112-L4148 async def api_toggle_modo_dev(req)
+      * L4152-L4184 async def api_list_skills()
+      * L4191-L4202 def _read_running_pid(pid_file)
+      * L4205-L4269 async def get_openjarvis_status()
+      * L4272-L4274 class OpenJarvisActionRequest(methods=0: )
+      * L4277-L4279 class OpenJarvisAskRequest(methods=0: )
+      * L4283-L4284 async def api_openjarvis_status()
+      * L4288-L4309 async def api_openjarvis_ptt() — Trigger 1 on-demand Push-to-Talk voice listen, transcribe, MCP execution, and 48kHz TTS reply.
+      * L4386-L4571 def _classify_studio_production_plan(query, telemetry, proj_statuses, outputs, campaigns)
+      * L4574-L4671 async def _ask_openjarvis_cloud_strategist(query)
+      * L4676-L4685 async def api_openjarvis_plan(req, goal) — Live studio_plan_production endpoint for cloud panel & integrations.
+      * L4689-L4720 async def api_openjarvis_ask(req) — Execute an active command via Cloud Master Operator on VPS or local OpenJarvis runtime.
+      * L4724-L4736 async def api_openjarvis_audio_test() — Run 48,000 Hz Stereo SoXR self-diagnostic voice test.
+      * L4740-L4751 async def api_openjarvis_webcam_test() — Capture 1 frame from /dev/video0 on demand, release camera immediately, and describe via multimodal cascade.
+      * L4755-L4807 async def api_openjarvis_action(req)
+      * L4811-L4820 async def api_openjarvis_logs()
+      * L4828-L4838 async def api_get_keys()
+      * L4841-L4852 class SaveKeysRequest(methods=0: )
+      * L4856-L4889 async def api_save_keys(req)
+      * L4896-L4902 class ChatCompletionMessage(methods=0: )
+      * L4905-L4914 class ChatCompletionRequest(methods=0: )
+      * L4917-L4971 def _sanitize_gemini_schema(schema) — Strip JSON Schema fields unsupported by Gemini v1beta FunctionDeclaration Schema.
+      * L4974-L4989 def _convert_openai_tools_to_gemini(tools)
+      * L4992-L5012 def _openai_content_to_gemini_parts(content)
+      * L5015-L5071 def _openai_messages_to_gemini(messages)
+      * L5077-L5091 def _openai_msg_to_dict(m)
+      * L5094-L5208 def _openai_to_anthropic_payload(req, model_id, effective_temp, effective_max_tokens) — Convert OpenAI ChatCompletionRequest (including tools & tool_calls) to Anthropic /v1/messages payload.
+      * L5211-L5221 def _request_has_vision_payload(messages) — Detect whether any OpenAI-compatible message includes image_url or inline image blocks.
+      * L5224-L5298 async def _cascade_try_nvidia(req, nvidia_key, nvidia_base, effective_temp, effective_max_tokens, tracker, errors, tier_num)
+      * L5301-L5377 async def _cascade_try_openrouter(req, openrouter_key, openrouter_base, effective_temp, effective_max_tokens, tracker, errors, tier_num)
+      * L5380-L5526 async def _cascade_try_gemini(req, gemini_key, effective_temp, effective_max_tokens, tracker, errors, is_vision, tier_num)
+      * L5529-L5636 async def call_ai_cascade(req) — Smart Specialty-Aware Quota Router (v2.9): NIM/OpenRouter for Text, High-Quota Gemini Pool for Vision.
+      * L5639-L5666 async def _sse_from_completion(data)
+      * L5671-L5675 async def api_chat_completions(req)
+      * L5679-L5689 async def api_v1_models()
+      * L5693-L5703 async def api_ai_quota_telemetry()
+      * L5707-L5777 async def api_ai_cascade_status()
+      * L5784-L5858 async def check_gemini_api(vault) — Zero-Token / Zero-RPD Metadata Ping against Google Gemini /v1beta/models.
+      * L5861-L5944 async def check_nvidia_api(vault)
+      * L5947-L6031 async def check_openrouter_api(vault)
+      * L6034-L6116 async def check_anthropic_api(vault)
+      * L6119-L6165 async def check_ai_cascade() — Executes parallel HTTP health pings across Anthropic Claude (when configured), Gemini, NVIDIA NIM, and OpenRouter.
+      * L6168-L6448 async def diagnose_single_project(project_id, gemini_result, ai_cascade)
+      * L6451-L6475 async def diagnose_skills()
+      * L6478-L6660 async def diagnose_infrastructure() — Valida Nginx/TLS/Basic-Bearer Auth, rotas de proxy das 7 stacks, volumes Docker, Outputs e Swap/Disk sem acordar contêin
+      * L6664-L6678 async def api_diagnostics_all()
+      * L6682-L6684 async def api_diagnostics_project(project_id)
 
 ### media-control-panel/guided_pipelines.py
-    VPS Equiv.: /opt/ai-media-studio/media-control-panel/guided_pipelines.py | Tamanho: 61.8 KB (63305 bytes) | Linhas: 1271
-    Papel     : Orquestrador assíncrono das 6 Trilhas Guiadas (RAM Relay, Checkpoints JSON em disco, Safe-Zones, Roteirista IA)
+    VPS Equiv.: /opt/ai-media-studio/media-control-panel/guided_pipelines.py | Tamanho: 64.5 KB (66025 bytes) | Linhas: 1309
+    Papel     : Orquestrador assíncrono das 6 Trilhas Guiadas (RAM Relay, Checkpoints JSON em disco, Safe-Zones, Roteirista IA Cinema v4/v3.1)
     Docstring : Guided Pipeline Orchestrator with 1-Stack-at-a-Time RAM Relay & Disk Checkpoints.
     Símbolos principais:
       * L128-L149  def _extract_json_block(raw_text) — Extract first valid JSON object from raw LLM text (fenced or inline).
@@ -363,7 +408,7 @@ SEÇÃO 3 · INVENTÁRIO COMPLETO DE ARQUIVOS, MÓDULOS PYTHON, FRONTEND SPA, NO
       * L173-L177  def _normalize_novela_visual_style(raw)
       * L180-L184  def _normalize_novela_dramatic_structure(raw)
       * L187-L307  def build_fallback_novela_script(theme, expressions, tone, visual_style, dramatic_structure) — Deterministic multi-character Brazilian Northeast script fallback with v2.8 Dual-World & Viral 4-Cut pacing.
-      * L310-L1271 class GuidedPipelineOrchestrator(methods=15: __init__(L313), state_path(L359), _save_state(L365), load_state(L376), list_runs(L385), start(L398), resume(L470), _run_pipeline_task(L494), _step_shopee_viral_clone(L584), _step_novela_shorts_polish(L697)...) — Executes multi-step production pipelines asynchronously with disk checkpoints and strict RAM protection.
+      * L310-L1309 class GuidedPipelineOrchestrator(methods=15: __init__(L313), state_path(L359), _save_state(L365), load_state(L376), list_runs(L385), start(L398), resume(L470), _run_pipeline_task(L494), _step_shopee_viral_clone(L584), _step_novela_shorts_polish(L697)...) — Executes multi-step production pipelines asynchronously with disk checkpoints and strict RAM protection.
 
 ### tools/hyperframes/quota_telemetry.py
     VPS Equiv.: /opt/ai-media-studio/tools/hyperframes/quota_telemetry.py | Tamanho: 19.2 KB (19644 bytes) | Linhas: 525
@@ -375,85 +420,135 @@ SEÇÃO 3 · INVENTÁRIO COMPLETO DE ARQUIVOS, MÓDULOS PYTHON, FRONTEND SPA, NO
       * L237-L515  class QuotaTelemetryTracker(methods=11: __init__(L240), _empty_state(L244), _ensure_day_rollover(L264), _with_state(L298), record_call(L330), record_cache_hit(L376), set_active(L392), _model_status_row(L401), is_available(L436), pick_round_robin_tts(L447)...) — Thread/process-safe persistent RPM/RPD telemetry tracker.
       * L521-L525  def get_tracker()
 
+### tools/hyperframes/cinema_v4_director.py
+    VPS Equiv.: /opt/ai-media-studio/tools/hyperframes/cinema_v4_director.py | Tamanho: 51.3 KB (52528 bytes) | Linhas: 1105
+    Papel     : Cinema Engine v4.0: Bíblia Visual, Shot Compiler (OTS/Contraplano/Reação/Conjunto, Eixo 180°), Stitcher J/L-Cut (LRA >= 5 LU, -16 LUFS) & Flow Pack v4
+    Docstring : Cinema Engine v4.0 Director, Shot Compiler & Reference Pack Builder.
+    Símbolos principais:
+      * L125-L131  class CharacterBibleEntry(methods=0: )
+      * L135-L143  class VisualBible(methods=0: )
+      * L147-L169  class ShotSpec(methods=0: )
+      * L208-L216  def tone_is_drama(tone, theme)
+      * L219-L239  def _infer_semantic_emotion(raw_turn, shot_idx, is_reaction, is_drama)
+      * L242-L328  def build_visual_bible(cfg, raw_dialogue)
+      * L331-L411  def compile_cinema_v4_shots(cfg, raw_dialogue) — Compile raw dialogue turns into calibrated Cinema Engine v4 shot specifications.
+      * L414-L453  def build_keyframe_prompt_v4(bible, shot) — Build a Cinema v4 still keyframe prompt with composition FIRST + positive off-camera gaze.
+      * L456-L479  def build_full_scene_video_prompt_v4(bible, shot) — Build second-by-second full-scene generation prompt for Veo 3.1 Lite (Flow) or Open-Weight Video models.
+      * L482-L505  def _sanitize_nim_prompt(prompt) — Replace words that trigger overly sensitive safety filters on NVIDIA NIM image generation.
+      * L508-L572  def call_nim_flux_plate(prompt, nvidia_key, out_jpg, seed_offset) — Generate a high-craft vertical 9:16 plate via NVIDIA NIM Flux API with automatic safety-filter retry.
+      * L575-L629  def generate_v4_cinema_assets(bible, shots, out_dir, nvidia_key) — Generate Master Set plate, Cast Ingredient sheets, and unique per-shot OTS/Reaction plates (zero crop reuse).
+      * L632-L731  def synthesize_cinema_room_tone_and_stingers(total_dur, out_wav, tone, shot_cuts, target_bed_dbfs) — Create precisely RMS-calibrated room-tone bed (-38 dBFS, zero windows < -45 dB) with impact stingers.
+      * L734-L974  def stitch_cinema_v4_episode(clip_paths, dialogue_wavs, shot_specs, out_mp4, tone, subtitles_mode, safe_bottom, safe_right) — Assemble full-scene clips with true J/L-cut audio bleeds, LRA >= 5 LU dynamics, and clean bottom captions.
+      * L977-L1105 def generate_flow_veo_pack_v4(cfg, compiled_dialogue, flow_packs_dir, novela_export_dir, nvidia_key) — Build a complete Cinema Engine v4 Production Pack for Google Flow (Veo 3.1 Lite) & Colab L4 Full-Scene.
+
 ### tools/hyperframes/vps_novela_runner.py
-    VPS Equiv.: /opt/ai-media-studio/tools/hyperframes/vps_novela_runner.py | Tamanho: 120.7 KB (123642 bytes) | Linhas: 2699
-    Papel     : Motor Clean Cinema v3.1 Multi-Personagem: Frontal Eye-Contact Lock (+14% crop), Single-Subject, Mix Contínuo -33dB, Legendas Bipartidas (.ass) & Flow Veo 3.1
+    VPS Equiv.: /opt/ai-media-studio/tools/hyperframes/vps_novela_runner.py | Tamanho: 135.9 KB (139161 bytes) | Linhas: 2994
+    Papel     : Motor Novela Studio Dual-Engine (cinema_engine='v4' c/ Colab/Flow full-scene ou fallback legado 'v3.1' MoDA Frontal)
     Docstring : VPS Novela Studio Runner — Cinema Clean Engine v2.5.
     Símbolos principais:
-      * L244-L249  def normalize_visual_style(raw) — Normalize visual style across v2.5/v2.8 names into 'cinematic_live_action' or 'stylized_3d_pixar'.
-      * L252-L257  def normalize_dramatic_structure(raw) — Normalize dramatic directing structure ('viral_4_cuts' or 'classic_3_cuts').
-      * L357-L384  class TurnCompiled(methods=0: )
-      * L387-L399  def _normalize_speaker_key(raw)
-      * L402-L429  def _get_character_spec(speaker_raw)
-      * L432-L534  def compile_dramatic_cuts(raw_dialogue, dramatic_structure) — Structure raw turns into either 4 viral dramatic cuts (0.12s Cut-2 pause + Cut-4 tone-matched reaction) or classic dialo
-      * L537-L554  def _assign_shot_framing(turn_idx, raw_framing, emotion, prev_speaker, cur_speaker)
-      * L557-L585  def _load_secrets_env()
-      * L588-L602  def _run_checked(cmd, cwd, timeout)
-      * L605-L628  def _probe_media(media_path)
-      * L631-L632  def _probe_duration(media_path)
-      * L635-L679  def _synthesize_turn_audio(tts_text, voice, rate, pitch, raw_mp3, clean_wav, lead_pad, tail_pad) — Synthesize edge-tts voice clip with rapid clean cinema padding into 48kHz stereo WAV.
-      * L682-L690  def _get_qt()
-      * L693-L758  def _call_nvidia_flux_image(prompt, api_key, out_jpg, model) — Generate a clean vertical 9:16 portrait/scene image via NVIDIA NIM Flux API.
-      * L761-L846  def _build_bespoke_svg_portrait(speaker_key, spec, visual_style, emotion, shot_framing, out_svg, clean_no_text) — Clean procedural vector stage artwork (zero overlaid UI plaques when clean_no_text=True).
-      * L849-L856  def _svg_to_clean_jpg(svg_path, jpg_path)
-      * L859-L954  def _resolve_turn_visual(speaker_key, spec, emotion, shot_framing, physical_action_en, visual_style, setting, assets_dir...) — Generate/resolve a clean 1080x1920 portrait with v3.0 Identity & Set Continuity Lock.
-      * L957-L1023 def build_veo_take_prompt(speaker_spec, tts_text, visual_style, shot_framing, emotion, physical_action_en, setting, cut_role...) — Compose second-by-second bilingual Veo 3.1 technical camera + acting prompt matching episode tone.
-      * L1026-L1173 def generate_flow_veo_pack(cfg) — Generate Google Flow Veo 3.1 Production Pack (closed-mouth 1080x1920 Ingredients + 4-Cut bilingual prompts).
-      * L1176-L1265 def _build_master_audio_mix(turns, freeze_start, freeze_dur, total_dur, work_dir, include_freeze_sting) — Concatenate per-turn speech + subtle scene cut pops normalized to 48kHz Stereo SoXR loudnorm.
-      * L1268-L1280 def _format_subtitle_html(text, highlight, accent_color)
-      * L1283-L1579 def _build_hyperframes_html(cfg, turns, freeze_start, freeze_dur, total_dur, safe_zone, visual_style, clean_cinema_mode...) — Generate HyperFrames compliant index.html in Clean Cinema (100% full-bleed) or Classic Card mode.
-      * L1586-L1596 def _get_whisper_model()
-      * L1599-L1671 def _detect_speech_window(clip_path, raw_dur, work_dir, idx) — Find tight [start, end] speech bounds via faster-whisper INT8 (NumPy PCM) + silencedetect fallback.
-      * L1674-L1682 def _format_ass_ts(sec)
-      * L1685-L1978 def stitch_novela_takes(cfg) — Trim silence lead/tail on ordered MP4 takes, normalize 1080x1920 30fps + 48kHz SoXR, optional minimal captions.
-      * L1981-L2022 def _call_colab_animate_take(colab_url, colab_token, image_path, audio_wav, veo_prompt, colab_engine, out_mp4, character_id...) — Send 1 take portrait + PT-BR WAV + acting prompt to remote Google Colab GPU Worker (`/animate_turn`).
-      * L2025-L2027 def _tone_is_dramatic(tone)
-      * L2030-L2040 def _synthesize_silent_ambient_wav(out_wav, dur_sec) — Create natural -32 dB room-tone/street ambience WAV (eliminates -73 dB dead air).
-      * L2043-L2053 def _create_master_ambience_bed_wav(out_wav, dur_sec, target_lufs) — Build a continuous -33 dBFS street/room-tone bed across the full episode so no 0.25s window falls below -40 dB.
-      * L2056-L2138 def _synthesize_reaction_soundtrack_wav(out_wav, dur_sec, tone, speaker, reaction_text, env_map, work_dir) — Generate dynamic Cut 4 audio (-22 dB to -14 dB active peak): tone-matched SFX + micro vocal reaction + street bed.
-      * L2141-L2180 def _split_subtitle_events(start_t, end_t, text, max_chars) — Split subtitles > max_chars into 2 sequential timed ASS events so 100% of spoken audio is shown dynamically.
-      * L2183-L2202 def _prepend_lead_silence_wav(src_wav, lead_sec) — Prepend clean subtle lead silence (e.g. 0.45s Cut-2 breath pause) preserving 48kHz Stereo SoXR.
-      * L2205-L2675 def render_novela_episode(cfg) — Execute end-to-end multi-character micro-series production across v2.8 Dual-Style & 4-Cut modes.
-      * L2678-L2691 def main()
+      * L48-L54   def _resolve_cinema_engine(cfg)
+      * L254-L259  def normalize_visual_style(raw) — Normalize visual style across v2.5/v2.8 names into 'cinematic_live_action' or 'stylized_3d_pixar'.
+      * L262-L267  def normalize_dramatic_structure(raw) — Normalize dramatic directing structure ('viral_4_cuts' or 'classic_3_cuts').
+      * L367-L394  class TurnCompiled(methods=0: )
+      * L397-L409  def _normalize_speaker_key(raw)
+      * L412-L439  def _get_character_spec(speaker_raw)
+      * L442-L544  def compile_dramatic_cuts(raw_dialogue, dramatic_structure) — Structure raw turns into either 4 viral dramatic cuts (0.12s Cut-2 pause + Cut-4 tone-matched reaction) or classic dialo
+      * L547-L564  def _assign_shot_framing(turn_idx, raw_framing, emotion, prev_speaker, cur_speaker)
+      * L567-L595  def _load_secrets_env()
+      * L598-L612  def _run_checked(cmd, cwd, timeout)
+      * L615-L638  def _probe_media(media_path)
+      * L641-L642  def _probe_duration(media_path)
+      * L645-L689  def _synthesize_turn_audio(tts_text, voice, rate, pitch, raw_mp3, clean_wav, lead_pad, tail_pad) — Synthesize edge-tts voice clip with rapid clean cinema padding into 48kHz stereo WAV.
+      * L692-L700  def _get_qt()
+      * L703-L768  def _call_nvidia_flux_image(prompt, api_key, out_jpg, model) — Generate a clean vertical 9:16 portrait/scene image via NVIDIA NIM Flux API.
+      * L771-L856  def _build_bespoke_svg_portrait(speaker_key, spec, visual_style, emotion, shot_framing, out_svg, clean_no_text) — Clean procedural vector stage artwork (zero overlaid UI plaques when clean_no_text=True).
+      * L859-L866  def _svg_to_clean_jpg(svg_path, jpg_path)
+      * L869-L964  def _resolve_turn_visual(speaker_key, spec, emotion, shot_framing, physical_action_en, visual_style, setting, assets_dir...) — Generate/resolve a clean 1080x1920 portrait with v3.0 Identity & Set Continuity Lock.
+      * L967-L1033 def build_veo_take_prompt(speaker_spec, tts_text, visual_style, shot_framing, emotion, physical_action_en, setting, cut_role...) — Compose second-by-second bilingual Veo 3.1 technical camera + acting prompt matching episode tone.
+      * L1036-L1200 def generate_flow_veo_pack(cfg) — Generate Google Flow Veo 3.1 Production Pack (dispatches to v4 Visual Bible OTS or v3.1 fallback).
+      * L1203-L1292 def _build_master_audio_mix(turns, freeze_start, freeze_dur, total_dur, work_dir, include_freeze_sting) — Concatenate per-turn speech + subtle scene cut pops normalized to 48kHz Stereo SoXR loudnorm.
+      * L1295-L1307 def _format_subtitle_html(text, highlight, accent_color)
+      * L1310-L1606 def _build_hyperframes_html(cfg, turns, freeze_start, freeze_dur, total_dur, safe_zone, visual_style, clean_cinema_mode...) — Generate HyperFrames compliant index.html in Clean Cinema (100% full-bleed) or Classic Card mode.
+      * L1613-L1623 def _get_whisper_model()
+      * L1626-L1698 def _detect_speech_window(clip_path, raw_dur, work_dir, idx) — Find tight [start, end] speech bounds via faster-whisper INT8 (NumPy PCM) + silencedetect fallback.
+      * L1701-L1709 def _format_ass_ts(sec)
+      * L1712-L2110 def stitch_novela_takes(cfg) — Trim silence lead/tail on ordered MP4 takes, normalize 1080x1920 30fps + 48kHz SoXR, optional minimal captions.
+      * L2113-L2154 def _call_colab_animate_take(colab_url, colab_token, image_path, audio_wav, veo_prompt, colab_engine, out_mp4, character_id...) — Send 1 take portrait + PT-BR WAV + acting prompt to remote Google Colab GPU Worker (`/animate_turn`).
+      * L2157-L2159 def _tone_is_dramatic(tone)
+      * L2162-L2172 def _synthesize_silent_ambient_wav(out_wav, dur_sec) — Create natural -32 dB room-tone/street ambience WAV (eliminates -73 dB dead air).
+      * L2175-L2185 def _create_master_ambience_bed_wav(out_wav, dur_sec, target_lufs) — Build a continuous -33 dBFS street/room-tone bed across the full episode so no 0.25s window falls below -40 dB.
+      * L2188-L2270 def _synthesize_reaction_soundtrack_wav(out_wav, dur_sec, tone, speaker, reaction_text, env_map, work_dir) — Generate dynamic Cut 4 audio (-22 dB to -14 dB active peak): tone-matched SFX + micro vocal reaction + street bed.
+      * L2273-L2312 def _split_subtitle_events(start_t, end_t, text, max_chars) — Split subtitles > max_chars into 2 sequential timed ASS events so 100% of spoken audio is shown dynamically.
+      * L2315-L2334 def _prepend_lead_silence_wav(src_wav, lead_sec) — Prepend clean subtle lead silence (e.g. 0.45s Cut-2 breath pause) preserving 48kHz Stereo SoXR.
+      * L2337-L2970 def render_novela_episode(cfg) — Execute end-to-end multi-character micro-series production across v4 Cinema & v3.1 Fallback.
+      * L2973-L2986 def main()
 
 ### tools/hyperframes/regional_voice_engine.py
-    VPS Equiv.: /opt/ai-media-studio/tools/hyperframes/regional_voice_engine.py | Tamanho: 54.8 KB (56122 bytes) | Linhas: 1413
-    Papel     : Motor de Voz Nordestina v3.1: Cache SHA-256 (<5ms), Gemini Live Audio (BidiGenerateContent), Pool Round-Robin 5 TTS REST, F5-TTS & Seed-VC
+    VPS Equiv.: /opt/ai-media-studio/tools/hyperframes/regional_voice_engine.py | Tamanho: 66.5 KB (68105 bytes) | Linhas: 1671
+    Papel     : Motor de Voz Nordestina v4.0: Audio Quality Gate (RMS/ZCR stdlib + Whisper INT8 anti-aliasing), Cache SHA-256, Gemini Live & Seed-VC
     Docstring : Regional Accent & Voice Cloning Engine (v2.6).
     Símbolos principais:
-      * L87-L95   def _get_qt()
-      * L98-L105  def _run_async(coro)
-      * L209-L221  def normalize_character_id(speaker_raw)
-      * L224-L261  def sanitize_northeast_slang(text) — Enforce authentic Northeast (PI/CE/PE/BA) vocabulary and punchy non-dragged cadence.
-      * L264-L329  def apply_nordestino_prosody(text, character, emotion, mode) — Apply authentic Brazilian Northeast prosody without dragging syllables.
-      * L332-L360  def _load_secrets_env()
-      * L363-L367  def _run_checked(cmd, timeout)
-      * L370-L378  def _probe_duration(path)
-      * L381-L417  def _pcm_to_48k_stereo_wav(raw_pcm_bytes, src_rate, out_wav, lead_pad, tail_pad, codec, src_channels, comedy_fast) — Convert raw PCM (or RIFF WAV) stream into agile 48kHz Stereo SoXR WAV.
-      * L420-L442  def _normalize_media_to_48k_wav(src_audio, out_wav, lead_pad, tail_pad, pitch_shift_edge_fallback)
-      * L449-L483  def ensure_regional_voice_bank() — Ensure regional voices directory and profiles.json exist on disk.
-      * L486-L511  def list_regional_voice_profiles()
-      * L514-L563  def save_regional_voice_reference(character_id, raw_bytes, orig_filename, reference_text) — Save and normalize an uploaded regional reference voice sample (6s-15s clean WAV) for zero-shot cloning/VC.
-      * L566-L603  def _ensure_character_seed_reference(character_id, env_map) — Ensure a clean target timbre sample exists on disk for F5-TTS / Seed-VC (uses Gemini TTS if absent).
-      * L614-L632  def _collect_gemini_keys(env_map) — Collect distinct Gemini API keys configured in env/vault in priority order.
-      * L635-L651  def _extract_audio_from_gemini_resp(data)
-      * L654-L674  def _post_gemini_tts_payload(payload, api_key, model)
-      * L677-L709  def _call_gemini_native_tts(text, voice_name, style_prompt, emotion, api_key, model) — Call Gemini Native TTS and return (raw_pcm_bytes, sample_rate, ffmpeg_codec, channels).
-      * L712-L720  def _cache_key_for_turn(cid, gem_voice, emotion, eff_engine, processed_text)
-      * L723-L731  def _read_wav_duration_fast(wav_path)
-      * L734-L744  def _save_voice_cache(cache_key, src_wav)
-      * L747-L812  async def _live_audio_ws_exchange(api_key, model, live_voice, system_prompt, user_prompt)
-      * L815-L876  def _call_gemini_live_audio_tts(env_map, text, style_inst, emo_cue, voice_name, models) — Primary unlimited-RPM Gemini Live Audio TTS over BidiGenerateContent WebSocket.
-      * L879-L949  def _call_gemini_resilient(env_map, build_payload_fn, models) — Invoke Gemini REST TTS across Round-Robin pool & rotated keys with QuotaTelemetryTracker.
-      * L952-L1028 def synthesize_gemini_multispeaker_dialogue(dialogue, out_wav, lead_pad, tail_pad) — Synthesize a multi-character conversation in ONE Gemini Multi-Speaker Native TTS API call.
-      * L1031-L1070 def _synthesize_edge_regional_fallback(tts_text, character_id, emotion, profile, out_wav, lead_pad, tail_pad) — Apply aggressive phonetics + edge-tts when Gemini TTS is unreachable/rate-limited.
-      * L1073-L1097 def _call_colab_voice_endpoint(endpoint_path, colab_url, colab_token, payload, out_wav, lead_pad, tail_pad)
-      * L1100-L1348 def synthesize_regional_turn(tts_text, speaker, emotion, accent_engine, accent_preset, out_wav, guide_audio_path, colab_url...) — Synthesize one dialogue turn in authentic Northeast prosody as 48kHz Stereo SoXR WAV.
-      * L1351-L1413 def synthesize_dialogue_preview(dialogue, accent_engine, out_mp3, colab_url, colab_token) — Synthesize rapid multi-character or single-line MP3 audio preview (48kHz Stereo SoXR).
+      * L89-L97   def _get_qt()
+      * L100-L107  def _run_async(coro)
+      * L268-L283  def _get_audio_gate_whisper() — Lazy-load CPU faster-whisper INT8 validator singleton (zero idle RAM until first check).
+      * L286-L289  def _fold_pt_tokens(text)
+      * L292-L311  def _downsample_to_16k_mono(audio_mono, framerate)
+      * L314-L414  def validate_generated_speech_wav(wav_path, expected_text, min_rms_dbfs, min_zcr, min_word_overlap, whisper_model) — Audio Quality Gate v4.0: blocks silence, low-frequency hums, and ASR hallucinations before caching.
+      * L417-L435  def normalize_character_id(speaker_raw)
+      * L438-L475  def sanitize_northeast_slang(text) — Enforce authentic Northeast (PI/CE/PE/BA) vocabulary and punchy non-dragged cadence.
+      * L478-L543  def apply_nordestino_prosody(text, character, emotion, mode) — Apply authentic Brazilian Northeast prosody without dragging syllables.
+      * L546-L574  def _load_secrets_env()
+      * L577-L581  def _run_checked(cmd, timeout)
+      * L584-L592  def _probe_duration(path)
+      * L595-L631  def _pcm_to_48k_stereo_wav(raw_pcm_bytes, src_rate, out_wav, lead_pad, tail_pad, codec, src_channels, comedy_fast) — Convert raw PCM (or RIFF WAV) stream into agile 48kHz Stereo SoXR WAV.
+      * L634-L656  def _normalize_media_to_48k_wav(src_audio, out_wav, lead_pad, tail_pad, pitch_shift_edge_fallback)
+      * L663-L697  def ensure_regional_voice_bank() — Ensure regional voices directory and profiles.json exist on disk.
+      * L700-L725  def list_regional_voice_profiles()
+      * L728-L777  def save_regional_voice_reference(character_id, raw_bytes, orig_filename, reference_text) — Save and normalize an uploaded regional reference voice sample (6s-15s clean WAV) for zero-shot cloning/VC.
+      * L780-L817  def _ensure_character_seed_reference(character_id, env_map) — Ensure a clean target timbre sample exists on disk for F5-TTS / Seed-VC (uses Gemini TTS if absent).
+      * L828-L846  def _collect_gemini_keys(env_map) — Collect distinct Gemini API keys configured in env/vault in priority order.
+      * L849-L865  def _extract_audio_from_gemini_resp(data)
+      * L868-L888  def _post_gemini_tts_payload(payload, api_key, model)
+      * L891-L923  def _call_gemini_native_tts(text, voice_name, style_prompt, emotion, api_key, model) — Call Gemini Native TTS and return (raw_pcm_bytes, sample_rate, ffmpeg_codec, channels).
+      * L926-L936  def _cache_key_for_turn(cid, gem_voice, emotion, eff_engine, processed_text, drama_pacing)
+      * L939-L947  def _read_wav_duration_fast(wav_path)
+      * L950-L960  def _save_voice_cache(cache_key, src_wav)
+      * L963-L1028 async def _live_audio_ws_exchange(api_key, model, live_voice, system_prompt, user_prompt)
+      * L1031-L1097 def _call_gemini_live_audio_tts(env_map, text, style_inst, emo_cue, voice_name, models, drama_pacing) — Primary unlimited-RPM Gemini Live Audio TTS over BidiGenerateContent WebSocket.
+      * L1100-L1170 def _call_gemini_resilient(env_map, build_payload_fn, models) — Invoke Gemini REST TTS across Round-Robin pool & rotated keys with QuotaTelemetryTracker.
+      * L1173-L1249 def synthesize_gemini_multispeaker_dialogue(dialogue, out_wav, lead_pad, tail_pad) — Synthesize a multi-character conversation in ONE Gemini Multi-Speaker Native TTS API call.
+      * L1252-L1291 def _synthesize_edge_regional_fallback(tts_text, character_id, emotion, profile, out_wav, lead_pad, tail_pad) — Apply aggressive phonetics + edge-tts when Gemini TTS is unreachable/rate-limited.
+      * L1294-L1321 def _call_colab_voice_endpoint(endpoint_path, colab_url, colab_token, payload, out_wav, lead_pad, tail_pad)
+      * L1324-L1606 def synthesize_regional_turn(tts_text, speaker, emotion, accent_engine, accent_preset, out_wav, guide_audio_path, colab_url...) — Synthesize one dialogue turn in authentic Northeast prosody as 48kHz Stereo SoXR WAV.
+      * L1609-L1671 def synthesize_dialogue_preview(dialogue, accent_engine, out_mp3, colab_url, colab_token) — Synthesize rapid multi-character or single-line MP3 audio preview (48kHz Stereo SoXR).
+
+### tools/colab-gpu-worker/colab_v4_cinema_server.py
+    VPS Equiv.: /opt/ai-media-studio/tools/colab-gpu-worker/colab_v4_cinema_server.py | Tamanho: 18.7 KB (19142 bytes) | Linhas: 475
+    Papel     : Worker FastAPI Colab Pro L4 v4.0: Dual-venv Seed-VC + WanGP shared.api persistente, Fila Assíncrona /jobs/animate_scene & /health real
+    Docstring : Google Colab Pro L4 (24GB VRAM) Cinema Engine v4.0 Worker & Benchmark Server.
+    Símbolos principais:
+      * L79-L86   def _cleanup_vram()
+      * L89-L101  def _gpu_info()
+      * L104-L117  def _smi_used_gb()
+      * L120-L124  def _require_token(token, require_configured)
+      * L127-L132  def _probe_dur(path)
+      * L135-L156  def _mux_no_freeze(raw_mp4, wav_path, out_mp4, width, height, fps)
+      * L159-L178  def _get_wangp_session()
+      * L181-L190  def _resolve_model_type(requested_backend, has_audio)
+      * L193-L203  def _resolve_model_resolution(model_type, width, height)
+      * L209-L211  class ExecReq(methods=0: )
+      * L214-L220  class VoiceConvertReq(methods=0: )
+      * L223-L235  class AnimateSceneReq(methods=0: )
+      * L239-L264  def health(x_colab_token)
+      * L268-L271  def admin_exec(req, x_colab_token)
+      * L275-L334  def voice_convert(req, x_colab_token)
+      * L337-L424  def _execute_scene_job(job_id, req)
+      * L428-L437  def submit_scene_job(req, x_colab_token)
+      * L441-L447  def get_scene_job(job_id, x_colab_token)
 
 ### tools/hyperframes/novela_lipsync_animator.py
     VPS Equiv.: /opt/ai-media-studio/tools/hyperframes/novela_lipsync_animator.py | Tamanho: 67.2 KB (68822 bytes) | Linhas: 1645
-    Papel     : Cascata GPU Generativa Real v3.1 (Tier 1 Colab MoDA-L4 LiveVASAPipeline emo=4 Happiness ~11s -> Colab LivePortrait+LatentSync 1.5 -> ZeroGPU A10G; Distorção 2D banida)
+    Papel     : Cascata GPU Legada v3.1 (Tier 1 Colab MoDA-L4 LiveVASAPipeline -> LivePortrait+LatentSync 1.5 -> ZeroGPU A10G)
     Docstring : True GPU Generative Video & Lip-Sync Cascade Engine (v2.9).
     Símbolos principais:
       * L54-L69   def _probe_duration(media_path)
@@ -483,13 +578,34 @@ SEÇÃO 3 · INVENTÁRIO COMPLETO DE ARQUIVOS, MÓDULOS PYTHON, FRONTEND SPA, NO
 
 ### tools/hyperframes/verify_lipsync_motion.py
     VPS Equiv.: /opt/ai-media-studio/tools/hyperframes/verify_lipsync_motion.py | Tamanho: 13.1 KB (13392 bytes) | Linhas: 318
-    Papel     : Auditor Computer Vision frame a frame (estabilização por âncora nasal, mouth ROI speech vs silence, piscar sem oclusão e Reaction Shot)
+    Papel     : Auditor Computer Vision frame a frame (estabilização por âncora nasal, mouth ROI speech vs silence, piscar e Reaction Shot)
     Docstring : Computer Vision Lip-Sync & Facial Motion Auditor (v2.7).
     Símbolos principais:
       * L42-L69   def _extract_rms_per_frame(mp4_path, fps, num_frames)
       * L72-L96   def _track_anchor_shift(ref_gray, cur_gray, ax, ay, aw, ah, pad)
       * L99-L304  def audit_lipsync_video(mp4_path, min_mouth_diff)
       * L307-L314  def main()
+
+### tests/cinema_qa.py
+    VPS Equiv.: /opt/ai-media-studio/tests/cinema_qa.py | Tamanho: 40.0 KB (40933 bytes) | Linhas: 987
+    Papel     : Auditor Cinema Objective QA (13 critérios calibrados contra docs/refs/espectativa.mp4: Gaze yaw, OTS, LRA/LUFS/TP, silêncios, crop reuse & ASR)
+    Docstring : Cinematic Quality Assurance & Objective Video Auditor (v4.0).
+    Símbolos principais:
+      * L41-L79   def _probe_stream_info(mp4_path)
+      * L82-L108  def _measure_ebur128(mp4_path)
+      * L111-L165  def _extract_pcm_16k_and_48k(mp4_path)
+      * L168-L191  def _analyze_audio_windows(pcm48, sr, win_sec)
+      * L194-L235  def _transcribe_words_whisper(pcm16)
+      * L238-L246  def _resolve_landmarker_model()
+      * L249-L293  def _init_face_analyzers()
+      * L296-L326  def _landmarks_to_face_dict(lm, w, h, source)
+      * L329-L432  def _analyze_frame_faces(frame_bgr, mp_face_landmarker, mp_face_mesh, mp_face_det, haar_frontal, haar_profile)
+      * L435-L492  def _detect_ots_foreground_blur(frame_bgr, primary_face) — Detect blurred over-the-shoulder (OTS) foreground mass on left or right frame edge.
+      * L495-L560  def _detect_burned_subtitles(frames_bgr) — Detect burned-in white/yellow text with black outline stroke in lower/mid frame.
+      * L563-L593  def _detect_static_crop_reuse(shot_rep_frames) — Check if any two shots reuse the exact same static base portrait (or +14% optical crop).
+      * L596-L615  def _extract_face_signature(frame_bgr, face)
+      * L618-L960  def evaluate_video(mp4_path)
+      * L963-L983  def main()
 
 ### tools/hyperframes/vps_ad_runner.py
     VPS Equiv.: /opt/ai-media-studio/tools/hyperframes/vps_ad_runner.py | Tamanho: 55.0 KB (56339 bytes) | Linhas: 1569
@@ -610,149 +726,153 @@ SEÇÃO 3 · INVENTÁRIO COMPLETO DE ARQUIVOS, MÓDULOS PYTHON, FRONTEND SPA, NO
       * L303-L324  def main()
 
 ### media-control-panel/static/index.html
-    VPS Equiv.: /opt/ai-media-studio/media-control-panel/static/index.html | Tamanho: 380.3 KB (389384 bytes) | Linhas: 6260
+    VPS Equiv.: /opt/ai-media-studio/media-control-panel/static/index.html | Tamanho: 384.2 KB (393382 bytes) | Linhas: 6316
     Papel     : Interface PWA Dark-Glass B2B responsiva (1440x900 Desktop + 390x844 Mobile; Tailwind + Lucide Icons) com Modo Guiado (6 Trilhas), Modo Hard, Costurador de Takes, Modal de Cotas ao Vivo e Cofre Central
-    Total de IDs de DOM mapeados: 382
+    Total de IDs de DOM mapeados: 386
     Abas/Navegação (14): tab-stacks, tab-quick, tab-outputs, tab-jarvis, tab-skills, tab-vault, tab-audit, vtab-all, vtab-cascade, vtab-media, mnav-stacks, mnav-quick, mnav-outputs, mnav-menu
     Modo Guiado Trilhas 1-6 (IDs gp-* — 72): gp-platform-hint, gp-platform-selector, gp-templates-grid, gp-steps-map, gp-guided-form, gp-active-title, gp-active-ram-badge, gp-fields-shopee_viral_clone, gp-upload-photos, gp-campaign, gp-campaign-preview, gp-viral-box, gp-viral-count, gp-viral-files, gp-viral-blueprint-card, gp-title, gp-offer, gp-desc, gp-voice-name, gp-duration, gp-script, gp-fields-novela_shorts_polish, gp-novela-source, gp-novela-cutmode, gp-novela-parts, gp-novela-grade, gp-fields-dark_channel_full, gp-dark-subject, gp-dark-broll, gp-dark-voice, gp-dark-source, gp-dark-script, gp-fields-pov_cinema_ad, gp-pov-campaign, gp-pov-title, gp-pov-offer, gp-fields-express_jumpcut, gp-exp-source, gp-exp-grade, gp-exp-lang, gp-exp-silence, gp-exp-subtitles, gp-fields-novela_regional_studio, gp-nov-style, gp-nov-style-stylized_3d_pixar, gp-nov-style-cinematic_live_action, gp-nov-theme, gp-nov-tone, gp-nov-expressions, gp-nov-preview-box
       ... +22 IDs: gp-nov-preview-count, gp-nov-preview-lines, gp-nov-render-mode, gp-nov-clean-cinema, gp-nov-mode-flow_pack, gp-nov-mode-colab_gpu, gp-nov-mode-vps_preview, gp-nov-panel-flow_pack, gp-nov-panel-colab_gpu, gp-nov-panel-vps_preview, gp-nov-subtitles, gp-monitor-box, gp-status-title, gp-ram-badge, gp-run-id-label, gp-progress-pct, gp-progress-bar, gp-stepper-list, gp-result-box, gp-preview-video, gp-download-link, gp-tpl-${escapeHtml(t.id)}
-    Novela Studio / Vozes / Stitcher (IDs nov-* / qnv-* — 55): nov-dramatic-structure, nov-profiles-summary, nov-engine-status-badges, nov-badge-voice, nov-badge-lipsync, nov-accent-engine, btn-nov-preview-voice, nov-voice-preview-player, nov-ref-char, nov-ref-file, btn-nov-upload-ref, nov-ref-badges, btn-nov-flow-pack, nov-flow-pack-result, nov-flow-credits-summary, nov-flow-pack-cards, nov-stitch-subtitles, nov-stitch-redub, nov-stitch-files, btn-nov-stitch, nov-stitch-list, nov-stitch-result, nov-colab-status-badge, btn-nov-colab-notebook, nov-colab-url, nov-colab-engine, btn-nov-colab-connect, btn-qnv-gen, btn-qnv-add-line, qnv-title, qnv-style, qnv-dramatic-structure, qnv-platform, qnv-render-mode, qnv-subtitles-mode, qnv-clean-cinema, qnv-badge-voice, qnv-badge-lipsync, qnv-accent-engine, btn-qnv-preview-voice, qnv-voice-preview-player, btn-qnv-flow-pack, qnv-flow-pack-result, qnv-dialogue-list, qnv-dict-json, btn-qnv-submit, qnv-status-box, qnv-status-title, qnv-progress-pct, qnv-progress-bar, qnv-status-text, qnv-downloads, btn-qnv-line-play-${idx}, btn-qnv-line-guide-${idx}, qnv-guide-file-${idx}
+    Novela Studio / Vozes / Stitcher (IDs nov-* / qnv-* — 59): nov-dramatic-structure, nov-cinema-badge, nov-cinema-engine, nov-profiles-summary, nov-engine-status-badges, nov-badge-voice, nov-badge-lipsync, nov-accent-engine, btn-nov-preview-voice, nov-voice-preview-player, nov-ref-char, nov-ref-file, btn-nov-upload-ref, nov-ref-badges, btn-nov-flow-pack, nov-flow-pack-result, nov-flow-credits-summary, nov-flow-pack-cards, nov-stitch-subtitles, nov-stitch-redub, nov-stitch-files, btn-nov-stitch, nov-stitch-list, nov-stitch-result, nov-colab-status-badge, btn-nov-colab-notebook, nov-colab-url, nov-colab-engine, btn-nov-colab-connect, btn-qnv-gen, btn-qnv-add-line, qnv-title, qnv-style, qnv-dramatic-structure, qnv-platform, qnv-render-mode, qnv-subtitles-mode, qnv-clean-cinema, qnv-cinema-badge, qnv-cinema-engine, qnv-badge-voice, qnv-badge-lipsync, qnv-accent-engine, btn-qnv-preview-voice, qnv-voice-preview-player, btn-qnv-flow-pack, qnv-flow-pack-result, qnv-dialogue-list, qnv-dict-json, btn-qnv-submit, qnv-status-box, qnv-status-title, qnv-progress-pct, qnv-progress-bar, qnv-status-text, qnv-downloads, btn-qnv-line-play-${idx}, btn-qnv-line-guide-${idx}, qnv-guide-file-${idx}
     HyperFrames / Shopee POV (IDs qhf-* — 23): qhf-title, qhf-offer, qhf-cta, qhf-upload-files, qhf-campaign, qhf-campaign-preview, qhf-style, qhf-aspect, qhf-duration, qhf-voice-enabled, qhf-voice-name, qhf-viral-box, qhf-viral-status, qhf-viral-files, btn-qhf-analyze-virals, qhf-voice-script, btn-qhf-submit, qhf-status-box, qhf-status-title, qhf-progress-pct, qhf-progress-bar, qhf-status-text, qhf-downloads
     Demais Cards Modo Hard / Cotas (IDs — 20): kpi-cascade-tier, kpi-cascade-pills, kpi-cascade-sub, qvu-source-select, qvu-upload-label, qvu-file-input, qvu-uploaded-path, qvu-grade, qvu-lang, qvu-remove-silences, qvu-burn-subs, qvu-status-box, qvu-status-title, qvu-progress-pct, qvu-progress-bar, qvu-status-text, qvu-downloads, card-hard-novela, quota-modal, quota-modal-body
-    Funções JavaScript inline (119):
-      * L2517  function renderIconTag()
-      * L2524  function safeCreateIcons()
-      * L2537  function toggleSidebarCollapse()
-      * L2548  function toggleMobileSidebar()
-      * L2556  function showToast()
-      * L2571  function hideToast()
-      * L2575  function copyToClipboard()
-      * L2583  function switchTab()
-      * L2611  function focusOpenJarvis()
-      * L2627  function filterVaultTab()
-      * L2640  function setProjectFilter()
-      * L2652  function setSkillsFilter()
-      * L2665  function fetchTelemetry()
-      * L2713  function statusBadgeHTML()
-      * L2732  function renderDiagnosticInline()
-      * L2768  function renderProjects()
-      * L2885  function setQuickJarvisPrompt()
-      * L2893  function escapeJarvisHtml()
-      * L2902  function formatJarvisMarkdown()
-      * L2910  function renderOpenJarvisCard()
-      * L3120  function triggerJarvisPTT()
-      * L3143  function sendJarvisAsk()
-      * L3177  function testJarvisWebcam()
-      * L3195  function testJarvisAudio()
-      * L3213  function fetchOpenJarvisStatus()
-      * L3225  function openJarvisAction()
-      * L3247  function openJarvisLogs()
-      * L3264  function renderModoDevHeader()
-      * L3311  function toggleModoDev()
-      * L3339  function renderSkills()
-      * L3415  function fetchSkills()
-      * L3429  function fetchProjects()
-      * L3440  function projectAction()
-      * L3459  function stopAllProjects()
-      * L3479  function _formatQuotaLimit()
-      * L3484  function _renderQuotaBadgesHtml()
-      * L3517  function renderQuotaModal()
-      * L3596  function openQuotaModal()
-      * L3604  function closeQuotaModal()
-      * L3609  function fetchQuotaTelemetry()
-      * L3640  function fetchCascadeStatus()
-      * L3679  function loadKeys()
-      * L3704  function toggleInputVisibility()
-      * L3710  function clearKeyField()
-      * L3718  function saveKeys()
-      * L3761  function runProjectDiagnostic()
-      * L3775  function runGlobalDiagnostics()
-      * L3953  function openLogsModal()
-      * L3971  function refreshCurrentLogs()
-      * L3979  function closeLogsModal()
-      * L3983  function escapeHtml()
-      * L3987  function fetchOutputs()
-      * L4003  function setOutputsFilter()
-      * L4015  function renderOutputs()
-      * L4098  function humanBytesJS()
-      * L4105  function submitQuickMoneyPrinter()
-      * L4169  function pollQuickMptTask()
-      * L4221  function submitQuickVoice()
-      * L4263  function uploadSupoClipFile()
-      * L4322  function submitQuickSupoClip()
-      * L4398  function pollQuickSupoClipTask()
-      * L4430  function submitQuickOpenFilm()
-      * L4472  function hydrateVideoUseSelector()
-      * L4488  function uploadQuickVideoUseFile()
-      * L4510  function submitQuickVideoUse()
-      * L4567  function pollQuickVideoUseTask()
-      * L4611  function submitQuickHyperFrames()
-      * L4677  function pollQuickHyperFramesTask()
-      * L4716  function installPWA()
-      * L4817  function setQuickStudioMode()
-      * L4838  function setGuidedPlatform()
-      * L4852  function fetchPipelineTemplates()
-      * L4870  function renderGuidedTemplates()
-      * L4885  function setGuidedTemplate()
-      * L4916  function renderGuidedStepperInitial()
-      * L4931  function _renderCampaignPreviewBox()
-      * L4949  function onGuidedCampaignChange()
-      * L4970  function _showViralBlueprintCard()
-      * L4986  function uploadGuidedPhotos()
-      * L5008  function uploadGuidedVirals()
-      * L5029  function analyzeGuidedVirals()
-      * L5061  function uploadHardHyperFramesVirals()
-      * L5081  function analyzeHardHyperFramesVirals()
-      * L5110  function _collectGuidedParams()
-      * L5181  function submitGuidedPipeline()
-      * L5218  function pollGuidedPipeline()
-      * L5241  function resumeLastGuidedPipeline()
-      * L5258  function renderGuidedMonitorState()
-      * L5325  function openGuidedResultInHardMode()
-      * L5425  function setGuidedNovelaStyle()
-      * L5439  function addNovelaExprChip()
-      * L5449  function generateGuidedNovelaDialogue()
-      * L5501  function renderHardNovelaRows()
-      * L5562  function addHardNovelaRow()
-      * L5573  function removeHardNovelaRow()
-      * L5582  function generateHardNovelaScript()
-      * L5617  function setNovelaRenderMode()
-      * L5635  function fetchColabStatus()
-      * L5654  function connectColabTunnel()
-      * L5674  function copyVeoPrompt()
-      * L5683  function renderNovFlowPackCards()
-      * L5729  function generateNovelaFlowPack()
-      * L5771  function renderStitchTakesList()
-      * L5784  function uploadNovelaTakes()
-      * L5807  function syncNovAccentEngine()
-      * L5825  function loadRegionalVoiceProfiles()
-      * L5845  function uploadRegionalVoiceSample()
-      * L5871  function previewRegionalVoices()
-      * L5904  function previewSingleNovelaLine()
-      * L5937  function _uploadGuideBlobForLine()
-      * L5952  function uploadGuideFileForLine()
-      * L5962  function toggleGuideAudioForLine()
-      * L5997  function stitchNovelaTakes()
-      * L6059  function submitHardNovela()
-      * L6145  function fetchCampaigns()
-      * L6177  function renderHyperFramesCampaignPreview()
-      * L6184  function uploadQuickHyperFramesPhotos()
-      * L6207  function refreshAll()
-      * L6223  function pollProjectsLoop()
+    Funções JavaScript inline (121):
+      * L2544  function renderIconTag()
+      * L2551  function safeCreateIcons()
+      * L2564  function toggleSidebarCollapse()
+      * L2575  function toggleMobileSidebar()
+      * L2583  function showToast()
+      * L2598  function hideToast()
+      * L2602  function copyToClipboard()
+      * L2610  function switchTab()
+      * L2638  function focusOpenJarvis()
+      * L2654  function filterVaultTab()
+      * L2667  function setProjectFilter()
+      * L2679  function setSkillsFilter()
+      * L2692  function fetchTelemetry()
+      * L2740  function statusBadgeHTML()
+      * L2759  function renderDiagnosticInline()
+      * L2795  function renderProjects()
+      * L2912  function setQuickJarvisPrompt()
+      * L2920  function escapeJarvisHtml()
+      * L2929  function formatJarvisMarkdown()
+      * L2937  function renderOpenJarvisCard()
+      * L3147  function triggerJarvisPTT()
+      * L3170  function sendJarvisAsk()
+      * L3204  function testJarvisWebcam()
+      * L3222  function testJarvisAudio()
+      * L3240  function fetchOpenJarvisStatus()
+      * L3252  function openJarvisAction()
+      * L3274  function openJarvisLogs()
+      * L3291  function renderModoDevHeader()
+      * L3338  function toggleModoDev()
+      * L3366  function renderSkills()
+      * L3442  function fetchSkills()
+      * L3456  function fetchProjects()
+      * L3467  function projectAction()
+      * L3486  function stopAllProjects()
+      * L3506  function _formatQuotaLimit()
+      * L3511  function _renderQuotaBadgesHtml()
+      * L3544  function renderQuotaModal()
+      * L3623  function openQuotaModal()
+      * L3631  function closeQuotaModal()
+      * L3636  function fetchQuotaTelemetry()
+      * L3667  function fetchCascadeStatus()
+      * L3706  function loadKeys()
+      * L3731  function toggleInputVisibility()
+      * L3737  function clearKeyField()
+      * L3745  function saveKeys()
+      * L3788  function runProjectDiagnostic()
+      * L3802  function runGlobalDiagnostics()
+      * L3980  function openLogsModal()
+      * L3998  function refreshCurrentLogs()
+      * L4006  function closeLogsModal()
+      * L4010  function escapeHtml()
+      * L4014  function fetchOutputs()
+      * L4030  function setOutputsFilter()
+      * L4042  function renderOutputs()
+      * L4125  function humanBytesJS()
+      * L4132  function submitQuickMoneyPrinter()
+      * L4196  function pollQuickMptTask()
+      * L4248  function submitQuickVoice()
+      * L4290  function uploadSupoClipFile()
+      * L4349  function submitQuickSupoClip()
+      * L4425  function pollQuickSupoClipTask()
+      * L4457  function submitQuickOpenFilm()
+      * L4499  function hydrateVideoUseSelector()
+      * L4515  function uploadQuickVideoUseFile()
+      * L4537  function submitQuickVideoUse()
+      * L4594  function pollQuickVideoUseTask()
+      * L4638  function submitQuickHyperFrames()
+      * L4704  function pollQuickHyperFramesTask()
+      * L4743  function installPWA()
+      * L4844  function setQuickStudioMode()
+      * L4865  function setGuidedPlatform()
+      * L4879  function fetchPipelineTemplates()
+      * L4897  function renderGuidedTemplates()
+      * L4912  function setGuidedTemplate()
+      * L4943  function renderGuidedStepperInitial()
+      * L4958  function _renderCampaignPreviewBox()
+      * L4976  function onGuidedCampaignChange()
+      * L4997  function _showViralBlueprintCard()
+      * L5013  function uploadGuidedPhotos()
+      * L5035  function uploadGuidedVirals()
+      * L5056  function analyzeGuidedVirals()
+      * L5088  function uploadHardHyperFramesVirals()
+      * L5108  function analyzeHardHyperFramesVirals()
+      * L5137  function _collectGuidedParams()
+      * L5209  function submitGuidedPipeline()
+      * L5246  function pollGuidedPipeline()
+      * L5269  function resumeLastGuidedPipeline()
+      * L5286  function renderGuidedMonitorState()
+      * L5353  function openGuidedResultInHardMode()
+      * L5453  function setGuidedNovelaStyle()
+      * L5467  function addNovelaExprChip()
+      * L5477  function generateGuidedNovelaDialogue()
+      * L5530  function renderHardNovelaRows()
+      * L5593  function addHardNovelaRow()
+      * L5604  function removeHardNovelaRow()
+      * L5613  function generateHardNovelaScript()
+      * L5649  function setNovelaRenderMode()
+      * L5667  function fetchColabStatus()
+      * L5686  function connectColabTunnel()
+      * L5706  function copyVeoPrompt()
+      * L5715  function renderNovFlowPackCards()
+      * L5761  function generateNovelaFlowPack()
+      * L5805  function renderStitchTakesList()
+      * L5818  function uploadNovelaTakes()
+      * L5841  function getNovCinemaEngine()
+      * L5845  function syncNovCinemaEngine()
+      * L5860  function syncNovAccentEngine()
+      * L5878  function loadRegionalVoiceProfiles()
+      * L5898  function uploadRegionalVoiceSample()
+      * L5924  function previewRegionalVoices()
+      * L5957  function previewSingleNovelaLine()
+      * L5990  function _uploadGuideBlobForLine()
+      * L6005  function uploadGuideFileForLine()
+      * L6015  function toggleGuideAudioForLine()
+      * L6050  function stitchNovelaTakes()
+      * L6114  function submitHardNovela()
+      * L6201  function fetchCampaigns()
+      * L6233  function renderHyperFramesCampaignPreview()
+      * L6240  function uploadQuickHyperFramesPhotos()
+      * L6263  function refreshAll()
+      * L6279  function pollProjectsLoop()
 
 ### tools/colab-gpu-worker/ai_studio_colab_novela_gpu.ipynb
-    VPS Equiv.: /opt/ai-media-studio/tools/colab-gpu-worker/ai_studio_colab_novela_gpu.ipynb | Tamanho: 30.4 KB | nbformat: 4
-      * Célula 0 [markdown]: # 🚀 AI Media Studio — Google Colab GPU Worker v3.1 (`MoDA LiveVASAPipeline` L4 + Vozes Regionais)
-      * Célula 1 [code]: # @title 1. Verificar GPU NVIDIA T4 e Instalar Dependências Base + Cloudflared
-      * Célula 2 [code]: # @title 2. Instalar Combo Open-Source v2.9 (LivePortrait + LatentSync 1.5 + MuseTalk 1.5 + Checkpoints Reais + Voz
-      * Célula 3 [code]: # @title 3. Subir Servidor Warm MoDA-L4 v3.1 (/content/moda_l4_server.py: LiveVASAPipeline + /health + /animate_tur
+    VPS Equiv.: /opt/ai-media-studio/tools/colab-gpu-worker/ai_studio_colab_novela_gpu.ipynb | Tamanho: 50.8 KB | nbformat: 4
+      * Célula 0 [markdown]: # 🎬 AI Media Studio — Google Colab Pro L4 Worker v4.0 (Clean-Slate · Zero Drive)
+      * Célula 1 [code]: # @title 1. Limpeza Total & Pré-Requisitos do Sistema (Do Zero · Sem Google Drive)
+      * Célula 2 [code]: # @title 2. Instalação Limpa em Venvs Isolados (Python 3.10.16 · Zero Conflitos)
+      * Célula 3 [code]: # @title 3. Pré-Download de Pesos & Auto-Teste Real na L4 GPU (Validação antes do Túnel)
+      * Célula 4 [code]: # @title 4. Iniciar Servidor Worker Cinema Engine v4.0 + Túnel Cloudflare
 
 ### notebooks/ai_studio_colab_novela_gpu.ipynb
-    VPS Equiv.: /opt/ai-media-studio/notebooks/ai_studio_colab_novela_gpu.ipynb | Tamanho: 30.4 KB | nbformat: 4
-      * Célula 0 [markdown]: # 🚀 AI Media Studio — Google Colab GPU Worker v3.1 (`MoDA LiveVASAPipeline` L4 + Vozes Regionais)
-      * Célula 1 [code]: # @title 1. Verificar GPU NVIDIA T4 e Instalar Dependências Base + Cloudflared
-      * Célula 2 [code]: # @title 2. Instalar Combo Open-Source v2.9 (LivePortrait + LatentSync 1.5 + MuseTalk 1.5 + Checkpoints Reais + Voz
-      * Célula 3 [code]: # @title 3. Subir Servidor Warm MoDA-L4 v3.1 (/content/moda_l4_server.py: LiveVASAPipeline + /health + /animate_tur
+    VPS Equiv.: /opt/ai-media-studio/notebooks/ai_studio_colab_novela_gpu.ipynb | Tamanho: 50.8 KB | nbformat: 4
+      * Célula 0 [markdown]: # 🎬 AI Media Studio — Google Colab Pro L4 Worker v4.0 (Clean-Slate · Zero Drive)
+      * Célula 1 [code]: # @title 1. Limpeza Total & Pré-Requisitos do Sistema (Do Zero · Sem Google Drive)
+      * Célula 2 [code]: # @title 2. Instalação Limpa em Venvs Isolados (Python 3.10.16 · Zero Conflitos)
+      * Célula 3 [code]: # @title 3. Pré-Download de Pesos & Auto-Teste Real na L4 GPU (Validação antes do Túnel)
+      * Célula 4 [code]: # @title 4. Iniciar Servidor Worker Cinema Engine v4.0 + Túnel Cloudflare
 
 ### OpenJarvis CLI/MCP, jarvis-falar & Catálogo Completo de Skills Instaladas
     Binário voz: /home/wbrendo/.local/bin/jarvis-falar (reprodução TTS em alto-falante via Piper/Edge-TTS)
@@ -925,163 +1045,163 @@ SEÇÃO 4 · CATÁLOGO COMPLETO DE ROTAS FASTAPI (main.py — 92 endpoints)
   [GET      ] /api/quick/hyperframes/task/{task_id}            -> api_quick_hyperframes_task (L2952-L2956)
               Motor   : HyperFrames POV / Clone Viral Shopee 20:9
               Params  : task_id: str
-  [POST     ] /api/quick/novela/generate-script                -> api_quick_novela_generate_script (L3173-L3184)
-              Motor   : Novela Studio v3.1 (MoDA-L4) / Regional Voice / Lip-Sync / Colab
+  [POST     ] /api/quick/novela/generate-script                -> api_quick_novela_generate_script (L3184-L3197)
+              Motor   : Novela Studio (Cinema v4.0 + Fallback v3.1) / Regional Voice + AudioGate / Colab L4
               Params  : req: QuickNovelaScriptRequest
-  [POST     ] /api/quick/novela/flow-pack                      -> api_quick_novela_flow_pack (L3188-L3210)
-              Motor   : Novela Studio v3.1 (MoDA-L4) / Regional Voice / Lip-Sync / Colab
+  [POST     ] /api/quick/novela/flow-pack                      -> api_quick_novela_flow_pack (L3201-L3226)
+              Motor   : Novela Studio (Cinema v4.0 + Fallback v3.1) / Regional Voice + AudioGate / Colab L4
               Params  : req: QuickNovelaFlowPackRequest
-  [POST     ] /api/quick/novela/upload-takes                   -> api_quick_novela_upload_takes (L3214-L3265)
-              Motor   : Novela Studio v3.1 (MoDA-L4) / Regional Voice / Lip-Sync / Colab
+  [POST     ] /api/quick/novela/upload-takes                   -> api_quick_novela_upload_takes (L3230-L3281)
+              Motor   : Novela Studio (Cinema v4.0 + Fallback v3.1) / Regional Voice + AudioGate / Colab L4
               Params  : request: Request
-  [POST     ] /api/quick/novela/stitch-takes                   -> api_quick_novela_stitch_takes (L3288-L3371)
-              Motor   : Novela Studio v3.1 (MoDA-L4) / Regional Voice / Lip-Sync / Colab
+  [POST     ] /api/quick/novela/stitch-takes                   -> api_quick_novela_stitch_takes (L3304-L3389)
+              Motor   : Novela Studio (Cinema v4.0 + Fallback v3.1) / Regional Voice + AudioGate / Colab L4
               Params  : req: QuickNovelaStitchRequest
-  [GET      ] /api/quick/novela/stitch-takes/task/{task_id}    -> api_quick_novela_stitch_task (L3375-L3379)
-              Motor   : Novela Studio v3.1 (MoDA-L4) / Regional Voice / Lip-Sync / Colab
+  [GET      ] /api/quick/novela/stitch-takes/task/{task_id}    -> api_quick_novela_stitch_task (L3393-L3397)
+              Motor   : Novela Studio (Cinema v4.0 + Fallback v3.1) / Regional Voice + AudioGate / Colab L4
               Params  : task_id: str
-  [GET      ] /api/colab/notebook                              -> api_colab_notebook (L3409-L3416)
-              Motor   : Novela Studio v3.1 (MoDA-L4) / Regional Voice / Lip-Sync / Colab
+  [GET      ] /api/colab/notebook                              -> api_colab_notebook (L3435-L3442)
+              Motor   : Novela Studio (Cinema v4.0 + Fallback v3.1) / Regional Voice + AudioGate / Colab L4
               Params  : (none)
-  [GET      ] /api/colab/status                                -> api_colab_status (L3420-L3424)
-              Motor   : Novela Studio v3.1 (MoDA-L4) / Regional Voice / Lip-Sync / Colab
+  [GET      ] /api/colab/status                                -> api_colab_status (L3446-L3450)
+              Motor   : Novela Studio (Cinema v4.0 + Fallback v3.1) / Regional Voice + AudioGate / Colab L4
               Params  : (none)
-  [POST     ] /api/colab/config                                -> api_colab_config (L3428-L3435)
-              Motor   : Novela Studio v3.1 (MoDA-L4) / Regional Voice / Lip-Sync / Colab
+  [POST     ] /api/colab/config                                -> api_colab_config (L3454-L3461)
+              Motor   : Novela Studio (Cinema v4.0 + Fallback v3.1) / Regional Voice + AudioGate / Colab L4
               Params  : req: ColabConfigRequest
-  [POST     ] /api/quick/novela                                -> api_quick_novela (L3439-L3497)
-              Motor   : Novela Studio v3.1 (MoDA-L4) / Regional Voice / Lip-Sync / Colab
+  [POST     ] /api/quick/novela                                -> api_quick_novela (L3465-L3525)
+              Motor   : Novela Studio (Cinema v4.0 + Fallback v3.1) / Regional Voice + AudioGate / Colab L4
               Params  : req: QuickNovelaRequest
-  [GET      ] /api/quick/novela/task/{task_id}                 -> api_quick_novela_task (L3501-L3505)
-              Motor   : Novela Studio v3.1 (MoDA-L4) / Regional Voice / Lip-Sync / Colab
+  [GET      ] /api/quick/novela/task/{task_id}                 -> api_quick_novela_task (L3529-L3533)
+              Motor   : Novela Studio (Cinema v4.0 + Fallback v3.1) / Regional Voice + AudioGate / Colab L4
               Params  : task_id: str
-  [GET      ] /api/voices/regional/profiles                    -> api_voices_regional_profiles (L3509-L3525)
-              Motor   : Novela Studio v3.1 (MoDA-L4) / Regional Voice / Lip-Sync / Colab
+  [GET      ] /api/voices/regional/profiles                    -> api_voices_regional_profiles (L3537-L3553)
+              Motor   : Novela Studio (Cinema v4.0 + Fallback v3.1) / Regional Voice + AudioGate / Colab L4
               Params  : (none)
-  [POST     ] /api/voices/regional/upload-reference            -> api_voices_regional_upload_reference (L3529-L3558)
-              Motor   : Novela Studio v3.1 (MoDA-L4) / Regional Voice / Lip-Sync / Colab
+  [POST     ] /api/voices/regional/upload-reference            -> api_voices_regional_upload_reference (L3557-L3586)
+              Motor   : Novela Studio (Cinema v4.0 + Fallback v3.1) / Regional Voice + AudioGate / Colab L4
               Params  : request: Request
-  [GET      ] /api/voices/regional/sample/{character_id}       -> api_voices_regional_sample (L3562-L3587)
-              Motor   : Novela Studio v3.1 (MoDA-L4) / Regional Voice / Lip-Sync / Colab
+  [GET      ] /api/voices/regional/sample/{character_id}       -> api_voices_regional_sample (L3590-L3615)
+              Motor   : Novela Studio (Cinema v4.0 + Fallback v3.1) / Regional Voice + AudioGate / Colab L4
               Params  : character_id: str
-  [POST     ] /api/quick/novela/upload-line-audio              -> api_quick_novela_upload_line_audio (L3591-L3638)
-              Motor   : Novela Studio v3.1 (MoDA-L4) / Regional Voice / Lip-Sync / Colab
+  [POST     ] /api/quick/novela/upload-line-audio              -> api_quick_novela_upload_line_audio (L3619-L3666)
+              Motor   : Novela Studio (Cinema v4.0 + Fallback v3.1) / Regional Voice + AudioGate / Colab L4
               Params  : request: Request
-  [POST     ] /api/quick/novela/preview-voice                  -> api_quick_novela_preview_voice (L3642-L3692)
-              Motor   : Novela Studio v3.1 (MoDA-L4) / Regional Voice / Lip-Sync / Colab
+  [POST     ] /api/quick/novela/preview-voice                  -> api_quick_novela_preview_voice (L3670-L3720)
+              Motor   : Novela Studio (Cinema v4.0 + Fallback v3.1) / Regional Voice + AudioGate / Colab L4
               Params  : req: QuickNovelaPreviewVoiceRequest
-  [GET      ] /api/quick/novela/preview-audio/{filename}       -> api_quick_novela_preview_audio (L3696-L3701)
-              Motor   : Novela Studio v3.1 (MoDA-L4) / Regional Voice / Lip-Sync / Colab
+  [GET      ] /api/quick/novela/preview-audio/{filename}       -> api_quick_novela_preview_audio (L3724-L3729)
+              Motor   : Novela Studio (Cinema v4.0 + Fallback v3.1) / Regional Voice + AudioGate / Colab L4
               Params  : filename: str
-  [GET      ] /api/pipelines/templates                         -> api_pipelines_templates (L3816-L3823)
+  [GET      ] /api/pipelines/templates                         -> api_pipelines_templates (L3844-L3851)
               Motor   : Guided Pipelines Orchestrator (Trilhas 1-6 + RAM Relay)
               Params  : (none)
-  [POST     ] /api/pipelines/start                             -> api_pipelines_start (L3827-L3839)
+  [POST     ] /api/pipelines/start                             -> api_pipelines_start (L3855-L3867)
               Motor   : Guided Pipelines Orchestrator (Trilhas 1-6 + RAM Relay)
               Params  : req: PipelineStartRequest
-  [GET      ] /api/pipelines/status/{run_id}                   -> api_pipelines_status (L3843-L3851)
+  [GET      ] /api/pipelines/status/{run_id}                   -> api_pipelines_status (L3871-L3879)
               Motor   : Guided Pipelines Orchestrator (Trilhas 1-6 + RAM Relay)
               Params  : run_id: str
-  [GET      ] /api/pipelines/runs                              -> api_pipelines_runs (L3855-L3857)
+  [GET      ] /api/pipelines/runs                              -> api_pipelines_runs (L3883-L3885)
               Motor   : Guided Pipelines Orchestrator (Trilhas 1-6 + RAM Relay)
               Params  : limit: int
-  [POST     ] /api/pipelines/resume/{run_id}                   -> api_pipelines_resume (L3861-L3867)
+  [POST     ] /api/pipelines/resume/{run_id}                   -> api_pipelines_resume (L3889-L3895)
               Motor   : Guided Pipelines Orchestrator (Trilhas 1-6 + RAM Relay)
               Params  : run_id: str, req: Optional[PipelineResumeRequest]
-  [GET      ] /app/supoclip/api/v1/clips                       -> api_supoclip_subroute_clips (L3874-L3875)
+  [GET      ] /app/supoclip/api/v1/clips                       -> api_supoclip_subroute_clips (L3902-L3903)
               Motor   : SupoClip Stack Bridge
               Params  : (none)
-  [GET      ] /app/supoclip/api/v1/tasks                       -> api_supoclip_subroute_clips (L3874-L3875)
+  [GET      ] /app/supoclip/api/v1/tasks                       -> api_supoclip_subroute_clips (L3902-L3903)
               Motor   : SupoClip Stack Bridge
               Params  : (none)
-  [GET      ] /app/supoclip-api/api/v1/clips                   -> api_supoclip_subroute_clips (L3874-L3875)
+  [GET      ] /app/supoclip-api/api/v1/clips                   -> api_supoclip_subroute_clips (L3902-L3903)
               Motor   : SupoClip Stack Bridge
               Params  : (none)
-  [GET      ] /app/supoclip-api/api/v1/tasks                   -> api_supoclip_subroute_clips (L3874-L3875)
+  [GET      ] /app/supoclip-api/api/v1/tasks                   -> api_supoclip_subroute_clips (L3902-L3903)
               Motor   : SupoClip Stack Bridge
               Params  : (none)
-  [POST     ] /app/supoclip/upload                             -> api_supoclip_subroute_upload (L3880-L3885)
+  [POST     ] /app/supoclip/upload                             -> api_supoclip_subroute_upload (L3908-L3913)
               Motor   : SupoClip Stack Bridge
               Params  : request: Request, video: Optional[UploadFile], file: Optional[UploadFile]
-  [POST     ] /app/supoclip-api/upload                         -> api_supoclip_subroute_upload (L3880-L3885)
+  [POST     ] /app/supoclip-api/upload                         -> api_supoclip_subroute_upload (L3908-L3913)
               Motor   : SupoClip Stack Bridge
               Params  : request: Request, video: Optional[UploadFile], file: Optional[UploadFile]
-  [GET      ] /api/stack-standby-view                          -> api_stack_standby_view (L3889-L3980)
+  [GET      ] /api/stack-standby-view                          -> api_stack_standby_view (L3917-L4008)
               Motor   : Painel/Infra
               Params  : request: Request, uri: str
-  [GET      ] /api/skills/dev-mode                             -> api_get_modo_dev (L4069-L4079)
+  [GET      ] /api/skills/dev-mode                             -> api_get_modo_dev (L4097-L4107)
               Motor   : Painel/Infra
               Params  : (none)
-  [GET      ] /api/skills/modo-dev                             -> api_get_modo_dev (L4069-L4079)
+  [GET      ] /api/skills/modo-dev                             -> api_get_modo_dev (L4097-L4107)
               Motor   : Painel/Infra
               Params  : (none)
-  [POST     ] /api/skills/dev-mode                             -> api_toggle_modo_dev (L4084-L4120)
+  [POST     ] /api/skills/dev-mode                             -> api_toggle_modo_dev (L4112-L4148)
               Motor   : Painel/Infra
               Params  : req: Optional[ModoDevActionRequest]
-  [POST     ] /api/skills/modo-dev                             -> api_toggle_modo_dev (L4084-L4120)
+  [POST     ] /api/skills/modo-dev                             -> api_toggle_modo_dev (L4112-L4148)
               Motor   : Painel/Infra
               Params  : req: Optional[ModoDevActionRequest]
-  [GET      ] /api/skills                                      -> api_list_skills (L4124-L4156)
+  [GET      ] /api/skills                                      -> api_list_skills (L4152-L4184)
               Motor   : Painel/Infra
               Params  : (none)
-  [GET      ] /api/openjarvis/status                           -> api_openjarvis_status (L4255-L4256)
+  [GET      ] /api/openjarvis/status                           -> api_openjarvis_status (L4283-L4284)
               Motor   : OpenJarvis Bridge
               Params  : (none)
-  [POST     ] /api/openjarvis/ptt                              -> api_openjarvis_ptt (L4260-L4281)
+  [POST     ] /api/openjarvis/ptt                              -> api_openjarvis_ptt (L4288-L4309)
               Motor   : OpenJarvis Bridge
               Params  : (none)
               Resumo  : Trigger 1 on-demand Push-to-Talk voice listen, transcribe, MCP execution, and 48kHz TTS reply.
-  [GET      ] /api/openjarvis/plan                             -> api_openjarvis_plan (L4648-L4657)
+  [GET      ] /api/openjarvis/plan                             -> api_openjarvis_plan (L4676-L4685)
               Motor   : OpenJarvis Bridge
               Params  : req: Optional[OpenJarvisAskRequest], goal: str
               Resumo  : Live studio_plan_production endpoint for cloud panel & integrations.
-  [POST     ] /api/openjarvis/plan                             -> api_openjarvis_plan (L4648-L4657)
+  [POST     ] /api/openjarvis/plan                             -> api_openjarvis_plan (L4676-L4685)
               Motor   : OpenJarvis Bridge
               Params  : req: Optional[OpenJarvisAskRequest], goal: str
               Resumo  : Live studio_plan_production endpoint for cloud panel & integrations.
-  [POST     ] /api/openjarvis/ask                              -> api_openjarvis_ask (L4661-L4692)
+  [POST     ] /api/openjarvis/ask                              -> api_openjarvis_ask (L4689-L4720)
               Motor   : OpenJarvis Bridge
               Params  : req: OpenJarvisAskRequest
               Resumo  : Execute an active command via Cloud Master Operator on VPS or local OpenJarvis runtime.
-  [POST     ] /api/openjarvis/audio-test                       -> api_openjarvis_audio_test (L4696-L4708)
+  [POST     ] /api/openjarvis/audio-test                       -> api_openjarvis_audio_test (L4724-L4736)
               Motor   : OpenJarvis Bridge
               Params  : (none)
               Resumo  : Run 48,000 Hz Stereo SoXR self-diagnostic voice test.
-  [POST     ] /api/openjarvis/webcam-test                      -> api_openjarvis_webcam_test (L4712-L4723)
+  [POST     ] /api/openjarvis/webcam-test                      -> api_openjarvis_webcam_test (L4740-L4751)
               Motor   : OpenJarvis Bridge
               Params  : (none)
               Resumo  : Capture 1 frame from /dev/video0 on demand, release camera immediately, and describe via multimodal cascade.
-  [POST     ] /api/openjarvis/action                           -> api_openjarvis_action (L4727-L4779)
+  [POST     ] /api/openjarvis/action                           -> api_openjarvis_action (L4755-L4807)
               Motor   : OpenJarvis Bridge
               Params  : req: OpenJarvisActionRequest
-  [GET      ] /api/openjarvis/logs                             -> api_openjarvis_logs (L4783-L4792)
+  [GET      ] /api/openjarvis/logs                             -> api_openjarvis_logs (L4811-L4820)
               Motor   : OpenJarvis Bridge
               Params  : (none)
-  [GET      ] /api/keys                                        -> api_get_keys (L4800-L4810)
+  [GET      ] /api/keys                                        -> api_get_keys (L4828-L4838)
               Motor   : Vault Central, Gateway /v1 & Smart Quota Router
               Params  : (none)
-  [POST     ] /api/keys                                        -> api_save_keys (L4828-L4861)
+  [POST     ] /api/keys                                        -> api_save_keys (L4856-L4889)
               Motor   : Vault Central, Gateway /v1 & Smart Quota Router
               Params  : req: SaveKeysRequest
-  [POST     ] /v1/chat/completions                             -> api_chat_completions (L5643-L5647)
+  [POST     ] /v1/chat/completions                             -> api_chat_completions (L5671-L5675)
               Motor   : Vault Central, Gateway /v1 & Smart Quota Router
               Params  : req: ChatCompletionRequest
-  [POST     ] /api/ai/chat/completions                         -> api_chat_completions (L5643-L5647)
+  [POST     ] /api/ai/chat/completions                         -> api_chat_completions (L5671-L5675)
               Motor   : Painel/Infra
               Params  : req: ChatCompletionRequest
-  [GET      ] /v1/models                                       -> api_v1_models (L5651-L5661)
+  [GET      ] /v1/models                                       -> api_v1_models (L5679-L5689)
               Motor   : Vault Central, Gateway /v1 & Smart Quota Router
               Params  : (none)
-  [GET      ] /api/ai/quota-telemetry                          -> api_ai_quota_telemetry (L5665-L5675)
+  [GET      ] /api/ai/quota-telemetry                          -> api_ai_quota_telemetry (L5693-L5703)
               Motor   : Vault Central, Gateway /v1 & Smart Quota Router
               Params  : (none)
-  [GET      ] /api/ai/cascade-status                           -> api_ai_cascade_status (L5679-L5749)
+  [GET      ] /api/ai/cascade-status                           -> api_ai_cascade_status (L5707-L5777)
               Motor   : Vault Central, Gateway /v1 & Smart Quota Router
               Params  : (none)
-  [POST     ] /api/diagnostics/all                             -> api_diagnostics_all (L6636-L6650)
+  [POST     ] /api/diagnostics/all                             -> api_diagnostics_all (L6664-L6678)
               Motor   : Painel/Infra
               Params  : (none)
-  [POST     ] /api/diagnostics/{project_id}                    -> api_diagnostics_project (L6654-L6656)
+  [POST     ] /api/diagnostics/{project_id}                    -> api_diagnostics_project (L6682-L6684)
               Motor   : Painel/Infra
               Params  : project_id: str
 
@@ -1090,6 +1210,7 @@ SEÇÃO 5 · TESTES AUTOMATIZADOS, EXPORTS VALIDADOS NA VPS, GOVERNANÇA GIT & B
 ----------------------------------------------------------------------------------------------------
 
 5.1 Suíte de Testes E2E (Node/Playwright 1440x900 + 390x844) e Auditores Python (tests/):
+  - tests/cinema_qa.py                       (40.0 KB) :: #!/usr/bin/env python3 | """Cinematic Quality Assurance & Objective Video Auditor (v4.0). | Measures objective cine
   - tests/e2e_elseve_campaign.mjs            (6.4 KB) :: #!/usr/bin/env node | import fs from 'node:fs'; | import { createRequire } from 'node:module';
   - tests/e2e_expansion_v22.mjs              (12.7 KB) :: #!/usr/bin/env node | import fs from 'node:fs'; | import { execFileSync } from 'node:child_process'; | import { cre
   - tests/e2e_guided_pipelines_v23.mjs       (11.2 KB) :: #!/usr/bin/env node | import fs from 'node:fs'; | import { createRequire } from 'node:module';
@@ -1115,6 +1236,11 @@ SEÇÃO 5 · TESTES AUTOMATIZADOS, EXPORTS VALIDADOS NA VPS, GOVERNANÇA GIT & B
       * hyperframes_kit-2-leos-extraordin-rio-elseve_1794950104_df7e3e.mp4         (8.0 MB)
       * hyperframes_ai-media-studio-pro-e2e_1794943370_f377a1.mp4                  (1.5 MB)
   - exports/novela/ (12 arquivos recentes):
+      * novela_stitched_enzo-da-capital-confundindo-g-ri_1795093765_cb6502.mp4     (144.2 KB)
+      * v4_e2e_nordeste_render_r2.mp4                                              (4.1 MB)
+      * novela_stitched_segredo-no-altar-r2_1795093240_c2c490.mp4                  (1.8 MB)
+      * v4_e2e_nordeste_render.mp4                                                 (3.6 MB)
+      * novela_stitched_segredo-no-altar_1795092705_421a20.mp4                     (1.9 MB)
       * novela_stitched_enzo-da-capital-confundindo-g-ri_1795051686_0fd042.mp4     (112.0 KB)
       * novela_moda_l4_v31.mp4                                                     (3.4 MB)
       * novela_stitched_enzo-da-capital-confundindo-g-ri_1795044417_f37a6e.mp4     (113.4 KB)
@@ -1122,11 +1248,6 @@ SEÇÃO 5 · TESTES AUTOMATIZADOS, EXPORTS VALIDADOS NA VPS, GOVERNANÇA GIT & B
       * novela_cinema_polished_v30.mp4                                             (2.1 MB)
       * novela_stitched_enzo-da-capital-confundindo-g-ri_1795032360_7bd9b6.mp4     (113.0 KB)
       * novela_stitched_enzo-da-capital-confundindo-g-ri_1795032193_310512.mp4     (111.2 KB)
-      * novela_gpu_real_v29.mp4                                                    (3.6 MB)
-      * novela_3d_nordeste_v28.mp4                                                 (4.2 MB)
-      * novela_cinematografica_vergonha_v28.mp4                                    (4.2 MB)
-      * novela_nordeste_lipsync_v27.mp4                                            (3.4 MB)
-      * novela_sotaque_nordestino_v26.mp4                                          (6.1 MB)
   - exports/pipelines/ (0 arquivos recentes):
   - exports/videouse/ (4 arquivos recentes):
       * videouse_demo-videouse-pt_1794967437_a5e6ff.mp4                            (199.8 KB)
