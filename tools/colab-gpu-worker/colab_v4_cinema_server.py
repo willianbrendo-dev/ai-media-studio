@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """Google Colab Pro L4 (24GB VRAM) Cinema Engine v4.0 Worker & Benchmark Server.
 
-Fixes all v2.9/v3.1 Colab notebook failures:
-1. Honest /health reporting (zero fake stubs).
-2. Persistent 5 TB Google Drive cache for HF weights & uv/pip caches.
-3. Strict GPU serialization Lock + explicit torch.cuda.empty_cache() cleanup.
-4. Async Job Queue (POST /jobs/animate_scene + GET /jobs/{id}) avoiding Cloudflare 524 timeouts.
-5. Real Seed-VC speech conversion (--f0-condition False --auto-f0-adjust True --fp16 True) with
-   explicit HTTP 500 failure instead of silent copy fallbacks.
-6. Clean muxing WITHOUT tpad=stop_mode=clone frame freezing.
-7. Token-protected /admin/exec (disabled unless COLAB_AUTH_TOKEN is explicitly configured).
+Zero-Drive, Clean-Slate BigTech Architecture:
+1. Local high-speed NVMe runtime under /content/ai_studio_v4 (zero Google Drive FUSE slowdowns/popups).
+2. Dual isolated uv Python 3.10 virtual environments:
+   - /content/ai_studio_v4/envs/seedvc : isolated numpy==1.26.4 + transformers==4.46.3 Seed-VC CLI runtime.
+   - /content/ai_studio_v4/envs/wangp  : isolated FastAPI + WanGP shared/api.py persistent session runtime.
+3. Persistent in-process WanGPSession (no cold 14B-22B reloads between shots) with INT8/SDPA/Profile-4 L4 memory safety.
+4. Honest /health telemetry (GPU name, real free/total VRAM, disk free GB, loaded model & readiness flags).
+5. Async Job Queue (/jobs/animate_scene + /jobs/{id}) immune to Cloudflare 524 100s timeouts.
+6. Clean stdout logging (zero noisy stderr red/pink boxes in Colab outputs).
 """
 
 from __future__ import annotations
@@ -22,6 +22,7 @@ import math
 import os
 import shutil
 import subprocess
+import sys
 import threading
 import time
 import uuid
@@ -34,24 +35,45 @@ from pydantic import BaseModel
 import uvicorn
 
 
+os.environ.setdefault("WAN2GP_DISABLE_AUDIO", "1")
+os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
+os.environ.setdefault("HF_HUB_VERBOSITY", "error")
+os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
+os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
+
+WORKSPACE_ROOT = Path(os.environ.get("AI_STUDIO_ROOT", "/content/ai_studio_v4"))
+REPOS_DIR = WORKSPACE_ROOT / "repos"
+HF_CACHE_DIR = Path(os.environ.get("HF_HOME", str(WORKSPACE_ROOT / "hf_cache")))
+CONFIG_DIR = WORKSPACE_ROOT / "config"
+OUTPUTS_DIR = WORKSPACE_ROOT / "outputs" / "wangp"
+
 COLAB_AUTH_TOKEN = os.environ.get("COLAB_AUTH_TOKEN", "").strip()
-DRIVE_CACHE_ROOT = Path(os.environ.get("AI_STUDIO_CACHE_DIR", "/content/drive/MyDrive/AI_Media_Studio_v4_Cache"))
-LOCAL_CACHE_ROOT = Path("/content/ai_studio_cache")
-CACHE_ROOT = DRIVE_CACHE_ROOT if Path("/content/drive/MyDrive").exists() else LOCAL_CACHE_ROOT
+DEFAULT_VIDEO_MODEL = os.environ.get("AI_STUDIO_VIDEO_MODEL", "ltx2_25_22B_distilled").strip()
 
-REPOS_DIR = CACHE_ROOT / "repos"
-MODELS_DIR = CACHE_ROOT / "models"
-PY311_BIN = Path(os.environ.get("AI_STUDIO_PY311_BIN", "/content/venv_cinema311/bin/python"))
-EXEC_PYTHON = str(PY311_BIN) if PY311_BIN.is_file() else "python3"
-
-SEED_VC_DIR = REPOS_DIR / "seed-vc" if (REPOS_DIR / "seed-vc").exists() else Path("/content/seed-vc")
-WANGP_DIR = REPOS_DIR / "WanGP" if (REPOS_DIR / "WanGP").exists() else Path("/content/WanGP")
-LTX_DIR = REPOS_DIR / "LTX-2" if (REPOS_DIR / "LTX-2").exists() else Path("/content/LTX-2")
-LONGCAT_DIR = REPOS_DIR / "LongCat-Video" if (REPOS_DIR / "LongCat-Video").exists() else Path("/content/LongCat-Video")
+SEED_VC_PYTHON = Path(os.environ.get("AI_STUDIO_SEEDVC_PY", str(WORKSPACE_ROOT / "envs" / "seedvc" / "bin" / "python")))
+SEED_VC_DIR = Path(os.environ.get("AI_STUDIO_SEEDVC_DIR", str(REPOS_DIR / "seed-vc")))
+WANGP_DIR = Path(os.environ.get("AI_STUDIO_WANGP_DIR", str(REPOS_DIR / "WanGP")))
 
 GPU_LOCK = threading.Lock()
 JOBS_LOCK = threading.Lock()
 JOBS: Dict[str, Dict[str, Any]] = {}
+_WANGP_SESSION = None
+
+
+BACKEND_MODEL_MAP: Dict[str, str] = {
+    "auto": DEFAULT_VIDEO_MODEL,
+    "wangp_wan22_s2v": DEFAULT_VIDEO_MODEL,
+    "wan22_s2v_v4": DEFAULT_VIDEO_MODEL,
+    "ltx25_v4": "ltx2_25_22B_distilled",
+    "ltx25_distilled": "ltx2_25_22B_distilled",
+    "ltx2_25_22b_distilled": "ltx2_25_22B_distilled",
+    "longcat_avatar": "longcat_avatar_v1_5",
+    "longcat_avatar_v1_5": "longcat_avatar_v1_5",
+    "infinitetalk": "infinitetalk",
+    "multitalk": "multitalk",
+    "i2v_2_2": "i2v_2_2",
+}
 
 
 def _cleanup_vram() -> None:
@@ -66,13 +88,33 @@ def _cleanup_vram() -> None:
 
 def _gpu_info() -> Dict[str, Any]:
     if not torch.cuda.is_available():
-        return {"gpu": "CPU", "vram_gb": 0.0, "cuda_ok": False}
+        return {"gpu": "CPU", "vram_gb": 0.0, "vram_free_gb": 0.0, "cuda_ok": False}
     props = torch.cuda.get_device_properties(0)
+    free_b, total_b = torch.cuda.mem_get_info(0)
     return {
         "gpu": torch.cuda.get_device_name(0),
-        "vram_gb": round(props.total_memory / (1024 ** 3), 1),
+        "vram_gb": round(total_b / (1024 ** 3), 1),
+        "vram_free_gb": round(free_b / (1024 ** 3), 1),
         "cuda_ok": True,
+        "torch_version": torch.__version__,
+        "cuda_version": getattr(torch.version, "cuda", ""),
     }
+
+
+def _smi_used_gb() -> float:
+    try:
+        out = subprocess.check_output(
+            ["nvidia-smi", "--query-gpu=memory.used", "--format=csv,noheader,nounits"],
+            text=True,
+            timeout=5,
+        ).strip().splitlines()
+        if out:
+            return round(float(out[0].strip()) / 1024.0, 2)
+    except Exception:
+        pass
+    if torch.cuda.is_available():
+        return round(torch.cuda.max_memory_allocated() / (1024 ** 3), 2)
+    return 0.0
 
 
 def _require_token(token: str, require_configured: bool = False) -> None:
@@ -114,7 +156,54 @@ def _mux_no_freeze(raw_mp4: Path, wav_path: Optional[Path], out_mp4: Path, width
     subprocess.run(cmd, check=True, capture_output=True)
 
 
-app = FastAPI(title="AI Media Studio Colab Cinema Engine v4.0", version="4.0.0-cinema-l4")
+def _get_wangp_session():
+    global _WANGP_SESSION
+    if _WANGP_SESSION is not None:
+        return _WANGP_SESSION
+    if not (WANGP_DIR / "shared" / "api.py").is_file():
+        raise RuntimeError(f"WanGP não instalado em {WANGP_DIR}")
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
+    if str(WANGP_DIR) not in sys.path:
+        sys.path.insert(0, str(WANGP_DIR))
+    from shared.api import init as wangp_init  # type: ignore
+
+    _WANGP_SESSION = wangp_init(
+        root=WANGP_DIR,
+        config_path=CONFIG_DIR,
+        output_dir=OUTPUTS_DIR,
+        cli_args=["--attention", "sdpa", "--profile", "4"],
+        console_output=False,
+    )
+    return _WANGP_SESSION
+
+
+def _resolve_model_type(requested_backend: str, has_audio: bool) -> str:
+    key = (requested_backend or "auto").strip().lower()
+    if key == "seed_vc_only":
+        raise RuntimeError("Este worker foi iniciado em modo seed_vc_only (sem modelo de vídeo).")
+    resolved = BACKEND_MODEL_MAP.get(key) or DEFAULT_VIDEO_MODEL
+    if resolved == "seed_vc_only":
+        raise RuntimeError("Worker configurado apenas para Seed-VC (VIDEO_MODEL=seed_vc_only).")
+    if not has_audio and resolved in ("infinitetalk", "multitalk", "longcat_avatar_v1_5"):
+        return "i2v_2_2"
+    return resolved
+
+
+def _resolve_model_resolution(model_type: str, width: int, height: int) -> str:
+    portrait = height >= width
+    if model_type in ("infinitetalk", "multitalk"):
+        return "480x832" if portrait else "832x480"
+    if "ltx2" in model_type:
+        w = max(256, (width // 32) * 32)
+        h = max(256, (height // 32) * 32)
+        return f"{w}x{h}"
+    if "longcat" in model_type:
+        return "480x832" if portrait else "832x480"
+    return "480x832" if portrait else "832x480"
+
+
+app = FastAPI(title="AI Media Studio Colab Cinema Engine v4.0", version="4.0.0-clean-l4")
 
 
 class ExecReq(BaseModel):
@@ -135,8 +224,8 @@ class AnimateSceneReq(BaseModel):
     image_b64: str
     audio_b64: str = ""
     prompt: str
-    negative_prompt: str = "static portrait, frozen posture, distorted hands, extra fingers, looking into camera lens, watermark"
-    backend: str = "wangp_wan22_s2v"  # wangp_wan22_s2v | ltx25_distilled | longcat_avatar
+    negative_prompt: str = "static portrait, frozen posture, distorted hands, extra fingers, watermark, overlaid text"
+    backend: str = "auto"
     steps: int = 8
     guidance_scale: float = 3.5
     duration_sec: float = 3.2
@@ -152,23 +241,25 @@ def health(x_colab_token: str = Header(default="")):
     info = _gpu_info()
     disk_free_gb = 0.0
     try:
-        st = shutil.disk_usage(str(CACHE_ROOT))
+        st = shutil.disk_usage(str(WORKSPACE_ROOT if WORKSPACE_ROOT.exists() else Path("/content")))
         disk_free_gb = round(st.free / (1024 ** 3), 1)
     except Exception:
         pass
+    wangp_ready = (WANGP_DIR / "wgp.py").is_file() and (WANGP_DIR / "shared" / "api.py").is_file()
     return {
         "ok": True,
         "ready": True,
-        "version": "4.0.0-cinema-l4",
+        "version": "4.0.0-clean-l4",
         **info,
-        "exec_python": EXEC_PYTHON,
-        "cache_root": str(CACHE_ROOT),
+        "default_video_model": DEFAULT_VIDEO_MODEL,
+        "workspace_root": str(WORKSPACE_ROOT),
         "cache_free_gb": disk_free_gb,
-        "drive_mounted": Path("/content/drive/MyDrive").exists(),
-        "seed_vc_ready": (SEED_VC_DIR / "inference.py").is_file(),
-        "wangp_ready": (WANGP_DIR / "wgp.py").is_file(),
-        "ltx2_ready": LTX_DIR.exists(),
-        "longcat_ready": (LONGCAT_DIR / "run_demo_avatar_single_audio_to_video.py").is_file(),
+        "drive_mounted": False,
+        "seed_vc_ready": SEED_VC_PYTHON.is_file() and (SEED_VC_DIR / "inference.py").is_file(),
+        "wangp_ready": wangp_ready and DEFAULT_VIDEO_MODEL != "seed_vc_only",
+        "ltx2_ready": wangp_ready and "ltx2" in DEFAULT_VIDEO_MODEL,
+        "longcat_ready": wangp_ready and "longcat" in DEFAULT_VIDEO_MODEL,
+        "wangp_session_warm": _WANGP_SESSION is not None,
         "active_jobs": sum(1 for j in JOBS.values() if j.get("status") == "processing"),
     }
 
@@ -184,10 +275,10 @@ def admin_exec(req: ExecReq, x_colab_token: str = Header(default="")):
 def voice_convert(req: VoiceConvertReq, x_colab_token: str = Header(default="")):
     _require_token(x_colab_token, require_configured=False)
     inf_py = SEED_VC_DIR / "inference.py"
-    if not inf_py.is_file():
-        raise HTTPException(status_code=503, detail=f"Seed-VC não encontrado em {inf_py}")
+    if not inf_py.is_file() or not SEED_VC_PYTHON.is_file():
+        raise HTTPException(status_code=503, detail=f"Seed-VC não encontrado em {SEED_VC_DIR}")
 
-    job_dir = Path(f"/tmp/svc_v4_{uuid.uuid4().hex[:8]}")
+    job_dir = WORKSPACE_ROOT / "tmp" / f"svc_v4_{uuid.uuid4().hex[:8]}"
     job_dir.mkdir(parents=True, exist_ok=True)
     t0 = time.time()
     with GPU_LOCK:
@@ -201,7 +292,7 @@ def voice_convert(req: VoiceConvertReq, x_colab_token: str = Header(default=""))
             t_wav.write_bytes(base64.b64decode(req.target_timbre_b64))
 
             cmd = [
-                EXEC_PYTHON, str(inf_py),
+                str(SEED_VC_PYTHON), str(inf_py),
                 "--source", str(g_wav),
                 "--target", str(t_wav),
                 "--output", str(out_dir),
@@ -211,7 +302,12 @@ def voice_convert(req: VoiceConvertReq, x_colab_token: str = Header(default=""))
                 "--auto-f0-adjust", "True" if not req.f0_condition else "False",
                 "--fp16", "True",
             ]
-            env = {**os.environ, "HF_HOME": str(CACHE_ROOT / "hf_hub")}
+            env = {
+                **os.environ,
+                "HF_HOME": str(HF_CACHE_DIR),
+                "PYTHONWARNINGS": "ignore",
+                "HF_HUB_VERBOSITY": "error",
+            }
             proc = subprocess.run(cmd, cwd=str(SEED_VC_DIR), env=env, capture_output=True, text=True, timeout=180)
             gen = next(iter(sorted(out_dir.glob("*.wav"))), None)
             if proc.returncode != 0 or not gen or not gen.is_file():
@@ -219,13 +315,15 @@ def voice_convert(req: VoiceConvertReq, x_colab_token: str = Header(default=""))
 
             subprocess.run(
                 ["ffmpeg", "-y", "-i", str(gen), "-ar", "48000", "-ac", "2", "-c:a", "pcm_s16le", str(out_wav)],
-                check=True, capture_output=True
+                check=True,
+                capture_output=True,
             )
             return {
                 "ok": True,
                 "engine": "seed-vc-v4-real",
                 "elapsed_s": round(time.time() - t0, 2),
                 "duration": round(_probe_dur(out_wav), 2),
+                "vram_used_gb": _smi_used_gb(),
                 "character_id": req.character_id,
                 "audio_b64": base64.b64encode(out_wav.read_bytes()).decode("ascii"),
             }
@@ -237,7 +335,7 @@ def voice_convert(req: VoiceConvertReq, x_colab_token: str = Header(default=""))
 
 
 def _execute_scene_job(job_id: str, req: AnimateSceneReq) -> None:
-    job_dir = Path(f"/tmp/scene_v4_{job_id}")
+    job_dir = WORKSPACE_ROOT / "tmp" / f"scene_v4_{job_id}"
     job_dir.mkdir(parents=True, exist_ok=True)
     t0 = time.time()
     try:
@@ -253,47 +351,53 @@ def _execute_scene_job(job_id: str, req: AnimateSceneReq) -> None:
             dur_target = max(1.0, min(10.0, _probe_dur(wav_p)))
 
         fps = int(req.fps or 24)
-        # Wan / LTX require 4k+1 / 8k+1 frame alignment
-        raw_frames = int(math.ceil(dur_target * fps)) + 4
-        aligned_frames = ((raw_frames - 1 + 3) // 4) * 4 + 1
-        out_dir = job_dir / "render_out"
-        out_dir.mkdir(exist_ok=True)
         final_mp4 = job_dir / "final_scene.mp4"
+        resolved_model = _resolve_model_type(req.backend, has_audio=(wav_p is not None))
 
         with GPU_LOCK:
-            if torch.cuda.is_available():
-                torch.cuda.reset_peak_memory_stats()
-            env = {**os.environ, "HF_HOME": str(CACHE_ROOT / "hf_hub")}
-            if req.backend == "wangp_wan22_s2v":
-                wgp_py = WANGP_DIR / "wgp.py"
-                if not wgp_py.is_file():
-                    raise RuntimeError(f"WanGP não instalado em {WANGP_DIR}")
-                settings_p = job_dir / "wangp_job.json"
-                settings_p.write_text(json.dumps({
-                    "model_type": "s2v_14B" if wav_p else "i2v_2_2",
-                    "prompt": req.prompt,
-                    "negative_prompt": req.negative_prompt,
-                    "resolution": f"{req.width}x{req.height}",
-                    "num_inference_steps": int(req.steps),
-                    "guidance_scale": float(req.guidance_scale),
-                    "video_length": aligned_frames,
-                    "force_fps": fps,
-                    "seed": int(req.seed),
-                    "image_path": str(img_p),
-                    "audio_path": str(wav_p) if wav_p else "",
-                }, indent=2), encoding="utf-8")
-                proc = subprocess.run(
-                    [EXEC_PYTHON, str(wgp_py), "--process", str(settings_p), "--output-dir", str(out_dir)],
-                    cwd=str(WANGP_DIR), env=env, capture_output=True, text=True, timeout=600,
-                )
-                cand = next(iter(sorted(out_dir.rglob("*.mp4"))), None)
-                if proc.returncode != 0 or not cand:
-                    raise RuntimeError(f"WanGP falhou (rc={proc.returncode}): {(proc.stderr or proc.stdout)[-500:]}")
-                _mux_no_freeze(cand, wav_p, final_mp4, req.width, req.height, fps=fps)
-            else:
-                raise RuntimeError(f"Backend {req.backend} ainda não habilitado neste worker.")
+            session = _get_wangp_session()
+            settings = session.get_default_settings(resolved_model)
+            mdef = session.get_model_def(resolved_model) or {}
+            schema = (session.get_model_schema(resolved_model) or {}).get("metadata", {})
+            f_min = int(schema.get("frames_minimum") or mdef.get("frames_minimum") or 17)
+            f_step = int(schema.get("frames_steps") or mdef.get("frames_steps") or 8)
+            f_off = int(mdef.get("frames_offset") or 1)
+            raw_frames = max(f_min, int(math.ceil(dur_target * fps)) + 4)
+            steps_n = max(0, (raw_frames - f_off + f_step - 1) // f_step)
+            aligned_frames = max(f_min, steps_n * f_step + f_off)
 
-            peak_vram = round(torch.cuda.max_memory_allocated() / (1024 ** 3), 2) if torch.cuda.is_available() else 0.0
+            settings["model_type"] = resolved_model
+            settings["prompt"] = req.prompt
+            settings["negative_prompt"] = req.negative_prompt
+            settings["resolution"] = _resolve_model_resolution(resolved_model, int(req.width), int(req.height))
+            settings["video_length"] = aligned_frames
+            settings["force_fps"] = fps
+            settings["seed"] = int(req.seed)
+            settings["image_start"] = str(img_p)
+            settings["image_prompt_type"] = "S"
+            if wav_p is not None:
+                settings["audio_guide"] = str(wav_p)
+                settings["audio_prompt_type"] = "AS" if "ltx2" in resolved_model else "A"
+            if "ltx2" in resolved_model and "distilled" in resolved_model:
+                settings["num_inference_steps"] = 8
+            elif "longcat" in resolved_model:
+                settings["num_inference_steps"] = 8
+                settings["guidance_scale"] = 1.0
+                settings["audio_guidance_scale"] = 1.0
+            else:
+                settings["num_inference_steps"] = max(4, int(req.steps))
+                settings["guidance_scale"] = float(req.guidance_scale)
+            settings["overrides"] = "attention_mode='sdpa', memory_profile=4, transformer_quantization='int8'"
+
+            job = session.submit_task(settings)
+            result = job.result()
+            if not result.success or not result.generated_files:
+                errs = "; ".join(str(e) for e in (result.errors or [])) or "WanGP retornou 0 arquivos."
+                raise RuntimeError(errs[:500])
+
+            raw_cand = Path(result.generated_files[0])
+            _mux_no_freeze(raw_cand, wav_p, final_mp4, int(req.width), int(req.height), fps=fps)
+            peak_vram = _smi_used_gb()
             _cleanup_vram()
 
         vid_b64 = base64.b64encode(final_mp4.read_bytes()).decode("ascii")
@@ -301,7 +405,7 @@ def _execute_scene_job(job_id: str, req: AnimateSceneReq) -> None:
             JOBS[job_id].update({
                 "status": "completed",
                 "ok": True,
-                "backend": req.backend,
+                "backend": resolved_model,
                 "elapsed_s": round(time.time() - t0, 2),
                 "duration": round(_probe_dur(final_mp4), 2),
                 "vram_peak_gb": peak_vram,
@@ -326,8 +430,7 @@ def submit_scene_job(req: AnimateSceneReq, x_colab_token: str = Header(default="
     job_id = uuid.uuid4().hex[:10]
     with JOBS_LOCK:
         if len(JOBS) > 40:
-            oldest = list(JOBS.keys())[:20]
-            for k in oldest:
+            for k in list(JOBS.keys())[:20]:
                 JOBS.pop(k, None)
         JOBS[job_id] = {"ok": True, "job_id": job_id, "status": "queued", "created_at": time.time()}
     threading.Thread(target=_execute_scene_job, args=(job_id, req), daemon=True).start()
@@ -345,4 +448,28 @@ def get_scene_job(job_id: str, x_colab_token: str = Header(default="")):
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="127.0.0.1", port=int(os.environ.get("PORT", "8787")), log_level="info")
+    log_cfg = {
+        "version": 1,
+        "disable_existing_loggers": False,
+        "formatters": {
+            "default": {"format": "%(asctime)s [%(levelname)s] %(message)s"},
+        },
+        "handlers": {
+            "file": {
+                "class": "logging.FileHandler",
+                "filename": "/tmp/colab_v4_server.log",
+                "formatter": "default",
+            },
+            "stdout": {
+                "class": "logging.StreamHandler",
+                "stream": "ext://sys.stdout",
+                "formatter": "default",
+            },
+        },
+        "loggers": {
+            "uvicorn": {"handlers": ["file", "stdout"], "level": "WARNING", "propagate": False},
+            "uvicorn.error": {"handlers": ["file", "stdout"], "level": "WARNING", "propagate": False},
+            "uvicorn.access": {"handlers": ["file"], "level": "INFO", "propagate": False},
+        },
+    }
+    uvicorn.run(app, host="127.0.0.1", port=int(os.environ.get("PORT", "8787")), log_config=log_cfg)

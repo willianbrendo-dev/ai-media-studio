@@ -2420,11 +2420,13 @@ def render_novela_episode(cfg: Dict[str, Any]) -> Dict[str, Any]:
                         hdrs = {"Accept": "application/json", "Content-Type": "application/json"}
                         if colab_token:
                             hdrs["X-Colab-Token"] = colab_token
+                        ce_req = str(cfg.get("colab_engine") or "").strip().lower()
+                        cb_backend = "ltx2_25_22B_distilled" if "ltx2" in ce_req else "auto"
                         payload_j = {
                             "image_b64": base64.b64encode(kf_path.read_bytes()).decode("ascii"),
                             "audio_b64": base64.b64encode(w_path.read_bytes()).decode("ascii") if (w_path and w_path.is_file()) else "",
                             "prompt": sa["video_prompt"],
-                            "backend": "wangp_wan22_s2v",
+                            "backend": cb_backend,
                             "duration_sec": shot.target_duration_sec,
                             "width": 720,
                             "height": 1280,
