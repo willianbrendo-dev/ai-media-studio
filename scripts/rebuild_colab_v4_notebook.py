@@ -340,13 +340,13 @@ if not ckpt_link.exists() and not ckpt_link.is_symlink():
 
 run_clean("Criação venv Python 3.10 Seed-VC", ["uv", "venv", str(SEEDVC_VENV), "--python", "3.10", "--seed"])
 
-svc_torch_pkgs = [f"torch=={TORCH_VER}", f"torchaudio=={TA_VER}"]
-if TC_VER:
-    svc_torch_pkgs.append(f"torchcodec=={TC_VER}")
+# Instalar APENAS torch/torchaudio do índice CUDA; torchcodec deve vir do PyPI padrão
+# (o wheel cu128 de torchcodec exige libnppicc.so.12 ausente no runtime do Colab,
+# enquanto o wheel PyPI padrão linka apenas libtorch.so + FFmpeg do sistema).
 run_clean(f"Instalação PyTorch {TORCH_VER}+{cuda_cfg['idx']} (Seed-VC)", [
     "uv", "pip", "install", "--python", SEEDVC_PY,
     "--index-url", TORCH_INDEX,
-    *svc_torch_pkgs,
+    f"torch=={TORCH_VER}", f"torchaudio=={TA_VER}",
 ], venv_dir=SEEDVC_VENV)
 
 svc_pkgs = [
@@ -356,11 +356,13 @@ svc_pkgs = [
     "descript-audio-codec==1.0.0", "soundfile==0.12.1", "pydub==0.25.1",
     "pyyaml", "resampy", "hydra-core==1.3.2", "python-dotenv", "jiwer==3.0.3",
 ]
-run_clean("Instalação dependências limpas Seed-VC (zero GUI/pyaudio)", [
+if TC_VER:
+    svc_pkgs.append(f"torchcodec=={TC_VER}")
+run_clean("Instalação dependências limpas Seed-VC (PyPI torchcodec, zero GUI/pyaudio)", [
     "uv", "pip", "install", "--python", SEEDVC_PY, *svc_pkgs,
 ], venv_dir=SEEDVC_VENV)
 
-# Valida imports + CUDA + torchaudio.save real (garante TorchCodec/FFmpeg OK no PyTorch 2.10)
+# Valida imports + CUDA + torchaudio.save real (garante TorchCodec PyPI + FFmpeg OK no PyTorch 2.10)
 svc_check_code = (
     "import os, torch, torchaudio, transformers, librosa, munch, soundfile, dac\n"
     "from pathlib import Path\n"
@@ -387,13 +389,10 @@ WANGP_DIR = WS / "repos/WanGP"
 
 run_clean("Criação venv Python 3.10 Worker/WanGP", ["uv", "venv", str(WANGP_VENV), "--python", "3.10", "--seed"])
 
-wgp_torch_pkgs = [f"torch=={TORCH_VER}", f"torchvision=={TV_VER}", f"torchaudio=={TA_VER}"]
-if TC_VER:
-    wgp_torch_pkgs.append(f"torchcodec=={TC_VER}")
 run_clean(f"Instalação PyTorch {TORCH_VER}+{cuda_cfg['idx']} (Worker/WanGP)", [
     "uv", "pip", "install", "--python", WANGP_PY,
     "--index-url", TORCH_INDEX,
-    *wgp_torch_pkgs,
+    f"torch=={TORCH_VER}", f"torchvision=={TV_VER}", f"torchaudio=={TA_VER}",
 ], venv_dir=WANGP_VENV)
 
 if VIDEO_MODEL == "seed_vc_only":
@@ -411,7 +410,8 @@ else:
         ckpts_link.symlink_to(WS / "models/wangp")
 
     kept_reqs = ["fastapi", "uvicorn[standard]", "python-multipart", "numpy==2.1.2", "cython", "setuptools", "wheel"]
-    skip_prefixes = ("torch", "torchvision", "torchaudio", "torchcodec", "numpy")
+    # Mantém torchcodec==0.10.0 do PyPI padrão (já presente em WanGP/requirements.txt) quando TC_VER ativo
+    skip_prefixes = ("torch", "torchvision", "torchaudio", "numpy") + (() if TC_VER else ("torchcodec",))
     for raw in (WANGP_DIR / "requirements.txt").read_text(encoding="utf-8").splitlines():
         ln = raw.split("#", 1)[0].strip()
         if not ln:
@@ -440,12 +440,16 @@ else:
     ], venv_dir=WANGP_VENV)
 
     wgp_selfcheck = (
-        "import os, sys, matplotlib, torch, fastapi, uvicorn\n"
+        "import os, sys, matplotlib, torch, torchaudio, fastapi, uvicorn\n"
         "from pathlib import Path\n"
         "assert os.environ.get('MPLBACKEND') == 'Agg'\n"
         "assert matplotlib.get_backend().lower() == 'agg'\n"
         "assert 'PYTHONPATH' not in os.environ\n"
         "assert torch.cuda.is_available()\n"
+        "chk = Path('/content/ai_studio_v4/tmp/ta_wgp_check.wav')\n"
+        "torchaudio.save(str(chk), torch.zeros(1, 1600), 16000)\n"
+        "assert chk.is_file() and chk.stat().st_size > 100\n"
+        "chk.unlink(missing_ok=True)\n"
         "sys.path.insert(0, '/content/ai_studio_v4/repos/WanGP')\n"
         "from shared.utils import generation_overrides\n"
         "ov = generation_overrides.parse_overrides(\n"
