@@ -170,7 +170,7 @@ def _get_wangp_session():
 
     _WANGP_SESSION = wangp_init(
         root=WANGP_DIR,
-        config_path=CONFIG_DIR,
+        config_path=CONFIG_DIR / "wgp_config.json",
         output_dir=OUTPUTS_DIR,
         cli_args=["--attention", "sdpa", "--profile", "4"],
         console_output=False,
