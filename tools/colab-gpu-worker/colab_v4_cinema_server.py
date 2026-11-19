@@ -632,6 +632,8 @@ class AnimateSceneReq(BaseModel):
     height: int = 1280
     fps: int = 24
     seed: int = 42
+    video_cue: str = ""
+    wardrobe_ref: str = ""
 
 
 @app.get("/health")
@@ -814,6 +816,13 @@ def _execute_scene_job(job_id: str, req: AnimateSceneReq) -> None:
         final_mp4 = job_dir / "final_scene.mp4"
         resolved_model = _resolve_model_type(req.backend, has_audio=(wav_p is not None))
 
+        # Incorporate video_cue and wardrobe_ref into prompt for visual consistency
+        full_prompt = req.prompt
+        if getattr(req, "video_cue", "") and req.video_cue:
+            full_prompt = f"{req.video_cue}. {full_prompt}"
+        if getattr(req, "wardrobe_ref", "") and req.wardrobe_ref:
+            full_prompt = f"{req.wardrobe_ref}. {full_prompt}"
+
         with GPU_LOCK:
             session = _get_wangp_session()
             meta = session.get_model_metadata(resolved_model)
@@ -834,7 +843,7 @@ def _execute_scene_job(job_id: str, req: AnimateSceneReq) -> None:
                 resolved_model,
                 mdef,
                 schema,
-                prompt=req.prompt,
+                prompt=full_prompt,
                 negative_prompt=req.negative_prompt,
                 img_path=img_p,
                 wav_path=wav_p,

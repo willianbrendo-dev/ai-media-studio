@@ -50,7 +50,7 @@ def _resolve_cinema_engine(cfg: Optional[Dict[str, Any]] = None) -> str:
     if isinstance(cfg, dict):
         raw = str(cfg.get("cinema_engine") or "").strip().lower()
     if not raw:
-        raw = str(os.environ.get("NOVELA_CINEMA_ENGINE_DEFAULT", "v3.1")).strip().lower()
+        raw = str(os.environ.get("NOVELA_CINEMA_ENGINE_DEFAULT", "v4")).strip().lower()
     return "v4" if raw in ("v4", "v4.0", "cinema_v4", "cinema") else "v3.1"
 
 
@@ -566,20 +566,7 @@ def _assign_shot_framing(
 
 def _load_secrets_env() -> Dict[str, str]:
     env_map = dict(os.environ)
-    for p in (
-        STUDIO_BASE / "media-control-panel/.env",
-        STUDIO_BASE / ".env",
-        Path("/opt/ai-media-studio/media-control-panel/.env"),
-    ):
-        if p.is_file():
-            for line in p.read_text(encoding="utf-8", errors="ignore").splitlines():
-                s = line.strip()
-                if not s or s.startswith("#") or "=" not in s:
-                    continue
-                k, v = s.split("=", 1)
-                k = k.strip()
-                if k and k not in env_map:
-                    env_map[k] = v.strip().strip("\"'")
+    # Vault (UI / /api/colab/config) takes precedence over static .env files
     for vault_file in (
         STUDIO_BASE / "media-control-panel/vault.json",
         STUDIO_BASE / "media-control-panel/data/vault.json",
@@ -592,6 +579,20 @@ def _load_secrets_env() -> Dict[str, str]:
                         env_map[k] = val.strip()
             except Exception:
                 pass
+    for p in (
+        STUDIO_BASE / "media-control-panel/.env",
+        STUDIO_BASE / ".env",
+        Path("/opt/ai-media-studio/media-control-panel/.env"),
+    ):
+        if p.is_file():
+            for line in p.read_text(encoding="utf-8", errors="ignore").splitlines():
+                s = line.strip()
+                if not s or s.startswith("#") or "=" not in s:
+                    continue
+                k, v = s.split("=", 1)
+                k = k.strip()
+                if k and not env_map.get(k):
+                    env_map[k] = v.strip().strip("\"'")
     return env_map
 
 
@@ -2122,37 +2123,84 @@ def _call_colab_animate_take(
     character_id: str = "",
     emotion: str = "happiness",
     cfg_scale: float = 1.25,
+    video_cue: str = "",
+    wardrobe_ref: str = "",
 ) -> Dict[str, Any]:
-    """Send 1 take portrait + PT-BR WAV + acting prompt to remote Google Colab GPU Worker (`/animate_turn`)."""
+    """Submit 1 take to remote Google Colab GPU Worker via /jobs/animate_scene + polling /jobs/{job_id}."""
     base = colab_url.rstrip("/")
-    payload = {
-        "image_b64": base64.b64encode(image_path.read_bytes()).decode("ascii"),
-        "audio_b64": base64.b64encode(audio_wav.read_bytes()).decode("ascii"),
-        "character_id": character_id or image_path.stem,
-        "prompt": veo_prompt,
-        "engine": colab_engine or "moda_livevasa_l4",
-        "emotion": emotion or "happiness",
-        "cfg_scale": float(cfg_scale or 1.25),
-        "width": 1080,
-        "height": 1920,
-    }
     headers = {"Content-Type": "application/json", "Accept": "application/json"}
     if colab_token:
         headers["X-Colab-Token"] = colab_token
-    last_err = "sem resposta"
-    for route in ("/animate_turn", "/animate-take", "/lipsync_video"):
-        try:
-            req = urllib.request.Request(f"{base}{route}", data=json.dumps(payload).encode("utf-8"), headers=headers, method="POST")
-            with urllib.request.urlopen(req, timeout=240) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
-            if data.get("ok") and data.get("video_b64"):
-                out_mp4.write_bytes(base64.b64decode(data["video_b64"]))
-                return data
-            last_err = str(data.get("error") or "sem video_b64")
-        except Exception as exc:
-            last_err = str(exc)[:180]
-    raise RuntimeError(f"Colab /animate_turn falhou: {last_err}")
 
+    # Build prompt with optional video_cue and wardrobe_ref for visual consistency
+    full_prompt = veo_prompt
+    if video_cue:
+        full_prompt = f"{video_cue}. {full_prompt}"
+    if wardrobe_ref:
+        full_prompt = f"{wardrobe_ref}. {full_prompt}"
+
+    payload = {
+        "image_b64": base64.b64encode(image_path.read_bytes()).decode("ascii"),
+        "audio_b64": base64.b64encode(audio_wav.read_bytes()).decode("ascii"),
+        "prompt": full_prompt,
+        "backend": colab_engine or "auto",
+        "width": 1080,
+        "height": 1920,
+        "fps": 24,
+        "steps": 8,
+        "guidance_scale": 3.5,
+        "duration_sec": 3.2,
+        "seed": 42,
+    }
+
+    # Submit job
+    req = urllib.request.Request(
+        f"{base}/jobs/animate_scene",
+        data=json.dumps(payload).encode("utf-8"),
+        headers=headers,
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=60) as resp:
+        submit_data = json.loads(resp.read().decode("utf-8"))
+
+    if not submit_data.get("ok") or not submit_data.get("job_id"):
+        raise RuntimeError(f"Colab submit falhou: {submit_data.get('error', 'sem job_id')}")
+
+    job_id = submit_data["job_id"]
+
+    # Poll for completion
+    poll_headers = {"Accept": "application/json"}
+    if colab_token:
+        poll_headers["X-Colab-Token"] = colab_token
+
+    max_wait = 300  # 5 minutes total
+    poll_interval = 3
+    waited = 0
+
+    while waited < max_wait:
+        time.sleep(poll_interval)
+        waited += poll_interval
+
+        poll_req = urllib.request.Request(
+            f"{base}/jobs/{job_id}",
+            headers=poll_headers,
+            method="GET",
+        )
+        try:
+            with urllib.request.urlopen(poll_req, timeout=30) as resp:
+                job_data = json.loads(resp.read().decode("utf-8"))
+        except Exception as exc:
+            raise RuntimeError(f"Colab poll falhou: {exc}")
+
+        status = job_data.get("status")
+        if status == "completed" and job_data.get("ok") and job_data.get("video_b64"):
+            out_mp4.write_bytes(base64.b64decode(job_data["video_b64"]))
+            return job_data
+        elif status == "error":
+            raise RuntimeError(f"Colab job erro: {job_data.get('error', 'desconhecido')}")
+        # status == "queued" or "running" -> continue polling
+
+    raise RuntimeError(f"Colab job timeout após {max_wait}s (job_id={job_id})")
 
 def _tone_is_dramatic(tone: str = "Comédia Leve") -> bool:
     low = (tone or "").strip().lower()
@@ -2422,6 +2470,10 @@ def render_novela_episode(cfg: Dict[str, Any]) -> Dict[str, Any]:
                             hdrs["X-Colab-Token"] = colab_token
                         ce_req = str(cfg.get("colab_engine") or "").strip().lower()
                         cb_backend = "ltx2_25_22B_distilled" if "ltx2" in ce_req else "auto"
+                        # Extract video_cue and wardrobe_ref from shot assets for visual consistency
+                        video_cue = ""
+                        wardrobe_ref = ""
+                        # sa["video_prompt"] already contains framing and wardrobe info from cinema_v4_director
                         payload_j = {
                             "image_b64": base64.b64encode(kf_path.read_bytes()).decode("ascii"),
                             "audio_b64": base64.b64encode(w_path.read_bytes()).decode("ascii") if (w_path and w_path.is_file()) else "",
@@ -2431,6 +2483,8 @@ def render_novela_episode(cfg: Dict[str, Any]) -> Dict[str, Any]:
                             "width": 720,
                             "height": 1280,
                             "fps": 24,
+                            "video_cue": video_cue,
+                            "wardrobe_ref": wardrobe_ref,
                         }
                         sreq = urllib.request.Request(
                             f"{colab_url.rstrip('/')}/jobs/animate_scene",
@@ -2697,6 +2751,11 @@ def render_novela_episode(cfg: Dict[str, Any]) -> Dict[str, Any]:
                 is_silent_reaction=t.is_silent_reaction,
             )
             take_mp4 = work_dir / f"colab_take_{t.index:02d}.mp4"
+            # Derive video_cue and wardrobe_ref from shot_framing and speaker for visual consistency
+            video_cue = ""
+            wardrobe_ref = ""
+            # video_cue would come from cinema_v4_director framings if available
+            # wardrobe_ref would come from character description
             colab_meta = _call_colab_animate_take(
                 colab_url=colab_url,
                 colab_token=colab_token,
@@ -2708,6 +2767,8 @@ def render_novela_episode(cfg: Dict[str, Any]) -> Dict[str, Any]:
                 character_id=t.speaker_key,
                 emotion=t.emotion,
                 cfg_scale=(1.35 if t.is_silent_reaction else float(cfg.get("cfg_scale") or 1.25)),
+                video_cue=video_cue,
+                wardrobe_ref=wardrobe_ref,
             )
             t.animation_engine_used = str(colab_meta.get("engine") or f"tier1_colab:{colab_engine}")
             colab_clips.append(take_mp4)

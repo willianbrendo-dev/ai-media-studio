@@ -545,20 +545,7 @@ def apply_nordestino_prosody(
 
 def _load_secrets_env() -> Dict[str, str]:
     env_map = dict(os.environ)
-    for p in (
-        STUDIO_BASE / "media-control-panel/.env",
-        STUDIO_BASE / ".env",
-        Path("/opt/ai-media-studio/media-control-panel/.env"),
-    ):
-        if p.is_file():
-            for line in p.read_text(encoding="utf-8", errors="ignore").splitlines():
-                s = line.strip()
-                if not s or s.startswith("#") or "=" not in s:
-                    continue
-                k, v = s.split("=", 1)
-                k = k.strip()
-                if k and k not in env_map:
-                    env_map[k] = v.strip().strip("\"'")
+    # Vault (UI / /api/colab/config) takes precedence over static .env files
     for vf in (
         STUDIO_BASE / "media-control-panel/vault.json",
         STUDIO_BASE / "media-control-panel/data/vault.json",
@@ -571,6 +558,20 @@ def _load_secrets_env() -> Dict[str, str]:
                         env_map[k] = val.strip()
             except Exception:
                 pass
+    for p in (
+        STUDIO_BASE / "media-control-panel/.env",
+        STUDIO_BASE / ".env",
+        Path("/opt/ai-media-studio/media-control-panel/.env"),
+    ):
+        if p.is_file():
+            for line in p.read_text(encoding="utf-8", errors="ignore").splitlines():
+                s = line.strip()
+                if not s or s.startswith("#") or "=" not in s:
+                    continue
+                k, v = s.split("=", 1)
+                k = k.strip()
+                if k and not env_map.get(k):
+                    env_map[k] = v.strip().strip("\"'")
     return env_map
 
 
