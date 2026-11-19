@@ -772,6 +772,75 @@ def _post_colab_json(
         raise RuntimeError(f"HTTP {exc.code} em {url}: {body or exc.reason}") from exc
 
 
+def _map_colab_moda_emotion(
+    emotion: str,
+    emotion_preset: str = "warm",
+    is_silent_reaction: bool = False,
+    cfg_scale: float = 1.25,
+) -> Tuple[str, float]:
+    """Resolve emotion & cfg_scale for Colab MoDA-L4 (defaults Cut 4 reaction to happiness @ 1.35)."""
+    raw = (emotion or "").strip().lower()
+    if is_silent_reaction and raw in ("", "neutral", "shame", "warm", "comedy", "laughing", "happiness", "happy"):
+        eff_cfg = 1.35 if abs(float(cfg_scale or 1.25) - 1.25) < 0.01 else float(cfg_scale or 1.35)
+        return "happiness", max(1.25, eff_cfg)
+    if is_silent_reaction:
+        eff_cfg = max(1.35, float(cfg_scale or 1.35))
+        return _map_moda_emotion(raw, emotion_preset).lower(), eff_cfg
+    if raw in ("happiness", "happy", "warm", "laughing", "proud", "comedy"):
+        return "happiness", float(cfg_scale or 1.25)
+    mapped = _map_moda_emotion(raw or "happiness", emotion_preset).lower()
+    return ("happiness" if mapped == "neutral" and not raw else mapped), float(cfg_scale or 1.25)
+
+
+def _call_colab_animate_take(
+    colab_url: str,
+    colab_token: str,
+    image_b64: str,
+    audio_b64: str,
+    *,
+    character_id: str = "",
+    emotion: str = "happiness",
+    cfg_scale: float = 1.25,
+    prompt: str = "",
+    engine: str = "moda_livevasa_l4",
+    emotion_preset: str = "warm",
+    lead_in_pause: float = 0.0,
+    is_silent_reaction: bool = False,
+    width: int = 1080,
+    height: int = 1920,
+    timeout: int = 180,
+) -> Dict[str, Any]:
+    """Call remote Colab GPU worker `/animate_turn` (with `/animate-take` & `/lipsync_video` fallbacks)."""
+    clean_url = (colab_url or "").strip().rstrip("/")
+    headers = {"Accept": "application/json"}
+    if colab_token:
+        headers["X-Colab-Token"] = colab_token
+    payload = {
+        "image_b64": image_b64,
+        "audio_b64": audio_b64,
+        "character_id": character_id or "character",
+        "prompt": prompt,
+        "engine": engine or "moda_livevasa_l4",
+        "emotion": emotion or "happiness",
+        "cfg_scale": float(cfg_scale or 1.25),
+        "emotion_preset": emotion_preset or "warm",
+        "lead_in_pause": float(lead_in_pause or 0.0),
+        "is_silent_reaction": bool(is_silent_reaction),
+        "width": width,
+        "height": height,
+    }
+    errs: List[str] = []
+    for route in ("/animate_turn", "/animate-take", "/lipsync_video"):
+        try:
+            cand = _post_colab_json(f"{clean_url}{route}", payload, headers, timeout=timeout)
+            if cand.get("ok") and cand.get("video_b64"):
+                return cand
+            errs.append(f"{route}: resposta sem video_b64")
+        except Exception as exc:
+            errs.append(f"{route}: {str(exc)[:140]}")
+    raise RuntimeError("Colab /animate_turn falhou: " + " | ".join(errs))
+
+
 def _try_tier1_colab_animate(
     *,
     image_path: Path,
@@ -781,15 +850,18 @@ def _try_tier1_colab_animate(
     colab_url: str,
     colab_token: str,
     colab_engine: str,
-    emotion_preset: str,
-    lead_in_pause: float,
-    is_silent_reaction: bool,
+    character_id: str = "",
+    emotion: str = "happiness",
+    emotion_preset: str = "warm",
+    cfg_scale: float = 1.25,
+    lead_in_pause: float = 0.0,
+    is_silent_reaction: bool = False,
     tone: str = "Comédia Leve",
-    width: int,
-    height: int,
+    width: int = 1080,
+    height: int = 1920,
     errors_out: Optional[List[str]] = None,
 ) -> Optional[Dict[str, Any]]:
-    """Two-stage Colab L4/T4 worker call (LivePortrait fp16 -> LatentSync 1.5 fp16) to beat Cloudflare 100s timeout."""
+    """Tier 1 absolute Colab GPU execution: prefers v3.1 MoDA-L4 (LiveVASAPipeline) in 1-shot (~11s), falling back to 2-stage LivePortrait+LatentSync."""
     clean_url = (colab_url or "").strip().rstrip("/")
     if not clean_url:
         return None
@@ -798,9 +870,16 @@ def _try_tier1_colab_animate(
         if colab_token:
             headers["X-Colab-Token"] = colab_token
         hreq = urllib.request.Request(f"{clean_url}/health", headers=headers, method="GET")
-        with urllib.request.urlopen(hreq, timeout=5.0) as resp:
+        with urllib.request.urlopen(hreq, timeout=8.0) as resp:
             if resp.status != 200:
                 return None
+            health_json = json.loads(resp.read().decode("utf-8"))
+
+        is_moda_l4 = bool(
+            health_json.get("moda_ready")
+            or "moda" in str(health_json.get("engine_choice") or "").lower()
+            or "moda" in str(health_json.get("stage2_engine") or "").lower()
+        )
 
         src_img = image_path
         tmp_jpg: Optional[Path] = None
@@ -816,7 +895,52 @@ def _try_tier1_colab_animate(
                 tmp_jpg.unlink(missing_ok=True)
         audio_b64 = base64.b64encode(audio_wav.read_bytes()).decode("ascii")
 
-        # Chamada 1 (Stage 1): LivePortrait fp16 ja cortado exatamente na duracao do audio (~15s)
+        if is_moda_l4:
+            eff_emo, eff_cfg = _map_colab_moda_emotion(
+                emotion=emotion,
+                emotion_preset=emotion_preset,
+                is_silent_reaction=is_silent_reaction,
+                cfg_scale=cfg_scale,
+            )
+            cand = _call_colab_animate_take(
+                colab_url=clean_url,
+                colab_token=colab_token,
+                image_b64=image_b64,
+                audio_b64=audio_b64,
+                character_id=character_id or image_path.stem,
+                emotion=eff_emo,
+                cfg_scale=eff_cfg,
+                prompt=prompt,
+                engine="moda_livevasa_l4",
+                emotion_preset=emotion_preset,
+                lead_in_pause=lead_in_pause,
+                is_silent_reaction=is_silent_reaction,
+                width=width,
+                height=height,
+                timeout=120,
+            )
+            raw_mp4 = out_mp4.with_suffix(".colab_moda_raw.mp4")
+            raw_mp4.write_bytes(base64.b64decode(cand["video_b64"]))
+            try:
+                _normalize_gpu_clip(raw_mp4, audio_wav, out_mp4, width=width, height=height)
+            finally:
+                raw_mp4.unlink(missing_ok=True)
+            qt = _get_qt()
+            if qt is not None:
+                qt.record_call("colab-t4-gpu", ok=True, status_code=200, specialty="video")
+            return {
+                "ok": True,
+                "animation_engine_used": str(cand.get("engine") or "colab_moda_livevasa_l4_emo4"),
+                "detector": "colab_gpu_worker",
+                "emotion": eff_emo,
+                "cfg_scale": eff_cfg,
+                "reaction_style": _resolve_reaction_style(tone=tone) if is_silent_reaction else "",
+                "duration": round(_probe_duration(out_mp4), 2),
+                "is_silent_reaction": bool(is_silent_reaction),
+                "output_mp4": str(out_mp4),
+            }
+
+        # Legacy Colab 2-stage fallback (LivePortrait fp16 -> LatentSync 1.5 fp16)
         stage1_payload = {
             "image_b64": image_b64,
             "audio_b64": audio_b64,
@@ -1446,8 +1570,10 @@ def animate_character_talking_take(
     out_mp4: Path,
     *,
     prompt: str = "",
-    emotion: str = "warm",
+    character_id: str = "",
+    emotion: str = "happiness",
     emotion_preset: str = "warm",
+    cfg_scale: float = 1.25,
     camera_action: str = "zoom_in",
     lead_in_pause: float = 0.0,
     is_silent_reaction: bool = False,
@@ -1455,13 +1581,13 @@ def animate_character_talking_take(
     reaction_style: str = "",
     colab_url: str = "",
     colab_token: str = "",
-    colab_engine: str = "liveportrait_latentsync",
+    colab_engine: str = "moda_livevasa_l4",
     env_map: Optional[Dict[str, str]] = None,
     width: int = 1080,
     height: int = 1920,
     fps: int = 30,
 ) -> Dict[str, Any]:
-    """Strict Real GPU Generative Video Cascade (v2.9): Colab T4 -> ZeroGPU A10G. No 2D fake distortion."""
+    """Strict Real GPU Generative Video Cascade (v3.1): Colab MoDA-L4 / L4 -> ZeroGPU A10G fallback. No 2D fake distortion."""
     eff_url = (colab_url or (env_map or {}).get("COLAB_GPU_URL") or "").strip()
     eff_tok = (colab_token or (env_map or {}).get("COLAB_GPU_TOKEN") or "").strip()
     colab_errors: List[str] = []
@@ -1474,7 +1600,10 @@ def animate_character_talking_take(
             colab_url=eff_url,
             colab_token=eff_tok,
             colab_engine=colab_engine,
+            character_id=character_id,
+            emotion=emotion,
             emotion_preset=emotion_preset,
+            cfg_scale=cfg_scale,
             lead_in_pause=lead_in_pause,
             is_silent_reaction=is_silent_reaction,
             tone=tone,
@@ -1511,3 +1640,6 @@ def animate_character_talking_take(
         "Configure HF_TOKEN no Cofre Central para ampliar cota ZeroGPU ou conecte o Google Colab GPU T4. "
         f"Detalhe: {detail}"
     )
+
+
+animate_character_turn = animate_character_talking_take

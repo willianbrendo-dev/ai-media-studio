@@ -227,9 +227,9 @@ def build_dossier() -> str:
         ("media-control-panel/main.py", "Servidor FastAPI central (porta 9000 VPS), Vault, orquestração Docker RAM-safe e rotas de estúdio"),
         ("media-control-panel/guided_pipelines.py", "Orquestrador assíncrono das 6 Trilhas Guiadas (RAM Relay, Checkpoints JSON, Safe-Zones, Roteirista IA)"),
         ("tools/hyperframes/quota_telemetry.py", "Rastreador persistente RPM/RPD/cooldowns/cache hits por processo (fcntl.flock + quota_telemetry.json)"),
-        ("tools/hyperframes/vps_novela_runner.py", "Motor Clean Cinema v3.0 Multi-Personagem: Continuity Lock (+14% crop), Single-Subject SRS, Mix Contínuo -33dB, Legendas Bipartidas (.ass) & Flow Veo 3.1"),
-        ("tools/hyperframes/regional_voice_engine.py", "Motor de Voz Nordestina v3.0: Cache SHA-256 (<5ms), Gemini Live Audio (BidiGenerateContent), Pool Round-Robin 5 TTS REST, F5-TTS & Seed-VC"),
-        ("tools/hyperframes/novela_lipsync_animator.py", "Cascata GPU Generativa Real v3.0-turbo (Colab L4/T4 2-Stage LivePortrait -> LatentSync 1.5 <=2.85s anti-524 -> ZeroGPU A10G; Distorção 2D banida)"),
+        ("tools/hyperframes/vps_novela_runner.py", "Motor Clean Cinema v3.1 Multi-Personagem: Frontal Eye-Contact Lock (+14% crop), Single-Subject SRS, Mix Contínuo -33dB, Legendas Bipartidas (.ass) & Flow Veo 3.1"),
+        ("tools/hyperframes/regional_voice_engine.py", "Motor de Voz Nordestina v3.1: Cache SHA-256 (<5ms), Gemini Live Audio (BidiGenerateContent), Pool Round-Robin 5 TTS REST, F5-TTS & Seed-VC"),
+        ("tools/hyperframes/novela_lipsync_animator.py", "Cascata GPU Generativa Real v3.1 (Tier 1 Colab MoDA-L4 LiveVASAPipeline emo=4 Happiness ~11s -> Colab LivePortrait+LatentSync 1.5 -> ZeroGPU A10G; Distorção 2D banida)"),
         ("tools/hyperframes/verify_lipsync_motion.py", "Auditor Computer Vision frame a frame (estabilização por âncora nasal, mouth ROI speech vs silence, piscar sem oclusão e Reaction Shot)"),
         ("tools/hyperframes/vps_ad_runner.py", "Motor HyperFrames POV Cinema Multi-Imagem Shopee 20:9 Anti-Crop & L'Oréal Gold Luxury"),
         ("tools/hyperframes/viral_reference_analyzer.py", "Extrator de DNA Viral (cut_cadence, WPM, energia de áudio e recomendações roteirizadas)"),
@@ -385,16 +385,16 @@ def build_dossier() -> str:
     add("")
     engines_arch = [
         (
-            "1. Novelinhas Multi-Personagem (Live-Action 8K & 3D Pixar · Estrutura Viral 4 Cortes · v3.0-turbo)",
+            "1. Novelinhas Multi-Personagem (Live-Action 8K & 3D Pixar · Estrutura Viral 4 Cortes · v3.1 MoDA-L4 LiveVASAPipeline)",
             [
                 "Fluxo: Roteiro JSON roteado para NVIDIA NIM nemotron via Smart Quota Router (0 gasto RPD Gemini) ->",
                 "  Saneamento Cultural Nordestino (sanitize_northeast_slang bloqueando 'trem/uai/sô/mano/meo/daora/guri/bah/tchê') ->",
                 "  Vozes 48kHz Estéreo SoXR via Gemini Live Audio WebSocket (BidiGenerateContent ilimitado) + Cache SHA-256 + Pool Round-Robin 5 REST TTS ->",
-                "  Retratos Keyframes 1080x1920 Single-Subject Limpo (char_lock nos primeiros 35 tokens do CLIP-L para flux.1-dev, zero dupla cabeça, lábio superior visível no Seu Bastião) ->",
-                "  Continuity Lock v3.0 ('v30_single_subject_lock'): 1 retrato mestre por ator/estilo + close-up óptico +14% (1232x2190 -> crop 1080x1920) em reações subsequentes ->",
-                "  Vídeo Generativo GPU Real 30fps (Colab L4/T4 2-Stage: Stage 1 LivePortrait fp16 512x896 -> Stage 2 LatentSync 1.5 stage2.yaml --guidance_scale 1.5 --enable_deepcache em chunks <=2.85s anti-524 -> ZeroGPU A10G; distorção 2D cv2.remap banida!) ->",
-                "  Design de Som & Mix Contínuo 1080x1920 @ 30fps + 48kHz AAC: cama de ambiente contínua -33 dB + SFX tonal/micro-reação no Corte 4 (zero buraco mudo < -40 dB) + loudnorm I=-16 + legendas .ass bipartidas (>42 chars).",
-                "Estrutura Dramática 4 Cortes ('viral_4_cuts'): Corte 1 Ataque -> Corte 2 Pausa rápida 0.12s (respirar) + Invertida -> Corte 3 Choque/Close-Up +14% -> Corte 4 Reaction Shot tonal (comedy_smile vs dramatic_shock) c/ SFX audível.",
+                "  Retratos Keyframes 1080x1920 Contato Visual Frontal Direto (SHOT_FRAMINGS v3.1 c/ olhos bem abertos + catchlights, sujeito único sem segunda cabeça, char_lock nos primeiros 35 tokens do CLIP-L, lábio superior visível no Seu Bastião) ->",
+                "  Continuity Lock v3.1 ('v31_frontal_moda_lock'): 1 retrato mestre frontal _v31 por ator/estilo + close-up óptico +14% (1232x2190 -> crop 1080x1920) em Cortes close_up/reaction ->",
+                "  Vídeo Generativo GPU Real 30fps (Tier 1 absoluto Colab MoDA-L4 LiveVASAPipeline TalkingHeadDiT c/ hooks nas 12 camadas HuBERT p/ transformers 5.x, mini-batch 4-frames SPADE decoder na linha 735 motion_processer.py, emo=4 Happiness cfg 1.25 / 1.35 Corte 4 em ~11s/take -> ZeroGPU A10G apenas offline; distorção 2D cv2.remap banida!) ->",
+                "  Design de Som & Mix Contínuo 1080x1920 @ 30fps + 48kHz AAC: cama de ambiente contínua -33 dB + SFX tonal/micro-reação falada no Corte 4 (zero buraco mudo < -40 dB) + loudnorm I=-16 + legendas .ass bipartidas (>42 chars).",
+                "Estrutura Dramática 4 Cortes ('viral_4_cuts'): Corte 1 Ataque Frontal -> Corte 2 Pausa rápida 0.12s + Invertida -> Corte 3 Close-Up +14% -> Corte 4 Reação Cômica Sorridente (emotion='happiness', cfg_scale=1.35) c/ SFX audível.",
             ],
         ),
         (
@@ -427,12 +427,12 @@ def build_dossier() -> str:
             add(f"    - {b}")
     add("")
 
-    add("3.1 Cascatas de Fallback & Smart Quota Router por Especialidade (v3.0):")
+    add("3.1 Cascatas de Fallback & Smart Quota Router por Especialidade (v3.1):")
     add("  - LLM Texto/Roteiro (main.py -> call_ai_cascade): NVIDIA NIM (nemotron-3.5-lightning-30b-a3b -> nemotron-3-ultra-550b-a55b -> kimi-k3.1-pro) -> OpenRouter :free -> Gemma 4 31B -> Gemini Flash-Lite -> Groq/OpenAI/Anthropic (gemini-2.5-flash último recurso; check_gemini_api 0 tokens via GET /v1beta/models)")
     add("  - LLM Visão Multimodal: Gemini 3.5 Flash-Lite -> Gemini 3.1 Flash-Lite -> Gemini 2.5 Flash-Lite -> OpenRouter")
     add("  - Voz Nordestina (regional_voice_engine.py): Cache Disco SHA-256 (<5ms) -> Gemini Live Audio WebSocket (BidiGenerateContent ilimitado) -> Round-Robin Pool 5 TTS REST (3.8-flash-tts, 3.8-flash-lite-tts, 2.5-flash-preview-tts, 3.1-flash-tts-preview, 2.5-pro-preview-tts) -> Edge-TTS fonético (offline only)")
-    add("  - Imagem/Ingrediente (vps_novela_runner.py): NVIDIA NIM black-forest-labs/flux.1-dev c/ char_lock nos primeiros 35 tokens + Continuity Lock (+14% crop) -> SVG vetorial rsvg-convert Clean Cinema")
-    add("  - Animação/Vídeo GPU Real (novela_lipsync_animator.py): Colab L4/T4 v3.0-turbo 2-Stage (Stage 1 LivePortrait fp16 -> Stage 2 LatentSync 1.5 stage2.yaml --guidance_scale 1.5 --enable_deepcache em chunks <=2.85s; Corte 4 guiado por tom comedy_smile/dramatic_shock) -> ZeroGPU A10G Cloud com HF_TOKEN (MoDA/LongCat/EchoMimic/Wan 2.2/LTX) — Distorção 2D banida!")
+    add("  - Imagem/Ingrediente (vps_novela_runner.py): NVIDIA NIM black-forest-labs/flux.1-dev c/ char_lock nos primeiros 35 tokens + Contato Visual Frontal Olhos Abertos + Continuity Lock v31 (+14% crop) -> SVG vetorial rsvg-convert Clean Cinema")
+    add("  - Animação/Vídeo GPU Real (novela_lipsync_animator.py): Tier 1 absoluto Colab MoDA-L4 LiveVASAPipeline pré-aquecido na L4 (/content/moda_l4_server.py c/ 4-frame mini-batch SPADE decoder + hooks 12 camadas HuBERT para transformers 5.x + emo=4 Happiness cfg 1.25/1.35) -> Legacy LivePortrait+LatentSync 1.5 (stage2.yaml) -> Fallback ZeroGPU A10G apenas se Colab offline — Distorção 2D banida!")
     add("")
 
     add("3.2 Variáveis de Ambiente e Chaves no Cofre da VPS (apenas nome e status SET=True/False):")

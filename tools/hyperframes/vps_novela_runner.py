@@ -294,43 +294,61 @@ EMOTION_DIRECTIONS: Dict[str, Tuple[str, str, str]] = {
         "zoom_in",
         "nods warmly and speaks with lively natural gestures",
     ),
+    "happiness": (
+        "bright expressive wide-open eyes with crisp catchlights, gentle pleasant smile with relaxed closed lips ready for dubbing, calm posture with arms down",
+        "zoom_in",
+        "smiles warmly with joyful lively head movement and bright eyes",
+    ),
 }
 
+FRONTAL_SINGLE_SUBJECT_DIRECTIVE = (
+    "single character only (strictly one person in frame, no second person, no foreground shoulder), "
+    "facing the camera directly with direct frontal eye-contact into the lens, "
+    "eyes wide open and bright with clear catchlights, warm expressive natural face"
+)
+
 SHOT_FRAMINGS: Dict[str, Dict[str, str]] = {
-    "over_shoulder": {
-        "label": "Plano · Single-Subject Shot-Reverse-Shot",
+    "establishing": {
+        "label": "Plano Aberto · Establishing Frontal",
+        "lens_mm": "35mm",
+        "flux_cue": f"medium-wide 35mm vertical 9:16 cinema shot of {{speaker_en}}, {FRONTAL_SINGLE_SUBJECT_DIRECTIVE}",
+        "veo_cue": f"Medium-wide 35mm cinema shot of speaker, {FRONTAL_SINGLE_SUBJECT_DIRECTIVE}, natural handheld breathing",
+    },
+    "medium": {
+        "label": "Plano Médio · Frontal Direto",
         "lens_mm": "85mm",
-        "flux_cue": (
-            "solo single-subject 85mm close-up vertical 9:16 portrait looking 15 degrees right, "
-            "empty blurred sunlit bokeh background, only one person in frame"
-        ),
-        "veo_cue": (
-            "Solitary single-subject medium close-up camera shot (85mm f/1.8 shallow bokeh) of speaker angled 15 degrees to the right, "
-            "strictly one person alone in frame, natural handheld breathing"
-        ),
+        "flux_cue": f"medium close-up 85mm vertical 9:16 cinema portrait of {{speaker_en}}, {FRONTAL_SINGLE_SUBJECT_DIRECTIVE}",
+        "veo_cue": f"Medium close-up 85mm cinema shot of speaker, {FRONTAL_SINGLE_SUBJECT_DIRECTIVE}, natural handheld breathing",
+    },
+    "over_shoulder": {
+        "label": "Plano · Frontal Limpo (Single-Subject)",
+        "lens_mm": "85mm",
+        "flux_cue": f"frontal 85mm medium close-up vertical 9:16 portrait of {{speaker_en}}, {FRONTAL_SINGLE_SUBJECT_DIRECTIVE}",
+        "veo_cue": f"Frontal 85mm medium close-up shot of speaker, {FRONTAL_SINGLE_SUBJECT_DIRECTIVE}, natural handheld breathing",
     },
     "reverse_over_shoulder": {
-        "label": "Contraplano · Reverse Single-Subject",
+        "label": "Contraplano · Frontal Limpo",
         "lens_mm": "85mm",
-        "flux_cue": (
-            "solo single-subject 85mm reverse close-up vertical 9:16 portrait looking 15 degrees left, "
-            "empty blurred sunlit bokeh background, only one person in frame"
-        ),
-        "veo_cue": (
-            "Solitary single-subject reverse-angle medium close-up shot (85mm f/1.8 shallow bokeh) of speaker angled 15 degrees to the left, "
-            "strictly one person alone in frame, cutting cleanly from the opposite perspective"
-        ),
+        "flux_cue": f"reverse-cut frontal 85mm medium close-up vertical 9:16 portrait of {{speaker_en}}, {FRONTAL_SINGLE_SUBJECT_DIRECTIVE}",
+        "veo_cue": f"Reverse-cut frontal 85mm medium close-up shot of speaker, {FRONTAL_SINGLE_SUBJECT_DIRECTIVE}, cutting cleanly",
+    },
+    "close_up": {
+        "label": "Close-Up · Frontal +14%",
+        "lens_mm": "85mm",
+        "flux_cue": f"tight 85mm close-up portrait framed from chest up of {{speaker_en}}, {FRONTAL_SINGLE_SUBJECT_DIRECTIVE}",
+        "veo_cue": f"Tight 85mm close-up shot, {FRONTAL_SINGLE_SUBJECT_DIRECTIVE}, natural handheld breathing",
     },
     "reaction_closeup": {
-        "label": "Close-Up · Reação Dramática",
-        "lens_mm": "50mm",
-        "flux_cue": (
-            "tight solo close-up portrait framed from chest up, expressive face looking slightly off-lens, "
-            "50mm crisp shallow bokeh, only one person in frame"
-        ),
-        "veo_cue": (
-            "Tight dramatic reaction close-up (50mm lens, shallow depth of field), sharp eye focus with natural handheld breathing"
-        ),
+        "label": "Close-Up · Reação Frontal",
+        "lens_mm": "85mm",
+        "flux_cue": f"tight 85mm reaction close-up portrait framed from chest up of {{speaker_en}}, {FRONTAL_SINGLE_SUBJECT_DIRECTIVE}",
+        "veo_cue": f"Tight reaction close-up shot, {FRONTAL_SINGLE_SUBJECT_DIRECTIVE}, natural handheld breathing",
+    },
+    "reaction": {
+        "label": "Reação Cômica · Frontal",
+        "lens_mm": "85mm",
+        "flux_cue": f"tight 85mm comic reaction close-up portrait framed from chest up of {{speaker_en}}, {FRONTAL_SINGLE_SUBJECT_DIRECTIVE}",
+        "veo_cue": f"Tight comic reaction close-up shot, {FRONTAL_SINGLE_SUBJECT_DIRECTIVE}, lively smiling reaction",
     },
 }
 
@@ -421,8 +439,11 @@ def compile_dramatic_cuts(
     if not turns:
         return []
 
+    def _is_react(row: Dict[str, Any]) -> bool:
+        return bool(row.get("is_silent_reaction") or row.get("is_reaction"))
+
     def _sync_sub_full(row: Dict[str, Any]) -> None:
-        if bool(row.get("is_silent_reaction")):
+        if _is_react(row):
             return
         tts = rve.sanitize_northeast_slang(str(row.get("tts_text") or row.get("subtitle_text") or row.get("text") or "").strip())
         sub = rve.sanitize_northeast_slang(str(row.get("subtitle_text") or tts).strip())
@@ -433,19 +454,19 @@ def compile_dramatic_cuts(
     if structure == "classic_3_cuts":
         out = []
         for idx, t in enumerate(turns):
-            if not str(t.get("tts_text") or t.get("subtitle_text") or t.get("text") or "").strip() and not bool(t.get("is_silent_reaction")):
+            if not str(t.get("tts_text") or t.get("subtitle_text") or t.get("text") or "").strip() and not _is_react(t):
                 continue
             _sync_sub_full(t)
             t.setdefault("cut_role", "dialogue")
             t.setdefault("lead_in_pause", 0.0)
-            t.setdefault("is_silent_reaction", False)
+            t["is_silent_reaction"] = _is_react(t)
             out.append(t)
         return out
 
     # viral_4_cuts ("Quem Passou Vergonha"):
     # Cut 1: Attack (Speaker A) -> Cut 2: 0.12s quick beat + Comeback (Speaker B) -> Cut 3: Shock -> Cut 4: Reaction (Speaker A)
-    spoken = [t for t in turns if not bool(t.get("is_silent_reaction")) and str(t.get("tts_text") or t.get("subtitle_text") or t.get("text") or "").strip()]
-    silent_existing = next((t for t in turns if bool(t.get("is_silent_reaction"))), None)
+    spoken = [t for t in turns if not _is_react(t) and str(t.get("tts_text") or t.get("subtitle_text") or t.get("text") or "").strip()]
+    silent_existing = next((t for t in turns if _is_react(t)), None)
     if not spoken:
         return turns
 
@@ -488,7 +509,7 @@ def compile_dramatic_cuts(
         }
         result.append(cut3)
 
-    # Cut 4: Always end with Silent Shame Reaction Shot back on Cut 1's attacker!
+    # Cut 4: End with Reaction Shot back on Cut 1's character!
     if silent_existing:
         cut4 = dict(silent_existing)
     else:
@@ -496,18 +517,19 @@ def compile_dramatic_cuts(
             "speaker": cut1.get("speaker") or "Dona Socorro",
             "tts_text": "",
             "subtitle_text": "",
-            "emotion": "shame",
+            "emotion": "happiness",
             "camera_action": "dramatic_push",
-            "shot_framing": "reaction_closeup",
+            "shot_framing": "reaction",
         }
-    cut4["cut_role"] = "silent_shame_reaction"
+    cut4["cut_role"] = str(cut4.get("cut_role") or "silent_shame_reaction")
     cut4["is_silent_reaction"] = True
+    cut4["reaction_phrase"] = str(cut4.get("reaction_phrase") or cut4.get("tts_text") or "").strip()
     cut4["tts_text"] = ""
     cut4["subtitle_text"] = ""
     cut4["lead_in_pause"] = 0.0
     cut4["silent_duration"] = float(cut4.get("silent_duration") or 2.0)
-    cut4["emotion"] = str(cut4.get("emotion") or "shame")
-    cut4["shot_framing"] = "reaction_closeup"
+    cut4["emotion"] = str(cut4.get("emotion") or "happiness")
+    cut4["shot_framing"] = str(cut4.get("shot_framing") or "reaction")
     result.append(cut4)
     return result
 
@@ -853,10 +875,10 @@ def _resolve_turn_visual(
     """Generate/resolve a clean 1080x1920 portrait with v3.0 Identity & Set Continuity Lock."""
     style_norm = normalize_visual_style(visual_style)
     is_3d = style_norm == "stylized_3d_pixar"
-    # v3.0 Single-Subject Continuity Lock: key ONLY on (speaker_key, style_norm) so ONE clean actor & set persist!
-    master_cache_key = ("v30_single_subject_lock", speaker_key, style_norm)
+    # v3.1 Frontal MoDA Continuity Lock: key ONLY on (speaker_key, style_norm) with fresh _v31 frontal portraits!
+    master_cache_key = ("v31_frontal_moda_lock", speaker_key, style_norm)
 
-    base_name = target_filename or f"shot_{turn_idx}.jpg"
+    base_name = target_filename or f"novela_portrait_{speaker_key}_{turn_idx}_v31.jpg"
     if master_cache_key in shot_cache:
         src_path, prov = shot_cache[master_cache_key]
         suffix = ".jpg" if force_jpg else src_path.suffix
@@ -864,7 +886,7 @@ def _resolve_turn_visual(
         if src_path.suffix == ".svg" and force_jpg:
             _svg_to_clean_jpg(src_path, dst)
             return dst, f"assets/{dst.name}", f"{prov}+continuity_svg2jpg", ""
-        if src_path.suffix != ".svg" and (shot_framing == "reaction_closeup" or is_silent_reaction):
+        if src_path.suffix != ".svg" and (shot_framing in ("reaction_closeup", "close_up", "reaction") or is_silent_reaction):
             dst = assets_dir / Path(base_name).with_suffix(".jpg").name
             _run_checked([
                 FFMPEG_BIN, "-y", "-i", str(src_path),
@@ -1964,27 +1986,40 @@ def _call_colab_animate_take(
     veo_prompt: str,
     colab_engine: str,
     out_mp4: Path,
+    *,
+    character_id: str = "",
+    emotion: str = "happiness",
+    cfg_scale: float = 1.25,
 ) -> Dict[str, Any]:
-    """Send 1 take portrait + PT-BR WAV + acting prompt to remote Google Colab GPU Worker `/animate-take`."""
-    endpoint = f"{colab_url.rstrip('/')}/animate-take"
+    """Send 1 take portrait + PT-BR WAV + acting prompt to remote Google Colab GPU Worker (`/animate_turn`)."""
+    base = colab_url.rstrip("/")
     payload = {
         "image_b64": base64.b64encode(image_path.read_bytes()).decode("ascii"),
         "audio_b64": base64.b64encode(audio_wav.read_bytes()).decode("ascii"),
+        "character_id": character_id or image_path.stem,
         "prompt": veo_prompt,
-        "engine": colab_engine if colab_engine in ("echomimic_v3", "latentsync") else "echomimic_v3",
+        "engine": colab_engine or "moda_livevasa_l4",
+        "emotion": emotion or "happiness",
+        "cfg_scale": float(cfg_scale or 1.25),
         "width": 1080,
         "height": 1920,
     }
     headers = {"Content-Type": "application/json", "Accept": "application/json"}
     if colab_token:
         headers["X-Colab-Token"] = colab_token
-    req = urllib.request.Request(endpoint, data=json.dumps(payload).encode("utf-8"), headers=headers, method="POST")
-    with urllib.request.urlopen(req, timeout=240) as resp:
-        data = json.loads(resp.read().decode("utf-8"))
-    if not data.get("ok") or not data.get("video_b64"):
-        raise RuntimeError(f"Colab /animate-take falhou: {data.get('error') or 'sem video_b64'}")
-    out_mp4.write_bytes(base64.b64decode(data["video_b64"]))
-    return data
+    last_err = "sem resposta"
+    for route in ("/animate_turn", "/animate-take", "/lipsync_video"):
+        try:
+            req = urllib.request.Request(f"{base}{route}", data=json.dumps(payload).encode("utf-8"), headers=headers, method="POST")
+            with urllib.request.urlopen(req, timeout=240) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+            if data.get("ok") and data.get("video_b64"):
+                out_mp4.write_bytes(base64.b64decode(data["video_b64"]))
+                return data
+            last_err = str(data.get("error") or "sem video_b64")
+        except Exception as exc:
+            last_err = str(exc)[:180]
+    raise RuntimeError(f"Colab /animate_turn falhou: {last_err}")
 
 
 def _tone_is_dramatic(tone: str = "Comédia Leve") -> bool:
@@ -2023,6 +2058,7 @@ def _synthesize_reaction_soundtrack_wav(
     dur_sec: float = 2.0,
     tone: str = "Comédia Leve",
     speaker: str = "Dona Socorro",
+    reaction_text: str = "",
     env_map: Optional[Dict[str, str]] = None,
     work_dir: Optional[Path] = None,
 ) -> float:
@@ -2056,7 +2092,7 @@ def _synthesize_reaction_soundtrack_wav(
         vox_wav = tmp_dir / "react_vox.wav"
         vox_ok = False
         try:
-            react_phrase = "Vixe Maria!" if is_drama else "Eita lasqueira!"
+            react_phrase = (reaction_text or "").strip() or ("Vixe Maria!" if is_drama else "Eita lasqueira!")
             rve.synthesize_regional_turn(
                 tts_text=react_phrase,
                 speaker=speaker,
@@ -2229,7 +2265,7 @@ def render_novela_episode(cfg: Dict[str, Any]) -> Dict[str, Any]:
     for idx, raw_turn in enumerate(raw_dialogue):
         spk_raw = str(raw_turn.get("speaker") or "Narrador")
         spk_key, spec = _get_character_spec(spk_raw)
-        is_silent = bool(raw_turn.get("is_silent_reaction", False))
+        is_silent = bool(raw_turn.get("is_silent_reaction", False) or raw_turn.get("is_reaction", False))
         cut_role = str(raw_turn.get("cut_role") or ("silent_shame_reaction" if is_silent else "dialogue")).strip().lower()
         lead_pause = float(raw_turn.get("lead_in_pause") or 0.0)
         tts_text = "" if is_silent else rve.sanitize_northeast_slang(str(raw_turn.get("tts_text") or raw_turn.get("subtitle_text") or raw_turn.get("text") or "").strip())
@@ -2238,7 +2274,10 @@ def render_novela_episode(cfg: Dict[str, Any]) -> Dict[str, Any]:
         raw_sub = "" if is_silent else rve.sanitize_northeast_slang(str(raw_turn.get("subtitle_text") or tts_text).strip())
         subtitle_text = "" if is_silent else (tts_text if (not raw_sub or len(raw_sub.split()) < len(tts_text.split())) else raw_sub)
 
-        emotion = "shame" if is_silent else str(raw_turn.get("emotion") or "warm").strip().lower()
+        if is_silent:
+            emotion = str(raw_turn.get("emotion") or ("shame" if _tone_is_dramatic(episode_tone) else "happiness")).strip().lower()
+        else:
+            emotion = str(raw_turn.get("emotion") or "warm").strip().lower()
         _, default_cam, _ = EMOTION_DIRECTIONS.get(emotion, EMOTION_DIRECTIONS["warm"])
         camera_action = str(raw_turn.get("camera_action") or default_cam).strip().lower()
         shot_framing = _assign_shot_framing(
@@ -2253,11 +2292,13 @@ def render_novela_episode(cfg: Dict[str, Any]) -> Dict[str, Any]:
 
         clean_wav = audio_dir / f"turn_{idx}.wav"
         if is_silent:
+            react_phrase_in = str(raw_turn.get("reaction_phrase") or raw_turn.get("tts_text") or "").strip()
             slot_dur = _synthesize_reaction_soundtrack_wav(
                 clean_wav,
                 dur_sec=float(raw_turn.get("silent_duration") or 2.0),
                 tone=episode_tone,
                 speaker=spk_raw,
+                reaction_text=react_phrase_in,
                 env_map=env_map,
                 work_dir=work_dir,
             )
@@ -2361,7 +2402,7 @@ def render_novela_episode(cfg: Dict[str, Any]) -> Dict[str, Any]:
                 is_silent_reaction=t.is_silent_reaction,
             )
             take_mp4 = work_dir / f"colab_take_{t.index:02d}.mp4"
-            _call_colab_animate_take(
+            colab_meta = _call_colab_animate_take(
                 colab_url=colab_url,
                 colab_token=colab_token,
                 image_path=t.shot_abs_path,
@@ -2369,8 +2410,11 @@ def render_novela_episode(cfg: Dict[str, Any]) -> Dict[str, Any]:
                 veo_prompt=v_prompt,
                 colab_engine=colab_engine,
                 out_mp4=take_mp4,
+                character_id=t.speaker_key,
+                emotion=t.emotion,
+                cfg_scale=(1.35 if t.is_silent_reaction else float(cfg.get("cfg_scale") or 1.25)),
             )
-            t.animation_engine_used = f"tier1_colab:{colab_engine}"
+            t.animation_engine_used = str(colab_meta.get("engine") or f"tier1_colab:{colab_engine}")
             colab_clips.append(take_mp4)
 
         stitch_res = stitch_novela_takes({
@@ -2429,9 +2473,11 @@ def render_novela_episode(cfg: Dict[str, Any]) -> Dict[str, Any]:
                 audio_wav=t.audio_wav,
                 out_mp4=take_mp4,
                 prompt=v_prompt,
+                character_id=t.speaker_key,
                 emotion=t.emotion,
                 camera_action=t.camera_action,
                 emotion_preset=t.cut_role,
+                cfg_scale=(1.35 if t.is_silent_reaction else float(cfg.get("cfg_scale") or 1.25)),
                 lead_in_pause=t.lead_in_pause,
                 is_silent_reaction=t.is_silent_reaction,
                 tone=episode_tone,
@@ -2529,7 +2575,7 @@ def render_novela_episode(cfg: Dict[str, Any]) -> Dict[str, Any]:
             "visual_style": visual_style,
             "dramatic_structure": dramatic_structure,
             "tone": episode_tone,
-            "prompt_rules": "v30_single_subject_lock",
+            "prompt_rules": "v31_frontal_moda_lock",
             "ass_events": [{"start": round(s, 2), "end": round(e, 2), "text": txt} for s, e, txt in ass_events],
             "platform_preset": platform_preset,
             "clean_cinema_mode": clean_cinema_mode,
