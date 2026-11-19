@@ -66,6 +66,24 @@ PRESERVED_EXACT_VARS = {
 }
 
 
+def _augment_cuda_ld_library_path(existing: str) -> str:
+    """Append existing host CUDA/NVIDIA library dirs without clobbering existing entries."""
+    candidates: list[str] = []
+    for base in ("/usr/lib64-nvidia", "/usr/local/cuda/lib64"):
+        if Path(base).is_dir():
+            candidates.append(base)
+    usr_local = Path("/usr/local")
+    if usr_local.is_dir():
+        for p in sorted(usr_local.glob("cuda-12*/targets/x86_64-linux/lib")):
+            if p.is_dir():
+                candidates.append(str(p))
+    parts = [x for x in (existing or "").split(":") if x]
+    for c in candidates:
+        if c not in parts:
+            parts.append(c)
+    return ":".join(parts)
+
+
 def build_clean_env(
     ws: Path = Path("/content/ai_studio_v4"),
     venv_dir: Optional[Path] = None,
@@ -84,6 +102,10 @@ def build_clean_env(
         if any(k.startswith(pref) for pref in TOXIC_PREFIXES):
             continue
         cleaned[k] = v
+
+    ld_path = _augment_cuda_ld_library_path(cleaned.get("LD_LIBRARY_PATH", ""))
+    if ld_path:
+        cleaned["LD_LIBRARY_PATH"] = ld_path
 
     cache_dir = ws / "cache"
     hf_cache = ws / "hf_cache"
@@ -143,10 +165,10 @@ def build_cells(server_code: str) -> list[dict]:
 # AI Media Studio — Google Colab Pro L4 Worker v4.0 (Clean-Slate · Zero Drive)
 
 Arquitetura à prova de falhas para **NVIDIA L4 (24 GB VRAM + RAM Alta)** em NVMe local (`/content/ai_studio_v4`), 100% sem Google Drive:
-- **Isolamento hermético (`clean_env.py`):** neutraliza `MPLBACKEND=module://matplotlib_inline...`, `PYTHONPATH`, `PYTHONHOME`, `JPY_*`, `COLAB_*` (preservando `COLAB_AUTH_TOKEN`) e `LD_PRELOAD` em todas as células e no bootstrap do servidor, preservando integralmente `LD_LIBRARY_PATH`, `CUDA_*` e `NVIDIA_*`.
-- **Dual Venv Python 3.10 via `uv`:** `envs/seedvc` (`numpy==1.26.4` + `transformers==4.46.3` + `torchcodec` + `TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=1`) e `envs/wangp` (`numpy==2.1.2` + `WanGP` v20.00 `shared/api.py` + FastAPI), com detecção automática de CUDA (`cu128`/`cu126`/`cu124`).
+- **Isolamento hermético (`clean_env.py`):** neutraliza `MPLBACKEND=module://matplotlib_inline...`, `PYTHONPATH`, `PYTHONHOME`, `JPY_*`, `COLAB_*` (preservando `COLAB_AUTH_TOKEN`) e `LD_PRELOAD` em todas as células e no bootstrap do servidor, preservando e enriquecendo `LD_LIBRARY_PATH` (`/usr/lib64-nvidia`, `/usr/local/cuda/lib64`, `/usr/local/cuda-12*/targets/x86_64-linux/lib`), `CUDA_*` e `NVIDIA_*`.
+- **Dual Venv Python 3.10 via `uv` imune a `libnppicc.so.12`:** `envs/seedvc` fixo em `torch==2.7.1+cu126` + `torchaudio==2.7.1+cu126` (nativo `soundfile`, zero `torchcodec`); `envs/wangp` em `torch==2.10.0+cu128` + `torchcodec==0.10.0` da wheel CPU (`--no-deps --index-url .../whl/cpu`) com fallback automático verificado para `cu126` (`2.7.1`) se necessário.
 - **Configuração por família validada no upstream `WanGP`:** `vae_block_size=64` + `audio_prompt_type='AS'` para LTX-2.5, `image_start` (`S`) + `image_refs` (`KI`) + `distill` para LongCat Avatar 1.6/1.5, `image_start` + `audio_prompt_type='A'` para InfiniteTalk, com `INT8` (Transformer + Text Encoder) + `SDPA` + `Profile 4`.
-- **Smoke test real + Quality Gates + Watchdog HTTP/2:** Célula 3 valida conversão real Seed-VC (Audio Quality Gate PCM) e micro-render real WanGP (Video Quality Gate `ffprobe` + liberação de VRAM); Célula 4 expõe `version='4.0.2-clean-l4'` (compatível com `vps_novela_runner.py`), valida `GET <tunnel>/health` externo e auto-recupera túnel/servidor sem caixas vermelhas.
+- **Smoke test real + Quality Gates + Watchdog HTTP/2:** Célula 2 valida `torchaudio.save/load` + CUDA nos dois venvs; Célula 3 valida conversão real Seed-VC (Audio Quality Gate PCM) e micro-render real WanGP (Video Quality Gate `ffprobe` + liberação de VRAM); Célula 4 expõe `version='4.0.3-clean-l4'` (compatível com `vps_novela_runner.py`), valida `GET <tunnel>/health` externo e auto-recupera túnel/servidor sem caixas vermelhas.
 """
         ),
     }
@@ -324,7 +346,7 @@ TA_VER = cuda_cfg["ta"]
 TC_VER = cuda_cfg.get("torchcodec") or ""
 TORCH_INDEX = f"https://download.pytorch.org/whl/{cuda_cfg['idx']}"
 
-# --- 1. Ambiente Seed-VC (dependência congelada: repo arquivado em Nov/2025) ---
+# --- 1. Ambiente Seed-VC (100% imune a torchcodec/libnppicc.so.12: PyTorch 2.7.1+cu126 + soundfile nativo) ---
 SEEDVC_VENV = WS / "envs/seedvc"
 SEEDVC_PY = str(SEEDVC_VENV / "bin/python")
 SEEDVC_DIR = WS / "repos/seed-vc"
@@ -340,13 +362,12 @@ if not ckpt_link.exists() and not ckpt_link.is_symlink():
 
 run_clean("Criação venv Python 3.10 Seed-VC", ["uv", "venv", str(SEEDVC_VENV), "--python", "3.10", "--seed"])
 
-# Instalar APENAS torch/torchaudio do índice CUDA; torchcodec deve vir do PyPI padrão
-# (o wheel cu128 de torchcodec exige libnppicc.so.12 ausente no runtime do Colab,
-# enquanto o wheel PyPI padrão linka apenas libtorch.so + FFmpeg do sistema).
-run_clean(f"Instalação PyTorch {TORCH_VER}+{cuda_cfg['idx']} (Seed-VC)", [
+# L4 (Ada Lovelace sm_89) com driver CUDA 12.8+/13.0 executa cu126 nativamente;
+# torchaudio==2.7.1 usa soundfile direto sem tocar em libtorchcodec_core*.so nem libnppicc.so.12.
+run_clean("Instalação PyTorch 2.7.1+cu126 + torchaudio 2.7.1 (Seed-VC · sem torchcodec)", [
     "uv", "pip", "install", "--python", SEEDVC_PY,
-    "--index-url", TORCH_INDEX,
-    f"torch=={TORCH_VER}", f"torchaudio=={TA_VER}",
+    "--index-url", "https://download.pytorch.org/whl/cu126",
+    "torch==2.7.1", "torchaudio==2.7.1",
 ], venv_dir=SEEDVC_VENV)
 
 svc_pkgs = [
@@ -356,13 +377,11 @@ svc_pkgs = [
     "descript-audio-codec==1.0.0", "soundfile==0.12.1", "pydub==0.25.1",
     "pyyaml", "resampy", "hydra-core==1.3.2", "python-dotenv", "jiwer==3.0.3",
 ]
-if TC_VER:
-    svc_pkgs.append(f"torchcodec=={TC_VER}")
-run_clean("Instalação dependências limpas Seed-VC (PyPI torchcodec, zero GUI/pyaudio)", [
+run_clean("Instalação dependências limpas Seed-VC (soundfile nativo, zero GUI/pyaudio/torchcodec)", [
     "uv", "pip", "install", "--python", SEEDVC_PY, *svc_pkgs,
 ], venv_dir=SEEDVC_VENV)
 
-# Valida imports + CUDA + torchaudio.save real (garante TorchCodec PyPI + FFmpeg OK no PyTorch 2.10)
+# Valida imports + CUDA + torchaudio.save() + torchaudio.load() reais sem torchcodec
 svc_check_code = (
     "import os, torch, torchaudio, transformers, librosa, munch, soundfile, dac\n"
     "from pathlib import Path\n"
@@ -371,18 +390,19 @@ svc_check_code = (
     "assert torch.cuda.is_available()\n"
     "chk = Path('/content/ai_studio_v4/tmp/ta_save_check.wav')\n"
     "torchaudio.save(str(chk), torch.zeros(1, 1600), 16000)\n"
-    "assert chk.is_file() and chk.stat().st_size > 100\n"
+    "wav, sr = torchaudio.load(str(chk))\n"
+    "assert chk.is_file() and chk.stat().st_size > 100 and sr == 16000 and tuple(wav.shape) == (1, 1600)\n"
     "chk.unlink(missing_ok=True)\n"
-    "print('SEEDVC_ENV_OK', torch.__version__, torch.cuda.get_device_name(0))\n"
+    "print('SEEDVC_ENV_OK', torch.__version__, torchaudio.__version__, torch.cuda.get_device_name(0))\n"
 )
 svc_check_py = WS / "tmp/seedvc_selfcheck.py"
 svc_check_py.write_text(svc_check_code, encoding="utf-8")
-svc_check = run_clean("Self-check Seed-VC (imports + CUDA + torchaudio.save)", [
+svc_check = run_clean("Self-check Seed-VC (imports + CUDA + torchaudio.save/load)", [
     SEEDVC_PY, str(svc_check_py),
 ], venv_dir=SEEDVC_VENV)
 print("   ->", svc_check.splitlines()[-1])
 
-# --- 2. Ambiente Worker/WanGP ---
+# --- 2. Ambiente Worker/WanGP (cu128 + torchcodec CPU --no-deps c/ fallback verificado p/ cu126) ---
 WANGP_VENV = WS / "envs/wangp"
 WANGP_PY = str(WANGP_VENV / "bin/python")
 WANGP_DIR = WS / "repos/WanGP"
@@ -394,6 +414,14 @@ run_clean(f"Instalação PyTorch {TORCH_VER}+{cuda_cfg['idx']} (Worker/WanGP)", 
     "--index-url", TORCH_INDEX,
     f"torch=={TORCH_VER}", f"torchvision=={TV_VER}", f"torchaudio=={TA_VER}",
 ], venv_dir=WANGP_VENV)
+
+if cuda_cfg["idx"] == "cu128" and TC_VER:
+    # Wheel CPU do torchcodec usa apenas ffmpeg do sistema e NÃO linka contra libnppicc.so.12
+    run_clean(f"Instalação torchcodec=={TC_VER} (wheel CPU --no-deps, sem libnppicc.so.12)", [
+        "uv", "pip", "install", "--python", WANGP_PY,
+        "--no-deps", "--index-url", "https://download.pytorch.org/whl/cpu",
+        f"torchcodec=={TC_VER}",
+    ], venv_dir=WANGP_VENV)
 
 if VIDEO_MODEL == "seed_vc_only":
     run_clean("Instalação FastAPI + Uvicorn (seed_vc_only)", [
@@ -410,8 +438,8 @@ else:
         ckpts_link.symlink_to(WS / "models/wangp")
 
     kept_reqs = ["fastapi", "uvicorn[standard]", "python-multipart", "numpy==2.1.2", "cython", "setuptools", "wheel"]
-    # Mantém torchcodec==0.10.0 do PyPI padrão (já presente em WanGP/requirements.txt) quando TC_VER ativo
-    skip_prefixes = ("torch", "torchvision", "torchaudio", "numpy") + (() if TC_VER else ("torchcodec",))
+    # Exclui torch/torchvision/torchaudio/torchcodec/numpy para não sobrescrever os wheels CUDA/CPU dedicados
+    skip_prefixes = ("torch", "torchvision", "torchaudio", "torchcodec", "numpy")
     for raw in (WANGP_DIR / "requirements.txt").read_text(encoding="utf-8").splitlines():
         ln = raw.split("#", 1)[0].strip()
         if not ln:
@@ -448,7 +476,8 @@ else:
         "assert torch.cuda.is_available()\n"
         "chk = Path('/content/ai_studio_v4/tmp/ta_wgp_check.wav')\n"
         "torchaudio.save(str(chk), torch.zeros(1, 1600), 16000)\n"
-        "assert chk.is_file() and chk.stat().st_size > 100\n"
+        "wav, sr = torchaudio.load(str(chk))\n"
+        "assert chk.is_file() and chk.stat().st_size > 100 and sr == 16000 and tuple(wav.shape) == (1, 1600)\n"
         "chk.unlink(missing_ok=True)\n"
         "sys.path.insert(0, '/content/ai_studio_v4/repos/WanGP')\n"
         "from shared.utils import generation_overrides\n"
@@ -470,13 +499,31 @@ else:
         "if not m:\n"
         "    ids = [x.get('id') or x.get('model_type') or str(x) for x in all_models]\n"
         "    raise RuntimeError(f'Modelo {target!r} ausente no WanGP clonado. IDs disponíveis: {ids[:40]}')\n"
-        "print('WANGP_API_OK', torch.__version__, 'models=', len(all_models), 'target=', target)\n"
+        "print('WANGP_API_OK', torch.__version__, torchaudio.__version__, 'models=', len(all_models), 'target=', target)\n"
     )
     sc_path = WS / "tmp/wangp_selfcheck.py"
     sc_path.write_text(wgp_selfcheck, encoding="utf-8")
-    wgp_check = run_clean("Self-check WanGP shared.api.init + overrides + matplotlib Agg + CUDA", [
-        WANGP_PY, str(sc_path),
-    ], venv_dir=WANGP_VENV)
+    try:
+        wgp_check = run_clean("Self-check WanGP (torchaudio.save/load + shared.api.init + overrides + Agg + CUDA)", [
+            WANGP_PY, str(sc_path),
+        ], venv_dir=WANGP_VENV)
+    except RuntimeError as exc:
+        msg = str(exc)
+        if cuda_cfg["idx"] == "cu128" and any(tok in msg for tok in ("libtorchcodec", "torchcodec", "undefined symbol", "torchaudio")):
+            print("[WARN] torchcodec CPU apresentou incompatibilidade com torch 2.10+cu128 — aplicando fallback verificado para PyTorch 2.7.1+cu126 (sem torchcodec)...")
+            run_clean("Remoção torchcodec (fallback cu126)", [
+                "uv", "pip", "uninstall", "--python", WANGP_PY, "torchcodec",
+            ], venv_dir=WANGP_VENV)
+            run_clean("Instalação PyTorch 2.7.1+cu126 + torchvision 0.22.1 + torchaudio 2.7.1 (WanGP fallback)", [
+                "uv", "pip", "install", "--python", WANGP_PY,
+                "--index-url", "https://download.pytorch.org/whl/cu126",
+                "torch==2.7.1", "torchvision==0.22.1", "torchaudio==2.7.1",
+            ], venv_dir=WANGP_VENV)
+            wgp_check = run_clean("Self-check WanGP (fallback cu126: torchaudio.save/load + shared.api.init + CUDA)", [
+                WANGP_PY, str(sc_path),
+            ], venv_dir=WANGP_VENV)
+        else:
+            raise
     print("   ->", wgp_check.splitlines()[-1])
 
 print("Etapa 2 concluída: 0 conflitos, sanitização verificada e 100% dos imports OK na L4.")
@@ -920,14 +967,15 @@ def verify_all(server_code: str) -> None:
     # 1. py_compile + ast.parse no servidor
     py_compile.compile(str(SERVER_PATH), doraise=True)
     ast.parse(server_code, filename=str(SERVER_PATH))
-    assert 'SERVER_VERSION = "4.0.' in server_code, "SERVER_VERSION deve começar com '4.0.' para vps_novela_runner.py!"
-    print("[OK] colab_v4_cinema_server.py: py_compile + ast.parse + SERVER_VERSION='4.0.*'")
+    assert 'SERVER_VERSION = "4.0.3-clean-l4"' in server_code, "SERVER_VERSION deve ser '4.0.3-clean-l4' (prefixo '4.0' para vps_novela_runner.py)!"
+    print("[OK] colab_v4_cinema_server.py: py_compile + ast.parse + SERVER_VERSION='4.0.3-clean-l4'")
 
     # 2. JSON + ast.parse nas 4 células + espelho idêntico + zero URL Markdown corrompida
     raw_primary = NB_PRIMARY.read_text(encoding="utf-8")
     raw_mirror = NB_MIRROR.read_text(encoding="utf-8")
     assert raw_primary == raw_mirror, "Espelhos .ipynb divergiram!"
     parsed = json.loads(raw_primary)
+    assert parsed.get("nbformat") == 4, "nbformat deve ser 4"
     code_cells = [c for c in parsed["cells"] if c["cell_type"] == "code"]
     assert len(code_cells) == 4, f"Esperadas 4 células de código, obtidas {len(code_cells)}"
     for idx, c in enumerate(code_cells, start=1):
@@ -937,6 +985,11 @@ def verify_all(server_code: str) -> None:
         assert "pkill -f colab_" not in src and "pkill -f cloudflared" not in src, (
             f"pkill sem bracket trick encontrado na célula {idx}!"
         )
+    cell2_src = "".join(code_cells[1]["source"])
+    assert "https://download.pytorch.org/whl/cu126" in cell2_src and '"torch==2.7.1", "torchaudio==2.7.1"' in cell2_src
+    assert '"--no-deps", "--index-url", "https://download.pytorch.org/whl/cpu"' in cell2_src
+    assert "torchaudio.save(" in cell2_src and "torchaudio.load(" in cell2_src
+    assert "fallback verificado para PyTorch 2.7.1+cu126" in cell2_src
     # Verifica que SERVER_CODE embutido na Célula 4 é exatamente igual ao arquivo standalone
     cell4_tree = ast.parse("".join(code_cells[3]["source"]), filename="cell_4.py")
     embedded_srv = None

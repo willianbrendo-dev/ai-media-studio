@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Google Colab Pro L4 (24GB VRAM) Cinema Engine v4.0 Worker Server.
 
-Zero-Drive, Clean-Slate Architecture (v4.0.2-clean-l4):
+Zero-Drive, Clean-Slate Architecture (v4.0.3-clean-l4):
 1. Hermetic environment sanitization at process bootstrap and every subprocess call
    (eliminates Jupyter MPLBACKEND/PYTHONPATH/JPY_* leaks while preserving CUDA/NVIDIA
    driver libs and COLAB_AUTH_TOKEN).
@@ -81,6 +81,24 @@ CACHE_DIR = WORKSPACE_ROOT / "cache"
 HF_CACHE_DIR = Path(os.environ.get("HF_HOME", str(WORKSPACE_ROOT / "hf_cache")))
 
 
+def _augment_cuda_ld_library_path(existing: str) -> str:
+    """Append existing host CUDA/NVIDIA library paths without clobbering existing entries."""
+    candidates: list[str] = []
+    for base in ("/usr/lib64-nvidia", "/usr/local/cuda/lib64"):
+        if Path(base).is_dir():
+            candidates.append(base)
+    usr_local = Path("/usr/local")
+    if usr_local.is_dir():
+        for p in sorted(usr_local.glob("cuda-12*/targets/x86_64-linux/lib")):
+            if p.is_dir():
+                candidates.append(str(p))
+    parts = [x for x in (existing or "").split(":") if x]
+    for c in candidates:
+        if c not in parts:
+            parts.append(c)
+    return ":".join(parts)
+
+
 def build_clean_env(
     venv_dir: Optional[Path] = None,
     extra: Optional[Dict[str, str]] = None,
@@ -98,6 +116,10 @@ def build_clean_env(
         if any(k.startswith(pref) for pref in TOXIC_PREFIXES):
             continue
         cleaned[k] = v
+
+    ld_path = _augment_cuda_ld_library_path(cleaned.get("LD_LIBRARY_PATH", ""))
+    if ld_path:
+        cleaned["LD_LIBRARY_PATH"] = ld_path
 
     forced = {
         "MPLBACKEND": "Agg",
@@ -163,7 +185,7 @@ from pydantic import BaseModel  # noqa: E402
 import uvicorn  # noqa: E402
 
 
-SERVER_VERSION = "4.0.2-clean-l4"  # Must start with "4.0" (vps_novela_runner.py L2380)
+SERVER_VERSION = "4.0.3-clean-l4"  # Must start with "4.0" (vps_novela_runner.py L2380)
 REPOS_DIR = WORKSPACE_ROOT / "repos"
 CONFIG_DIR = WORKSPACE_ROOT / "config"
 OUTPUTS_DIR = WORKSPACE_ROOT / "outputs" / "wangp"
