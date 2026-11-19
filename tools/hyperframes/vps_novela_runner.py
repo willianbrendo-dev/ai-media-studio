@@ -42,6 +42,16 @@ if _THIS_DIR not in sys.path:
     sys.path.insert(0, _THIS_DIR)
 import regional_voice_engine as rve  # noqa: E402
 import novela_lipsync_animator as nla  # noqa: E402
+import cinema_v4_director as cv4  # noqa: E402
+
+
+def _resolve_cinema_engine(cfg: Optional[Dict[str, Any]] = None) -> str:
+    raw = ""
+    if isinstance(cfg, dict):
+        raw = str(cfg.get("cinema_engine") or "").strip().lower()
+    if not raw:
+        raw = str(os.environ.get("NOVELA_CINEMA_ENGINE_DEFAULT", "v3.1")).strip().lower()
+    return "v4" if raw in ("v4", "v4.0", "cinema_v4", "cinema") else "v3.1"
 
 
 for _env_k, _env_v in (("OMP_NUM_THREADS", "2"), ("MKL_NUM_THREADS", "2"), ("CT2_NUM_THREADS", "2")):
@@ -1024,7 +1034,24 @@ def build_veo_take_prompt(
 
 
 def generate_flow_veo_pack(cfg: Dict[str, Any]) -> Dict[str, Any]:
-    """Generate Google Flow Veo 3.1 Production Pack (closed-mouth 1080x1920 Ingredients + 4-Cut bilingual prompts)."""
+    """Generate Google Flow Veo 3.1 Production Pack (dispatches to v4 Visual Bible OTS or v3.1 fallback)."""
+    if _resolve_cinema_engine(cfg) == "v4":
+        raw_in = list(cfg.get("dialogue") or [])
+        if not raw_in:
+            raise ValueError("Campo 'dialogue' vazio: informe ao menos 1 fala para gerar o Pack Cinema v4.")
+        env_map = _load_secrets_env()
+        manifest = cv4.generate_flow_veo_pack_v4(
+            cfg,
+            compiled_dialogue=raw_in,
+            flow_packs_dir=FLOW_PACKS_DIR,
+            novela_export_dir=NOVELA_EXPORT_DIR,
+            nvidia_key=(env_map.get("NVIDIA_API_KEY") or "").strip(),
+        )
+        qt = _get_qt()
+        if qt is not None:
+            qt.record_call("google-flow-veo31", ok=True, status_code=200, specialty="video")
+        return manifest
+
     t_start = time.time()
     visual_style = normalize_visual_style(str(cfg.get("visual_style") or "stylized_3d_pixar"))
     dramatic_structure = normalize_dramatic_structure(str(cfg.get("dramatic_structure") or "viral_4_cuts"))
@@ -1718,6 +1745,111 @@ def stitch_novela_takes(cfg: Dict[str, Any]) -> Dict[str, Any]:
         out_path = NOVELA_EXPORT_DIR / f"novela_stitched_{slug}_{int(time.time())}_{job_id}.mp4"
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
+    # Cinema Engine v4 Stitcher: J/L-cut audio overlap, dynamic LRA >= 5 LU, zero -45dB dead air, Seed-VC/AudioGate
+    if _resolve_cinema_engine(cfg) == "v4":
+        try:
+            tone = str(cfg.get("tone") or "Drama Tenso").strip()
+            v4_cfg = {**cfg, "tone": tone}
+            raw_dlg = redub_dialogue if redub_dialogue else [
+                {"speaker": f"Personagem {idx + 1}", "tts_text": "", "is_silent_reaction": (idx == len(take_paths) - 1 and len(take_paths) >= 4)}
+                for idx in range(len(take_paths))
+            ]
+            _, shot_specs = cv4.compile_cinema_v4_shots(v4_cfg, raw_dlg[:len(take_paths)])
+            v4_clips: List[Path] = []
+            v4_wavs: List[Optional[Path]] = []
+            takes_metrics: List[Dict[str, Any]] = []
+            raw_total_dur = 0.0
+            for idx, src_clip in enumerate(take_paths):
+                info = _probe_media(src_clip)
+                raw_dur = info["duration"]
+                raw_total_dur += raw_dur
+                words_meta = []
+                if trim_silence and info["has_audio"]:
+                    cut_s, cut_e, words_meta = _detect_speech_window(src_clip, raw_dur, work_dir, idx)
+                else:
+                    cut_s, cut_e = 0.0, raw_dur
+                seg_dur = max(0.45, cut_e - cut_s)
+                trim_clip = work_dir / f"v4_trim_{idx:02d}.mp4"
+                _run_checked([
+                    FFMPEG_BIN, "-y", "-ss", f"{cut_s:.3f}", "-t", f"{seg_dur:.3f}", "-i", str(src_clip),
+                    "-vf", "scale=1080:1920:force_original_aspect_ratio=increase:flags=lanczos,crop=1080:1920,setsar=1,fps=24,format=yuv420p",
+                    "-c:v", "libx264", "-preset", "fast", "-crf", "17",
+                    "-af", "aresample=48000:resampler=soxr,aformat=sample_fmts=fltp:channel_layouts=stereo",
+                    "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2",
+                    str(trim_clip),
+                ], timeout=120)
+                v4_clips.append(trim_clip)
+
+                # Extract native speech WAV (preserved 1:1 with original Flow/LTX lip-sync) or re-dub with AudioGate
+                dlg_wav: Optional[Path] = work_dir / f"v4_dlg_{idx:02d}.wav"
+                sp = shot_specs[idx] if idx < len(shot_specs) else None
+                if redub_regional and sp and sp.tts_text:
+                    meta_dub = rve.synthesize_regional_turn(
+                        tts_text=sp.tts_text,
+                        speaker=sp.speaker_label,
+                        emotion=sp.semantic_emotion,
+                        accent_engine=accent_engine,
+                        out_wav=dlg_wav,
+                        colab_url=colab_url,
+                        colab_token=colab_token,
+                        drama_pacing=cv4.tone_is_drama(tone),
+                        performance_direction=sp.performance_direction_pt,
+                    )
+                    redub_engines_used.append(meta_dub["voice_engine_used"])
+                elif info["has_audio"]:
+                    _run_checked([
+                        FFMPEG_BIN, "-y", "-i", str(trim_clip), "-vn",
+                        "-ar", "48000", "-ac", "2", "-c:a", "pcm_s16le", str(dlg_wav),
+                    ], timeout=45)
+                else:
+                    dlg_wav = None
+
+                # Keep target duration synchronized to real clip length (allowing natural L-cut overlap)
+                if sp:
+                    sp.target_duration_sec = round(_probe_duration(trim_clip), 2)
+                v4_wavs.append(dlg_wav)
+                takes_metrics.append({
+                    "index": idx + 1,
+                    "filename": src_clip.name,
+                    "raw_duration": round(raw_dur, 2),
+                    "cut_start": cut_s,
+                    "cut_end": cut_e,
+                    "final_duration": round(_probe_duration(trim_clip), 2),
+                    "words_detected": len(words_meta),
+                })
+
+            st_v4 = cv4.stitch_cinema_v4_episode(
+                clip_paths=v4_clips,
+                dialogue_wavs=v4_wavs,
+                shot_specs=shot_specs,
+                out_mp4=out_path,
+                tone=tone,
+                subtitles_mode=subtitles_mode,
+                safe_bottom=int(safe_zone["safe_bottom"]),
+                safe_right=int(safe_zone["safe_right"]),
+            )
+            final_dur = float(st_v4["duration"])
+            return {
+                "ok": True,
+                "cinema_engine": "v4",
+                "output_path": str(out_path),
+                "filename": out_path.name,
+                "platform_preset": platform_preset,
+                "subtitles_mode": subtitles_mode,
+                "trim_silence": trim_silence,
+                "takes_count": len(v4_clips),
+                "raw_total_duration": round(raw_total_dur, 2),
+                "duration": round(final_dur, 2),
+                "trimmed_seconds": round(max(0.0, raw_total_dur - final_dur), 2),
+                "has_l_cuts": st_v4["has_l_cuts"],
+                "redubbed_with_regional_tts": redub_regional,
+                "voice_engines_used": sorted(set(redub_engines_used)) or ["native_preserved"],
+                "takes_metrics": takes_metrics,
+                "elapsed_sec": round(time.time() - t_start, 2),
+            }
+        finally:
+            shutil.rmtree(work_dir, ignore_errors=True)
+
     trimmed_clips: List[Path] = []
     takes_metrics: List[Dict[str, Any]] = []
     ass_events: List[Tuple[float, float, str]] = []
@@ -2203,11 +2335,172 @@ def _prepend_lead_silence_wav(src_wav: Path, lead_sec: float) -> float:
 
 
 def render_novela_episode(cfg: Dict[str, Any]) -> Dict[str, Any]:
-    """Execute end-to-end multi-character micro-series production across v2.8 Dual-Style & 4-Cut modes."""
+    """Execute end-to-end multi-character micro-series production across v4 Cinema & v3.1 Fallback."""
     t_start_wall = time.time()
     render_mode = str(cfg.get("render_mode") or "vps_preview").strip().lower()
     if render_mode == "flow_pack":
         return generate_flow_veo_pack(cfg)
+
+    if _resolve_cinema_engine(cfg) == "v4":
+        raw_in = list(cfg.get("dialogue") or [])
+        if not raw_in:
+            raise ValueError("Campo 'dialogue' vazio: informe ao menos 1 fala para render Cinema v4.")
+        env_map = _load_secrets_env()
+        tone = str(cfg.get("tone") or "Drama Tenso").strip()
+        platform_preset = str(cfg.get("platform_preset") or "tiktok_reels").strip().lower()
+        safe_zone = PLATFORM_SAFE_ZONES.get(platform_preset) or PLATFORM_SAFE_ZONES["tiktok_reels"]
+        subtitles_mode = str(cfg.get("subtitles_mode") or "none").strip().lower()
+        accent_engine = str(cfg.get("accent_engine") or cfg.get("accent_preset") or "nordestino_raiz").strip().lower()
+        colab_url = str(cfg.get("colab_url") or env_map.get("COLAB_GPU_URL") or "").strip()
+        colab_token = str(cfg.get("colab_token") or env_map.get("COLAB_GPU_TOKEN") or "").strip()
+
+        bible, shots = cv4.compile_cinema_v4_shots(cfg, raw_in)
+        job_id = uuid.uuid4().hex[:8]
+        work_dir = Path(cfg.get("work_dir") or f"/tmp/hf_novela_v4_{job_id}")
+        work_dir.mkdir(parents=True, exist_ok=True)
+        out_raw = cfg.get("output")
+        if out_raw:
+            out_path = Path(str(out_raw))
+        else:
+            slug = re.sub(r"[^a-z0-9]+", "-", bible.title.lower()).strip("-")[:32] or "novela"
+            out_path = NOVELA_EXPORT_DIR / f"novela_v4_{slug}_{int(time.time())}_{job_id}.mp4"
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Check if Colab L4 v4.0 full-scene async worker is online
+        colab_v4_ready = False
+        if colab_url:
+            try:
+                hdrs = {"Accept": "application/json"}
+                if colab_token:
+                    hdrs["X-Colab-Token"] = colab_token
+                hreq = urllib.request.Request(f"{colab_url.rstrip('/')}/health", headers=hdrs, method="GET")
+                with urllib.request.urlopen(hreq, timeout=3.0) as hr:
+                    hdata = json.loads(hr.read().decode("utf-8"))
+                colab_v4_ready = (
+                    str(hdata.get("version", "")).startswith("4.0")
+                    and bool(hdata.get("wangp_ready") or hdata.get("ltx2_ready") or hdata.get("longcat_ready"))
+                )
+            except Exception:
+                colab_v4_ready = False
+
+        try:
+            assets = cv4.generate_v4_cinema_assets(bible, shots, work_dir, (env_map.get("NVIDIA_API_KEY") or "").strip())
+            wavs: List[Optional[Path]] = []
+            clips: List[Path] = []
+            voice_engines: List[str] = []
+            video_engines: List[str] = []
+
+            for idx, shot in enumerate(shots):
+                sa = assets["shot_assets"][idx]
+                kf_path = Path(sa["image_path"]) if sa.get("image_path") else Path(assets["set_master_path"])
+                w_path: Optional[Path] = None
+                if shot.tts_text:
+                    w_path = work_dir / f"v4_tts_{idx:02d}.wav"
+                    meta_t = rve.synthesize_regional_turn(
+                        tts_text=shot.tts_text,
+                        speaker=shot.speaker_label,
+                        emotion=shot.semantic_emotion,
+                        accent_engine=accent_engine,
+                        out_wav=w_path,
+                        colab_url=colab_url,
+                        colab_token=colab_token,
+                        drama_pacing=bible.is_drama,
+                        performance_direction=shot.performance_direction_pt,
+                        lead_pad=0.04,
+                        tail_pad=0.06,
+                    )
+                    voice_engines.append(meta_t["voice_engine_used"])
+                    shot.target_duration_sec = round(max(0.85, min(4.6, float(meta_t["duration"]) - shot.l_cut_bleed_sec + shot.lead_in_pause_sec)), 2)
+                wavs.append(w_path)
+
+                seg_mp4 = work_dir / f"v4_clip_{idx:02d}.mp4"
+                animated_v4 = False
+                if colab_v4_ready and kf_path.is_file():
+                    try:
+                        hdrs = {"Accept": "application/json", "Content-Type": "application/json"}
+                        if colab_token:
+                            hdrs["X-Colab-Token"] = colab_token
+                        payload_j = {
+                            "image_b64": base64.b64encode(kf_path.read_bytes()).decode("ascii"),
+                            "audio_b64": base64.b64encode(w_path.read_bytes()).decode("ascii") if (w_path and w_path.is_file()) else "",
+                            "prompt": sa["video_prompt"],
+                            "backend": "wangp_wan22_s2v",
+                            "duration_sec": shot.target_duration_sec,
+                            "width": 720,
+                            "height": 1280,
+                            "fps": 24,
+                        }
+                        sreq = urllib.request.Request(
+                            f"{colab_url.rstrip('/')}/jobs/animate_scene",
+                            data=json.dumps(payload_j).encode("utf-8"),
+                            headers=hdrs,
+                            method="POST",
+                        )
+                        with urllib.request.urlopen(sreq, timeout=20) as sr:
+                            sdata = json.loads(sr.read().decode("utf-8"))
+                        jid = sdata.get("job_id")
+                        deadline = time.time() + 420
+                        while jid and time.time() < deadline:
+                            time.sleep(3.0)
+                            greq = urllib.request.Request(f"{colab_url.rstrip('/')}/jobs/{jid}", headers=hdrs, method="GET")
+                            with urllib.request.urlopen(greq, timeout=15) as gr:
+                                gdata = json.loads(gr.read().decode("utf-8"))
+                            if gdata.get("status") == "completed" and gdata.get("video_b64"):
+                                seg_mp4.write_bytes(base64.b64decode(gdata["video_b64"]))
+                                animated_v4 = True
+                                video_engines.append(f"colab_v4:{gdata.get('backend') or 'wan22'}")
+                                break
+                            if gdata.get("status") == "error":
+                                raise RuntimeError(gdata.get("error") or "colab_v4_error")
+                    except Exception as cb_v4_exc:
+                        print(f"[CINEMA V4 WARN] Colab v4 full-scene take {idx+1} falhou ({cb_v4_exc}); usando storyboard animado.", flush=True)
+
+                if not animated_v4:
+                    # Storyboard camera motion preview (never falls back to v3.1 frontal head warp!)
+                    dur = max(0.85, shot.target_duration_sec)
+                    nfr = int(round(dur * 24))
+                    _run_checked([
+                        FFMPEG_BIN, "-y", "-loop", "1", "-i", str(kf_path),
+                        "-vf", f"scale=1200:2134:flags=lanczos,zoompan=z='min(zoom+0.0028,1.14)':d={nfr}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1080x1920:fps=24,format=yuv420p",
+                        "-t", f"{dur:.3f}", "-c:v", "libx264", "-preset", "fast", "-crf", "18", str(seg_mp4),
+                    ], timeout=90)
+                    video_engines.append("storyboard_v4_motion_preview")
+                clips.append(seg_mp4)
+
+            st_out = cv4.stitch_cinema_v4_episode(
+                clip_paths=clips,
+                dialogue_wavs=wavs,
+                shot_specs=shots,
+                out_mp4=out_path,
+                tone=tone,
+                subtitles_mode=subtitles_mode,
+                safe_bottom=int(safe_zone["safe_bottom"]),
+                safe_right=int(safe_zone["safe_right"]),
+            )
+            return {
+                "ok": True,
+                "cinema_engine": "v4",
+                "output_path": str(out_path),
+                "filename": out_path.name,
+                "render_mode": render_mode,
+                "visual_style": bible.visual_style,
+                "tone": bible.tone,
+                "prompt_rules": "v4_cinema_ots_bible",
+                "platform_preset": platform_preset,
+                "subtitles_mode": subtitles_mode,
+                "duration": st_out["duration"],
+                "scenes": len(shots),
+                "turns": len(shots),
+                "speakers": sorted({s.speaker_label for s in shots}),
+                "shot_framings": [s.shot_framing for s in shots],
+                "has_l_cuts": st_out["has_l_cuts"],
+                "voice_engines_used": sorted(set(voice_engines)),
+                "animation_engines_used": sorted(set(video_engines)),
+                "elapsed_sec": round(time.time() - t_start_wall, 2),
+            }
+        finally:
+            if not bool(cfg.get("keep_work_dir")):
+                shutil.rmtree(work_dir, ignore_errors=True)
 
     visual_style = normalize_visual_style(str(cfg.get("visual_style") or "stylized_3d_pixar"))
     dramatic_structure = normalize_dramatic_structure(str(cfg.get("dramatic_structure") or "viral_4_cuts"))

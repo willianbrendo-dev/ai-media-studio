@@ -910,11 +910,24 @@
                 <input id="gp-nov-render-mode" type="hidden" value="flow_pack" />
                 <div class="space-y-2 rounded-2xl bg-[#070a08] border border-white/10 p-3">
                   <div class="flex flex-wrap items-center justify-between gap-2">
-                    <label class="text-[11px] font-extrabold uppercase tracking-wider text-amber-300">🎬 Motor de Produção Clean Cinema (v2.5)</label>
+                    <label class="text-[11px] font-extrabold uppercase tracking-wider text-amber-300">🎬 Motor de Produção Clean Cinema (v4.0)</label>
                     <label class="inline-flex items-center gap-1.5 text-[11px] text-slate-300 cursor-pointer min-h-[36px]">
                       <input id="gp-nov-clean-cinema" type="checkbox" checked class="w-4 h-4 accent-amber-500 rounded" />
                       <span>Tela 100% Limpa (Sem Caixas)</span>
                     </label>
+                  </div>
+
+                  <!-- SELETOR DE MOTOR DE DIREÇÃO CINEMA (v4.0 vs v3.1 FALLBACK) -->
+                  <div class="rounded-xl bg-[#0d1210] border border-amber-500/30 p-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div class="space-y-0.5">
+                      <span class="text-[11px] font-extrabold uppercase tracking-wider text-amber-300 block">🎥 Direção de Câmera &amp; Som</span>
+                      <span id="nov-cinema-badge" class="text-[10px] text-slate-400">OTS + Contraplano + Eixo 180° + J/L-Cut + AudioGate</span>
+                    </div>
+                    <select id="nov-cinema-engine" onchange="syncNovCinemaEngine(this.value)"
+                      class="w-full sm:w-auto min-h-[42px] bg-[#070a08] border border-amber-400/35 focus:border-amber-400 rounded-xl px-2.5 text-xs text-amber-100 outline-none">
+                      <option value="v4" selected>🎬 Motor Cinema v4.0 (OTS · Contraplano · AudioGate)</option>
+                      <option value="v3.1">🛟 Legado v3.1 (Retrato Frontal MoDA / Fallback)</option>
+                    </select>
                   </div>
 
                   <!-- MOTOR DE SOTAQUE & VOZES NORDESTINAS (v2.6) -->
@@ -1044,6 +1057,8 @@
                         class="sm:col-span-2 w-full min-h-[44px] bg-[#0d1210] border border-white/10 focus:border-indigo-400 rounded-xl px-3 text-xs text-white outline-none" />
                       <select id="nov-colab-engine" class="w-full min-h-[44px] bg-[#0d1210] border border-white/10 rounded-xl px-2.5 text-xs text-white outline-none">
                         <option value="liveportrait_latentsync" selected>LivePortrait + LatentSync 1.5 (fp16)</option>
+                        <option value="wan22_s2v_v4">🎬 Wan 2.2 S2V 14B (Full-Scene L4 v4.0)</option>
+                        <option value="ltx25_v4">⚡ LTX-2.5 Audio+Video (Full-Scene L4 v4.0)</option>
                         <option value="liveportrait_musetalk">LivePortrait + MuseTalk 1.5 (fp16)</option>
                         <option value="sonic_echomimic">Sonic / EchoMimicV2 (Expressivo)</option>
                         <option value="latentsync">LatentSync 1.5 Direto</option>
@@ -1989,6 +2004,18 @@
                     <span>Clean Cinema (Sem Caixas/Placas)</span>
                   </label>
                 </div>
+              </div>
+
+              <div class="rounded-2xl bg-[#070a08] border border-amber-500/30 p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div class="space-y-0.5">
+                  <label class="text-[11px] font-semibold text-amber-300 block">🎥 Direção de Câmera &amp; Motor Cinema</label>
+                  <span id="qnv-cinema-badge" class="text-[10px] text-slate-400">OTS + Contraplano + Eixo 180° + J/L-Cut + AudioGate</span>
+                </div>
+                <select id="qnv-cinema-engine" onchange="syncNovCinemaEngine(this.value)"
+                  class="w-full sm:w-auto min-h-[44px] bg-[#0d1210] border border-amber-400/35 rounded-xl px-2.5 text-xs text-amber-100 outline-none">
+                  <option value="v4" selected>🎬 Motor Cinema v4.0 (OTS · Contraplano · AudioGate)</option>
+                  <option value="v3.1">🛟 Legado v3.1 (Retrato Frontal MoDA / Fallback)</option>
+                </select>
               </div>
 
               <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 items-center rounded-2xl bg-[#070a08] border border-emerald-500/25 p-3">
@@ -5159,6 +5186,7 @@
           render_mode: document.getElementById('gp-nov-render-mode')?.value || 'flow_pack',
           colab_engine: document.getElementById('nov-colab-engine')?.value || 'liveportrait_latentsync',
           accent_engine: document.getElementById('nov-accent-engine')?.value || 'nordestino_raiz',
+          cinema_engine: getNovCinemaEngine(),
         };
         if (Array.isArray(gpNovGeneratedDialogue) && gpNovGeneratedDialogue.length) {
           out.dialogue = gpNovGeneratedDialogue;
@@ -5463,6 +5491,7 @@
             tone: document.getElementById('gp-nov-tone')?.value || 'Comédia Leve',
             visual_style: document.getElementById('gp-nov-style')?.value || 'stylized_3d_pixar',
             dramatic_structure: document.getElementById('nov-dramatic-structure')?.value || 'viral_4_cuts',
+            cinema_engine: getNovCinemaEngine(),
           }),
         });
         const data = await res.json();
@@ -5519,6 +5548,8 @@
                 <option value="over_shoulder" ${(row.shot_framing || 'over_shoulder') === 'over_shoulder' ? 'selected' : ''}>Plano (Ombro)</option>
                 <option value="reverse_over_shoulder" ${row.shot_framing === 'reverse_over_shoulder' ? 'selected' : ''}>Contraplano</option>
                 <option value="reaction_closeup" ${row.shot_framing === 'reaction_closeup' ? 'selected' : ''}>Close-Up Reação</option>
+                <option value="wide_ensemble" ${row.shot_framing === 'wide_ensemble' ? 'selected' : ''}>Plano Conjunto (Figurantes)</option>
+                <option value="two_shot" ${row.shot_framing === 'two_shot' ? 'selected' : ''}>Two-Shot (2 Pessoas)</option>
               </select>
               <input type="text" value="${escapeHtml(row.expression_highlight || '')}" placeholder="Palavra destaque"
                 onchange="qnvDialogueRows[${idx}].expression_highlight = this.value"
@@ -5592,6 +5623,7 @@
             tone: 'Comédia Leve',
             visual_style: document.getElementById('qnv-style')?.value || 'stylized_3d_pixar',
             dramatic_structure: document.getElementById('qnv-dramatic-structure')?.value || 'viral_4_cuts',
+            cinema_engine: getNovCinemaEngine(),
           }),
         });
         const data = await res.json();
@@ -5691,9 +5723,9 @@
                 <span class="px-2 py-0.5 rounded-full text-[10px] font-mono bg-white/5 text-slate-300">${escapeHtml(tk.shot_framing)} · ~${tk.estimated_duration_sec}s</span>
                 <span class="px-2 py-0.5 rounded-full text-[10px] font-mono bg-amber-500/15 text-amber-300">${tk.credits_veo_lite} Lite / ${tk.credits_veo_fast} Fast créd</span>
                 <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/15 text-emerald-200">🎙️ Sotaque Sertão Ágil</span>
-                <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-cyan-500/15 text-cyan-200">👄 Pose Neutra p/ Lip-Sync</span>
+                <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-cyan-500/15 text-cyan-200">${pack.cinema_engine === 'v4' ? '🎥 OTS/Contraplano v4.0' : '👄 Pose Neutra p/ Lip-Sync'}</span>
               </div>
-              <div class="text-[11px] font-semibold text-white">“${escapeHtml(tk.tts_text)}”</div>
+              <div class="text-[11px] font-semibold text-white">“${escapeHtml(tk.tts_text || '[Reação Muda Cinematográfica]')}”</div>
               <textarea readonly rows="3" class="w-full bg-[#070a08] border border-white/10 rounded-lg p-2 text-[10px] font-mono text-slate-300 outline-none">${escapeHtml(tk.veo_prompt)}</textarea>
               <div class="flex flex-wrap gap-2">
                 <button type="button" onclick="copyVeoPrompt(${tk.take_number})"
@@ -5736,12 +5768,14 @@
               title: document.getElementById('qnv-title')?.value || 'Novela Flow Veo 3.1',
               visual_style: document.getElementById('qnv-style')?.value || 'stylized_3d_pixar',
               dramatic_structure: document.getElementById('qnv-dramatic-structure')?.value || 'viral_4_cuts',
+              cinema_engine: getNovCinemaEngine(),
               dialogue: qnvDialogueRows,
             }
           : {
               title: gpNovGeneratedMeta.title || document.getElementById('gp-nov-theme')?.value || 'Causos do Sertão',
               visual_style: document.getElementById('gp-nov-style')?.value || 'stylized_3d_pixar',
               dramatic_structure: document.getElementById('nov-dramatic-structure')?.value || 'viral_4_cuts',
+              cinema_engine: getNovCinemaEngine(),
               theme: document.getElementById('gp-nov-theme')?.value || '',
               expressions: (document.getElementById('gp-nov-expressions')?.value || '').split(',').map(s => s.trim()).filter(Boolean),
               tone: document.getElementById('gp-nov-tone')?.value || 'Comédia Leve',
@@ -5803,6 +5837,25 @@
     let qnvActiveRecIdx = -1;
     let qnvMediaRecorder = null;
     let qnvRecChunks = [];
+
+    function getNovCinemaEngine() {
+      return (document.getElementById('nov-cinema-engine')?.value || document.getElementById('qnv-cinema-engine')?.value || 'v4').trim();
+    }
+
+    function syncNovCinemaEngine(val) {
+      const v = (val === 'v3.1') ? 'v3.1' : 'v4';
+      const s1 = document.getElementById('nov-cinema-engine');
+      const s2 = document.getElementById('qnv-cinema-engine');
+      if (s1 && s1.value !== v) s1.value = v;
+      if (s2 && s2.value !== v) s2.value = v;
+      const msg = v === 'v4'
+        ? 'OTS + Contraplano + Eixo 180° + J/L-Cut + AudioGate'
+        : 'Modo Legado v3.1 · Retrato Frontal MoDA / Fallback';
+      const b1 = document.getElementById('nov-cinema-badge');
+      const b2 = document.getElementById('qnv-cinema-badge');
+      if (b1) b1.textContent = msg;
+      if (b2) b2.textContent = msg;
+    }
 
     function syncNovAccentEngine(val) {
       const v = (val || 'nordestino_raiz').trim();
@@ -6019,6 +6072,8 @@
             trim_silence: true,
             redub_with_regional_tts: redubChecked,
             accent_engine: accentEngine,
+            tone: document.getElementById('gp-nov-tone')?.value || 'Drama Tenso',
+            cinema_engine: getNovCinemaEngine(),
             dialogue: redubChecked ? dlgForRedub : [],
           }),
         });
@@ -6090,6 +6145,7 @@
             render_mode: rmode,
             colab_engine: document.getElementById('nov-colab-engine')?.value || 'liveportrait_latentsync',
             accent_engine: document.getElementById('qnv-accent-engine')?.value || document.getElementById('nov-accent-engine')?.value || 'nordestino_raiz',
+            cinema_engine: getNovCinemaEngine(),
             dictionary: Array.isArray(parsedDict) ? parsedDict : [],
             dialogue: qnvDialogueRows,
             quality: 'standard',

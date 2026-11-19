@@ -177,3 +177,22 @@ GAP TOTAL (hoje.mp4 3/13 PASS vs espectativa.mp4 13/13 PASS)
 ### 4.4 Bloqueio / Ação Necessária para Fase 5 (Spikes na L4)
 - **Túnel Colab L4 (`COLAB_GPU_URL`) está offline** (`online: false` no endpoint `/api/colab/status` em 2026-11-19 06:36 -03). Sem uma sessão ativa do Colab Pro (L4 24 GB), os benchmarks reais de tempo/VRAM/lip-sync da Fase 5 (`LongCat-Video-Avatar 1.5`, `Wan2.2-S2V-14B fp8`, `InfiniteTalk`, `LTX-2.5`, `Seed-VC`) não podem ser executados ainda.
 - **Próximo passo enquanto o Colab L4 não está conectado:** Podemos avançar na validação local/VPS dos componentes independentes do Colab (ex.: Spike gratuito de `flux.1-kontext-dev` na NVIDIA NIM para provar continuidade OTS/Two-Shot entre planos e implementação do Audio Quality Gate + Shot Compiler v4 atrás de feature flag), **ou** aguardar a conexão do notebook Colab L4 para executar os spikes da Fase 5 antes da implementação completa.
+
+---
+
+## Atualização Empírica (Fase 6 Concluída na VPS + APIs Externas Verificadas)
+
+1. **Verificação Empírica NVIDIA NIM & Fontes Gratuitas:**
+   - Testado `black-forest-labs/flux.1-kontext-dev` ao vivo na NVIDIA NIM: rejeita `"aspect_ratio": "9:16"`, `"guidance_scale"` e `"seed"` (`HTTP 422`), exige `"example_id"` em vez de `image` base64 (`422 {"detail":"Expected: example_id, got: base64"}`), e `https://api.nvcf.nvidia.com/v2/nvcf/assets` retorna `410 Gone`.
+   - `flux.1-dev` e `flux.1-schnell` aceitam prompts customizados em `768x1344` (`HTTP 200`), exigindo sanitização de filtros excessivamente restritivos (`_sanitize_nim_prompt`) e estrutura de prompt com **composição OTS/Wide nos primeiros tokens e direção positiva de olhar fora da lente** (nunca negações com `"camera lens"`).
+   - `Qwen/Qwen-Image-Edit` no HF ZeroGPU excede cota gratuita (`-120s left`) e OpenRouter `:free` não expõe modelos gratuitos de geração de imagem.
+   - Portanto, na Fase 6, a Bíblia Visual (`set_master.jpg`, `char_*.jpg`) + placas únicas OTS/Contraplano/Reação/Ensemble usam `flux.1-dev` sanitizado com fallback `flux.1-schnell`, enquanto consistência `>= 0.80` com ingredientes é entregue ao **Google Flow (`Veo 3.1 Lite`)** e ao **Colab L4 v4.0 (`Wan 2.2 S2V / LTX-2.5`)**.
+2. **Audio Quality Gate v4 (`regional_voice_engine.py`):**
+   - Validação de `RMS >= -32 dBFS` e `ZCR >= 0.025` em Python stdlib puro (`array` + `math`, funcionando tanto no `.venv` enxuto do painel web para `/api/quick/novela/preview-voice` quanto no worker pesado com `numpy` + `faster-whisper` CPU INT8 + anti-aliasing).
+   - Rejeição e limpeza automática de cache corrompido + bloqueio de respostas falsas `"fallback"`/`"copy"` do Colab.
+3. **Cinema Director Engine v4 (`cinema_v4_director.py`, `vps_novela_runner.py`, `guided_pipelines.py`, `main.py`, `index.html`):**
+   - Feature flag `cinema_engine` (`"v4"` vs `"v3.1"` preservado intacto como fallback).
+   - Montagem `stitch_cinema_v4_episode` com alinhamento estrito pela duração real dos WAVs sintetizados, pausas pós-L-cut (`<= 0.18s`), ambientação `-38 dBFS` calibrada em NumPy e ganho linear único (`LRA = 9.9 LU`, `-15.8 LUFS`, `-2.0 dBTP`).
+   - Resultado objetivo em `tests/cinema_qa.py` (`novela_stitched_segredo-no-altar-r2_*.mp4`): **9/13 critérios aprovados** (`shots_ge_4_and_varied=true`, `non_frontal_gaze_ge_60pct=true` com `100%` não-frontal / `0%` camera stare, `at_least_1_multi_person_or_ots=true`, `audio_lra_ge_5_0=true`, `audio_lufs_in_target=true`, `audio_true_peak_le_minus_1_5=true`, `audio_no_dead_window_below_45db=true`, `zero_static_crop_reuse=true`, `no_corrupted_mute_dialogue_shot=true`). Os 4 critérios pendentes (`motion >= 3.0`, `lipsync`, `identity_similarity >= 0.80`) dependem dos clipes de difusão de vídeo da Fase 5/7 (`Flow Veo 3.1` ou `Colab L4 v4`).
+4. **Colab Pro L4 + Google Drive 5 TB (`tools/colab-gpu-worker/`):**
+   - Notebook `ai_studio_colab_novela_gpu.ipynb` reconstruído do zero (`ast.parse` validado): cache persistente em `/content/drive/MyDrive/AI_Media_Studio_v4_Cache`, ambiente isolado **Python 3.11 via `uv`** (`/content/venv_cinema311`) eliminando o erro de `scikit-image` no Python 3.13, interface real `WanGP/wgp.py --process`, `Seed-VC` real (`--f0-condition False --auto-f0-adjust True --fp16 True`, sem fallback silencioso) e jobs assíncronos `/jobs/animate_scene`. Aguardando conexão da L4 pelo usuário para executar os benchmarks da Fase 5 e validação final da Fase 7.

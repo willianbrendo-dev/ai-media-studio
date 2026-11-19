@@ -998,48 +998,80 @@ class GuidedPipelineOrchestrator:
         episode_badge: str = "🌵 NOVELINHA DO SERTÃO • EP. 01",
         visual_style: str = "stylized_3d_pixar",
         dramatic_structure: str = "viral_4_cuts",
+        cinema_engine: str = "v3.1",
     ) -> Dict[str, Any]:
-        """Generate multi-character Northeast dialogue via AI cascade with v2.8 Dual-World & Viral 4-Cut pacing."""
+        """Generate multi-character dialogue via AI cascade across Cinema v4 (OTS/Hook) or v3.1 fallback."""
         vstyle = _normalize_novela_visual_style(visual_style)
         dstruct = _normalize_novela_dramatic_structure(dramatic_structure)
+        is_v4 = (cinema_engine or "").strip().lower() in ("v4", "v4.0", "cinema_v4", "cinema")
+        is_drama_tone = any(k in f"{tone} {theme}".lower() for k in ("drama", "trai", "tenso", "suspense", "choque", "casamento", "briga"))
         expr_list = [e.strip() for e in (expressions or []) if e and e.strip()]
         if not expr_list:
-            expr_list = ["Oxente", "Morreu Maria Preá", "Botar Boneco", "Deixe de cunversa"]
+            expr_list = ["O quê?!", "Mentira!"] if (is_v4 and is_drama_tone) else ["Oxente", "Morreu Maria Preá", "Botar Boneco", "Deixe de cunversa"]
 
-        world_directive = (
-            "ESTILO VISUAL: CINEMATOGRÁFICO REALISTA 8K LIVE-ACTION (pessoas reais em café/calçada nordestina iluminada, atuação contida de cinema/novela das 9). "
-            if vstyle == "cinematic_live_action"
-            else "ESTILO VISUAL: ANIMAÇÃO 3D PIXAR/CARTOON EXPRESSIVA (bodega nordestina colorida estilizada). "
-        )
-        structure_directive = (
-            "ESTRUTURA OBRIGATÓRIA VIRAL 4 CORTES (v3.0):\n"
-            "- Corte 1 (`attack_angry`, `lead_in_pause`: 0.0): Personagem A dispara provocação rápida (MÁX. 12 a 15 palavras, 2.0s a 3.4s, `over_shoulder`).\n"
-            "- Corte 2 (`calm_inhale_comeback`, `lead_in_pause`: 0.12): Personagem B devolve uma invertida certeira (MÁX. 12 a 15 palavras, 2.0s a 3.4s, `reverse_over_shoulder`).\n"
-            "- Corte 3 (`shock_what`, `lead_in_pause`: 0.0): Reação de espanto (MÁX. 12 palavras, `reaction_closeup`).\n"
-            "- Corte 4 (`silent_shame_reaction`, `is_silent_reaction`: true, `silent_duration`: 2.0, `tts_text`: \"\", `subtitle_text`: \"\"): Close-up de reação de 2.0s voltando no Personagem A.\n"
-            if dstruct == "viral_4_cuts"
-            else "ESTRUTURA CLÁSSICA (3 CORTES RÁPIDOS): dialogue com 3 falas ágeis (máx. 12-15 palavras cada) alternando plano/contraplano.\n"
-        )
+        if is_v4:
+            world_directive = (
+                "ESTILO CINEMA v4.0 (MICRO-DRAMA VERTICAL 9:16): planos Over-The-Shoulder (OTS), olhares cruzados (NUNCA olhando para a lente), "
+                "gesticulação física explícita com as mãos, figurantes vivos ao fundo, iluminação prática e continuidade de cenário."
+            )
+            structure_directive = (
+                "DECUPAGEM OBRIGATÓRIA v4.0 (10s–12s TOTAIS, RITMO VARIADO):\n"
+                "- Corte 1 (`hook_confrontation`, `over_shoulder`, `~3.0s`): ABRE NO MEIO DO CONFLITO no segundo 0.0 (MÁX. 8 a 11 palavras, sem cumprimento!).\n"
+                "- Corte 2 (`cold_turnaround`, `reverse_over_shoulder`, `lead_in_pause`: 0.25, `~3.8s`): Reviravolta fria ou revelação chocante (MÁX. 9 a 12 palavras).\n"
+                "- Corte 3 (`third_shock_impact`, `reaction_closeup`, `<= 1.2s`): Impacto seco de 3º personagem ou alvo (EXATAMENTE 1 a 3 palavras explosivas, ex: 'O quê?!' ou 'Mentira!').\n"
+                "- Corte 4 (`ensemble_cliffhanger`, `wide_ensemble`, `is_silent_reaction`: true, `silent_duration`: 2.1): Reação silenciosa de cliffhanger com figurantes no fundo virando para olhar/fofocar.\n"
+            )
+            allowed_framings = ("two_shot", "over_shoulder", "reverse_over_shoulder", "reaction_closeup", "wide_ensemble")
+            allowed_emotions = "furious, angry, cold_twist, betrayal, shock, shame, panic, laughing, warm"
+            cast_hint = (
+                "Para drama use elenco dramático apropriado ao tema (ex: 'Noiva', 'Sogra', 'Noivo' ou nomes da história); "
+                "para comédia regional use 'Dona Socorro', 'Seu Bastião', 'Enzo'."
+            )
+            slang_rule = (
+                "Se o tom for drama sério, use português brasileiro natural direto e intenso sem gírias cômicas forçadas; "
+                "se for comédia nordestina, use vocabulário nordestino autêntico sem alongar vogais e proibindo gírias do sul/sudeste."
+            )
+        else:
+            world_directive = (
+                "ESTILO VISUAL: CINEMATOGRÁFICO REALISTA 8K LIVE-ACTION (pessoas reais em café/calçada nordestina iluminada, atuação contida de cinema/novela das 9). "
+                if vstyle == "cinematic_live_action"
+                else "ESTILO VISUAL: ANIMAÇÃO 3D PIXAR/CARTOON EXPRESSIVA (bodega nordestina colorida estilizada). "
+            )
+            structure_directive = (
+                "ESTRUTURA OBRIGATÓRIA VIRAL 4 CORTES (v3.0):\n"
+                "- Corte 1 (`attack_angry`, `lead_in_pause`: 0.0): Personagem A dispara provocação rápida (MÁX. 12 a 15 palavras, 2.0s a 3.4s, `over_shoulder`).\n"
+                "- Corte 2 (`calm_inhale_comeback`, `lead_in_pause`: 0.12): Personagem B devolve uma invertida certeira (MÁX. 12 a 15 palavras, 2.0s a 3.4s, `reverse_over_shoulder`).\n"
+                "- Corte 3 (`shock_what`, `lead_in_pause`: 0.0): Reação de espanto (MÁX. 12 palavras, `reaction_closeup`).\n"
+                "- Corte 4 (`silent_shame_reaction`, `is_silent_reaction`: true, `silent_duration`: 2.0, `tts_text`: \"\", `subtitle_text`: \"\"): Close-up de reação de 2.0s voltando no Personagem A.\n"
+                if dstruct == "viral_4_cuts"
+                else "ESTRUTURA CLÁSSICA (3 CORTES RÁPIDOS): dialogue com 3 falas ágeis (máx. 12-15 palavras cada) alternando plano/contraplano.\n"
+            )
+            allowed_framings = ("over_shoulder", "reverse_over_shoulder", "reaction_closeup")
+            allowed_emotions = "shocked, confused, laughing, proud, dramatic, shame, warm"
+            cast_hint = "Personagens fixos disponíveis: 'Dona Socorro', 'Seu Bastião', 'Enzo', 'Narrador'."
+            slang_rule = (
+                "REGRA CULTURAL INEGOCIÁVEL: é PROIBIDO usar gírias mineiras, paulistas ou gaúchas como 'trem', 'uai', 'sô', 'mano', 'meo', 'daora', 'guri', 'bah', 'tchê'. "
+                "Use apenas vocabulário legítimo do Nordeste ('oxente', 'oxe', 'vixe', 'esse negócio', 'essa marmota', 'essa presepada', 'cabra', 'mangar', 'botar boneco', 'morreu Maria Preá', 'deixe de cunversa', 'arretado'). "
+            )
 
         sys_prompt = (
-            "Você é roteirista e diretor cinematográfico de micro-séries virais nordestinas para Reels/TikTok (10 a 15 segundos no total, corte seco plano/contraplano). "
+            "Você é roteirista e diretor cinematográfico de micro-séries verticais (10 a 13 segundos no total, corte seco plano/contraplano). "
             + world_directive
             + structure_directive
-            + "Personagens fixos disponíveis: 'Dona Socorro', 'Seu Bastião', 'Enzo', 'Narrador'. "
-            "REGRA DE DURAÇÃO & LEGENDA 100% FIEL: Cada fala deve ter NO MÁXIMO 12 a 15 palavras (2.0s a 3.4s). "
-            "`subtitle_text` DEVE reproduzir EXATAMENTE 100% de todas as palavras de `tts_text` (PROIBIDO truncar ou resumir a 2ª frase!). "
-            "REGRA CULTURAL INEGOCIÁVEL: é PROIBIDO usar gírias mineiras, paulistas ou gaúchas como 'trem', 'uai', 'sô', 'mano', 'meo', 'daora', 'guri', 'bah', 'tchê'. "
-            "Use apenas vocabulário legítimo do Nordeste ('oxente', 'oxe', 'vixe', 'esse negócio', 'essa marmota', 'essa presepada', 'cabra', 'mangar', 'botar boneco', 'morreu Maria Preá', 'deixe de cunversa', 'arretado'). "
-            "NUNCA alongue vogais repetidas ('Oxêêênte' é proibido; escreva 'Oxente!'). "
+            + f" {cast_hint} "
+            "REGRA DE DURAÇÃO & LEGENDA 100% FIEL: Cada fala deve ser curta e impactante dentro do tempo do plano. "
+            "`subtitle_text` DEVE reproduzir EXATAMENTE 100% de todas as palavras de `tts_text` (PROIBIDO truncar ou resumir!). "
+            + slang_rule
+            + "NUNCA alongue vogais repetidas ('Oxêêênte' é proibido; escreva 'Oxente!'). "
             "Responda EXCLUSIVAMENTE um JSON válido com as chaves:\n"
             "- title (string curta)\n"
             "- episode_badge (string)\n"
-            "- setting (descrição curta em inglês do cenário externo iluminado com figurantes discretos ao fundo)\n"
-            "- dictionary (array de 2 objetos {term, meaning} explicando as gírias usadas em português claro e engraçado)\n"
-            "- dialogue (array de takes com: speaker, tts_text, subtitle_text, emotion [uma de: shocked, confused, laughing, proud, dramatic, shame, warm], "
-            "camera_action [uma de: shake, whip_pan, zoom_in, dramatic_push], shot_framing [uma de: over_shoulder, reverse_over_shoulder, reaction_closeup], "
-            "cut_role [attack_angry, calm_inhale_comeback, shock_what, silent_shame_reaction], lead_in_pause [float segundos], "
-            "is_silent_reaction [boolean], silent_duration [float segundos], physical_action_en [ação física em inglês], expression_highlight [string])."
+            "- setting (descrição em inglês detalhada do cenário físico único compartilhado com iluminação prática e figurantes)\n"
+            "- dictionary (array de 2 objetos {term, meaning})\n"
+            f"- dialogue (array de takes com: speaker, tts_text, subtitle_text, emotion [uma de: {allowed_emotions}], "
+            f"camera_action [shake, whip_pan, zoom_in, dramatic_push], shot_framing [uma de: {', '.join(allowed_framings)}], "
+            "cut_role, lead_in_pause [float segundos], is_silent_reaction [boolean], silent_duration [float segundos], "
+            "physical_action_en [ação corporal/mãos em inglês], expression_highlight [string])."
         )
         user_prompt = (
             f"Tema do episódio: {theme}\n"
@@ -1080,13 +1112,13 @@ class GuidedPipelineOrchestrator:
             sub = tts if (not sub_raw or len(sub_raw.split()) < len(tts.split())) else sub_raw
 
             framing = str(row.get("shot_framing") or default_framings[d_idx % len(default_framings)]).strip().lower()
-            if framing not in ("over_shoulder", "reverse_over_shoulder", "reaction_closeup"):
+            if framing not in allowed_framings:
                 framing = default_framings[d_idx % len(default_framings)]
 
             cut_role = str(row.get("cut_role") or default_roles[min(d_idx, len(default_roles) - 1)]).strip().lower()
-            if is_silent:
+            if is_silent and not is_v4:
                 cut_role = "silent_shame_reaction"
-            elif dstruct == "viral_4_cuts" and d_idx == 1 and cut_role not in ("calm_inhale_comeback",):
+            elif dstruct == "viral_4_cuts" and d_idx == 1 and not is_v4 and cut_role not in ("calm_inhale_comeback",):
                 cut_role = "calm_inhale_comeback"
 
             try:
@@ -1103,7 +1135,13 @@ class GuidedPipelineOrchestrator:
             if is_silent:
                 silent_dur = max(1.8, min(2.2, silent_dur or 2.0))
 
-            emotion = "shame" if is_silent else str(row.get("emotion") or "warm").strip().lower()
+            if not is_v4:
+                if is_silent:
+                    emotion = "shame"
+                else:
+                    emotion = str(row.get("emotion") or "warm").strip().lower()
+            else:
+                emotion = str(row.get("emotion") or ("shock" if is_silent else "furious")).strip().lower()
             cleaned_dialogue.append({
                 "speaker": str(row.get("speaker") or "Dona Socorro").strip(),
                 "tts_text": tts,
@@ -1122,7 +1160,7 @@ class GuidedPipelineOrchestrator:
             fallback["source"] = "fallback_deterministic"
             return fallback
 
-        if dstruct == "viral_4_cuts":
+        if dstruct == "viral_4_cuts" and not is_v4:
             if len(cleaned_dialogue) >= 2:
                 lp2 = float(cleaned_dialogue[1].get("lead_in_pause") or 0.0)
                 cleaned_dialogue[1]["lead_in_pause"] = 0.12 if (lp2 <= 0.0 or lp2 >= 0.35) else round(min(0.18, max(0.08, lp2)), 2)

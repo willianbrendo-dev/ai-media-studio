@@ -20,6 +20,7 @@ from __future__ import annotations
 import base64
 import io
 import json
+import math
 import os
 import re
 import shutil
@@ -36,6 +37,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import asyncio
 import hashlib
 import sys
+import unicodedata
 
 STUDIO_BASE = Path(os.environ.get("STUDIO_BASE_DIR", "/opt/ai-media-studio"))
 VOICES_REGIONAL_DIR = STUDIO_BASE / "voices/regional"
@@ -179,6 +181,45 @@ DEFAULT_REGIONAL_PROFILES: Dict[str, Dict[str, Any]] = {
         ),
         "default_sample_text": "Eita lá! Mais um dia agitado na bodega antes da presepada começar!",
     },
+    "noiva": {
+        "id": "noiva",
+        "label": "Noiva",
+        "role": "Protagonista dramática intensa",
+        "region": "Urbano / Drama Brasileiro",
+        "gemini_voice": "Aoede",
+        "gemini_alt_voice": "Kore",
+        "edge_voice": "pt-BR-FranciscaNeural",
+        "edge_rate": "+4%",
+        "edge_pitch": "+1Hz",
+        "style_instruction": "Atue em português brasileiro dramático realista, voz emotiva, firme e intensa.",
+        "default_sample_text": "Você acha mesmo que eu não vi tudo acontecer bem na minha frente?!",
+    },
+    "sogra": {
+        "id": "sogra",
+        "label": "Sogra",
+        "role": "Antagonista fria, elegante e manipuladora",
+        "region": "Urbano / Drama Brasileiro",
+        "gemini_voice": "Kore",
+        "gemini_alt_voice": "Leda",
+        "edge_voice": "pt-BR-ThalitaMultilingualNeural",
+        "edge_rate": "-4%",
+        "edge_pitch": "-3Hz",
+        "style_instruction": "Atue com frieza elegante e cortante de antagonista dramática brasileira, calma e intimidadora.",
+        "default_sample_text": "Calma querida... se você falar agora, quem perde tudo é a sua família.",
+    },
+    "noivo": {
+        "id": "noivo",
+        "label": "Noivo",
+        "role": "Co-protagonista masculino sob pressão",
+        "region": "Urbano / Drama Brasileiro",
+        "gemini_voice": "Puck",
+        "gemini_alt_voice": "Charon",
+        "edge_voice": "pt-BR-AntonioNeural",
+        "edge_rate": "+2%",
+        "edge_pitch": "-2Hz",
+        "style_instruction": "Atue em português brasileiro dramático realista com voz masculina expressiva e tensa.",
+        "default_sample_text": "O quê?! Como você descobriu isso?!",
+    },
 }
 
 SPEAKER_KEY_ALIASES: Dict[str, str] = {
@@ -194,16 +235,183 @@ SPEAKER_KEY_ALIASES: Dict[str, str] = {
     "narrador": "narrador_sertao",
     "narradora": "narrador_sertao",
     "narrador_sertao": "narrador_sertao",
+    "noiva": "noiva",
+    "esposa": "noiva",
+    "noivo": "noivo",
+    "marido": "noivo",
+    "sogra": "sogra",
+    "mae": "sogra",
+    "mãe": "sogra",
 }
 
 EMOTION_ACTING_CUES_PT: Dict[str, str] = {
-    "shocked": "Reação imediata e rápida de espanto, voz firme e expressiva sem arrastar.",
-    "confused": "Tom perplexo, resposta ágil de quem foi pego de surpresa.",
+    "shocked": "Reação imediata de espanto real, respiração presa e voz firme.",
+    "shock": "Choque súbito e impacto emocional, corte seco na voz.",
+    "confused": "Tom perplexo e incrédulo de quem acabou de ser surpreendido.",
     "laughing": "Rindo de verdade com tirada rápida, alegre e debochada.",
-    "proud": "Tom convencido e esperto, resposta na ponta da língua.",
-    "dramatic": "Dramaticidade cômica acelerada de barraco bem-humorado.",
-    "warm": "Tom animado, direto e caloroso de conversa rápida na calçada.",
+    "proud": "Tom convencido e seguro, resposta na ponta da língua.",
+    "dramatic": "Interpretação dramática de novela das 9, tensão visceral e pausas naturais.",
+    "furious": "Raiva contida explodindo em acusação direta, articulação intensa e firme.",
+    "angry": "Indignação firme e confrontadora, sem perder a clareza das palavras.",
+    "cold_twist": "Frieza calculada e cortante, voz baixa mas letal que vira o jogo.",
+    "betrayal": "Voz embargada por traição e decepção profunda, tensão dramática.",
+    "panic": "Desespero e pânico urgente, respiração ofegante.",
+    "shame": "Constrangimento e humilhação intensa, voz trêmula e baixa.",
+    "whisper_tension": "Tom quase sussurrado, ameaçador e carregado de tensão.",
+    "crying": "Voz embargada segurando o choro, emoção à flor da pele.",
+    "warm": "Tom natural e caloroso de diálogo espontâneo.",
 }
+
+_AUDIO_GATE_WHISPER_SINGLETON = None
+
+
+def _get_audio_gate_whisper():
+    """Lazy-load CPU faster-whisper INT8 validator singleton (zero idle RAM until first check)."""
+    global _AUDIO_GATE_WHISPER_SINGLETON
+    if _AUDIO_GATE_WHISPER_SINGLETON is not None:
+        return _AUDIO_GATE_WHISPER_SINGLETON
+    try:
+        from faster_whisper import WhisperModel
+        _AUDIO_GATE_WHISPER_SINGLETON = WhisperModel(
+            "base",
+            device="cpu",
+            compute_type="int8",
+            cpu_threads=2,
+        )
+    except Exception:
+        _AUDIO_GATE_WHISPER_SINGLETON = False
+    return _AUDIO_GATE_WHISPER_SINGLETON
+
+
+def _fold_pt_tokens(text: str) -> List[str]:
+    norm = unicodedata.normalize("NFKD", (text or "").lower())
+    ascii_txt = "".join(ch for ch in norm if not unicodedata.combining(ch))
+    return re.findall(r"[a-z0-9]+", ascii_txt)
+
+
+def _downsample_to_16k_mono(audio_mono, framerate: int):
+    import numpy as np
+    sr = int(framerate or 48000)
+    if sr == 16000:
+        return audio_mono.astype(np.float32, copy=False)
+    if sr % 16000 == 0:
+        factor = sr // 16000
+        trim = len(audio_mono) - (len(audio_mono) % factor)
+        if trim > 0:
+            return audio_mono[:trim].reshape(-1, factor).mean(axis=1).astype(np.float32)
+    try:
+        from math import gcd
+        from scipy.signal import resample_poly
+        g = gcd(16000, sr)
+        return resample_poly(audio_mono, 16000 // g, sr // g).astype(np.float32)
+    except Exception:
+        target_len = max(1, int(round(len(audio_mono) * 16000.0 / float(sr))))
+        x_old = np.linspace(0.0, 1.0, len(audio_mono), endpoint=False)
+        x_new = np.linspace(0.0, 1.0, target_len, endpoint=False)
+        return np.interp(x_new, x_old, audio_mono).astype(np.float32)
+
+
+def validate_generated_speech_wav(
+    wav_path: Path | str,
+    expected_text: str,
+    min_rms_dbfs: float = -32.0,
+    min_zcr: float = 0.025,
+    min_word_overlap: float = 0.65,
+    whisper_model: Any = "auto",
+) -> Tuple[bool, str]:
+    """Audio Quality Gate v4.0: blocks silence, low-frequency hums, and ASR hallucinations before caching."""
+    import array
+
+    try:
+        import numpy as np  # type: ignore
+    except ImportError:
+        np = None
+
+    w_path = Path(wav_path)
+    if not w_path.is_file():
+        return False, "arquivo WAV ausente"
+
+    try:
+        with wave.open(str(w_path), "rb") as wf:
+            n_channels = max(1, wf.getnchannels())
+            sampwidth = wf.getsampwidth()
+            framerate = wf.getframerate() or 48000
+            raw = wf.readframes(wf.getnframes())
+    except Exception as exc:
+        return False, f"falha ao ler WAV: {exc}"
+
+    if sampwidth != 2 or not raw:
+        return False, "formato PCM WAV inválido ou vazio"
+
+    if np is not None:
+        audio = np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
+        if n_channels > 1:
+            audio = audio.reshape(-1, n_channels).mean(axis=1)
+        dur = len(audio) / float(framerate)
+        if dur < 0.30:
+            return False, f"áudio curto demais ({dur:.2f}s)"
+        rms = float(np.sqrt(np.mean(np.square(audio)) + 1e-12))
+        rms_dbfs = 20.0 * float(math.log10(rms))
+        if rms_dbfs < min_rms_dbfs:
+            return False, f"áudio baixo/mudo (RMS={rms_dbfs:.1f} dBFS < {min_rms_dbfs})"
+        zcr = float(np.mean(np.abs(np.diff(np.signbit(audio)))))
+        if zcr < min_zcr:
+            return False, f"zumbido/ruído sem consoantes detectado (ZCR={zcr:.4f} < {min_zcr})"
+    else:
+        pcm = array.array("h")
+        pcm.frombytes(raw)
+        if n_channels > 1:
+            mono = [
+                sum(pcm[i + c] for c in range(n_channels)) / (32768.0 * n_channels)
+                for i in range(0, len(pcm) - (len(pcm) % n_channels), n_channels)
+            ]
+        else:
+            mono = [s / 32768.0 for s in pcm]
+        dur = len(mono) / float(framerate)
+        if dur < 0.30:
+            return False, f"áudio curto demais ({dur:.2f}s)"
+        rms = math.sqrt((sum(v * v for v in mono) / float(len(mono))) + 1e-12)
+        rms_dbfs = 20.0 * math.log10(rms)
+        if rms_dbfs < min_rms_dbfs:
+            return False, f"áudio baixo/mudo (RMS={rms_dbfs:.1f} dBFS < {min_rms_dbfs})"
+        crossings = sum(1 for i in range(1, len(mono)) if (mono[i] < 0.0) != (mono[i - 1] < 0.0))
+        zcr = crossings / float(max(1, len(mono) - 1))
+        if zcr < min_zcr:
+            return False, f"zumbido/ruído sem consoantes detectado (ZCR={zcr:.4f} < {min_zcr})"
+        return True, f"audio_gate_ok (RMS={rms_dbfs:.1f}dBFS, ZCR={zcr:.4f}, dur={dur:.2f}s)"
+
+    # Ignore pure single-letter fillers unless total utterance is ultra-short (e.g. "O quê?!")
+    raw_exp_tokens = _fold_pt_tokens(expected_text)
+    exp_tokens = [w for w in raw_exp_tokens if len(w) >= 2]
+    is_short_exclamation = len(raw_exp_tokens) <= 2
+    model_obj = _get_audio_gate_whisper() if whisper_model == "auto" else whisper_model
+    asr_note = ""
+    if model_obj and model_obj is not False and (exp_tokens or is_short_exclamation):
+        audio_16k = _downsample_to_16k_mono(audio, framerate)
+        try:
+            segments, _ = model_obj.transcribe(audio_16k, language="pt", vad_filter=False)
+            transcribed = " ".join(getattr(seg, "text", "") for seg in segments).strip()
+            got_tokens = _fold_pt_tokens(transcribed)
+            if not got_tokens:
+                return False, f"ASR detectou 0 palavras faladas (esperado '{expected_text[:40]}')"
+            got_set = set(got_tokens)
+            # Phonetic tolerance for ultra-short exclamations ("O quê?!" -> Whisper often outputs "Ok!" or "O que?")
+            if is_short_exclamation and dur <= 2.2:
+                asr_note = f", asr='{transcribed[:30]}'"
+            else:
+                hits = 0
+                for ew in exp_tokens:
+                    if ew in got_set or any((len(ew) >= 4 and len(gw) >= 4 and ew[:3] == gw[:3]) for gw in got_set):
+                        hits += 1
+                overlap = hits / float(len(exp_tokens))
+                req_overlap = 0.50 if len(exp_tokens) <= 2 else min_word_overlap
+                if overlap < req_overlap:
+                    return False, f"ASR divergiu ({overlap:.0%} < {req_overlap:.0%}, lido='{transcribed[:60]}')"
+                asr_note = f", overlap={overlap:.0%}"
+        except Exception as asr_exc:
+            return True, f"PASS_ACOUSTIC_ONLY (RMS={rms_dbfs:.1f}dBFS, ZCR={zcr:.4f}, asr_warn={asr_exc})"
+
+    return True, f"PASS (RMS={rms_dbfs:.1f}dBFS, ZCR={zcr:.4f}{asr_note})"
 
 
 def normalize_character_id(speaker_raw: str) -> str:
@@ -216,6 +424,12 @@ def normalize_character_id(speaker_raw: str) -> str:
         return "seu_bastiao"
     if "enzo" in clean:
         return "enzo"
+    if "noiva" in clean or "esposa" in clean or "mulher" in clean:
+        return "noiva"
+    if "sogra" in clean or "mae" in clean or "mãe" in clean or "senhora" in clean:
+        return "sogra"
+    if "noivo" in clean or "marido" in clean or "pai" in clean or "homem" in clean:
+        return "noivo"
     if "narr" in clean:
         return "narrador_sertao"
     return "narrador_sertao"
@@ -715,8 +929,10 @@ def _cache_key_for_turn(
     emotion: str,
     eff_engine: str,
     processed_text: str,
+    drama_pacing: bool = False,
 ) -> str:
-    raw = f"v29|{cid}|{gem_voice}|{emotion}|{eff_engine}|{processed_text}"
+    tag = "v4drama" if drama_pacing else "v29"
+    raw = f"{tag}|{cid}|{gem_voice}|{emotion}|{eff_engine}|{processed_text}"
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
@@ -820,6 +1036,7 @@ def _call_gemini_live_audio_tts(
     emo_cue: str,
     voice_name: str,
     models: Tuple[str, ...] = GEMINI_LIVE_AUDIO_MODELS,
+    drama_pacing: bool = False,
 ) -> Tuple[bytes, int, str, int, str, str]:
     """Primary unlimited-RPM Gemini Live Audio TTS over BidiGenerateContent WebSocket."""
     keys = _collect_gemini_keys(env_map)
@@ -828,11 +1045,15 @@ def _call_gemini_live_audio_tts(
     live_voice = _LIVE_VOICE_FALLBACK_MAP.get((voice_name or "Kore").strip(), "Kore")
     qt = _get_qt()
 
+    tone_desc = (
+        "Leia em voz alta com interpretação dramática brasileira realista e carga emocional EXATAMENTE "
+        if drama_pacing
+        else "Leia em voz alta com sotaque cearense autêntico, ritmo ágil e atuação expressiva EXATAMENTE "
+    )
     system_prompt = (
         f"{style_inst} {emo_cue} "
-        "Você é um sintetizador de voz (TTS) estritamente literal para dublagem nordestina brasileira. "
-        "Leia em voz alta com sotaque cearense autêntico, ritmo ágil e atuação expressiva EXATAMENTE "
-        "o texto entre aspas enviado pelo usuário. "
+        "Você é um sintetizador de voz (TTS) estritamente literal para dublagem brasileira. "
+        f"{tone_desc}o texto entre aspas enviado pelo usuário. "
         "PROIBIDO responder, cumprimentar, confirmar ('claro', 'entendido'), explicar ou adicionar palavras."
     )
     user_prompt = f"\"{text}\""
@@ -1089,6 +1310,9 @@ def _call_colab_voice_endpoint(
         data = json.loads(resp.read().decode("utf-8"))
     if not data.get("ok") or not data.get("audio_b64"):
         raise RuntimeError(f"Colab {endpoint_path} falhou: {data.get('error') or 'sem audio_b64'}")
+    used_eng = str(data.get("engine") or "").lower()
+    if "fallback" in used_eng or "copy" in used_eng:
+        raise RuntimeError(f"Colab {endpoint_path} retornou fallback silencioso ({used_eng})")
     tmp_raw = out_wav.with_suffix(".colab_raw.wav")
     tmp_raw.write_bytes(base64.b64decode(data["audio_b64"]))
     try:
@@ -1111,6 +1335,8 @@ def synthesize_regional_turn(
     lead_pad: float = 0.03,
     tail_pad: float = 0.09,
     voice_override: str = "",
+    drama_pacing: bool = False,
+    performance_direction: str = "",
 ) -> Dict[str, Any]:
     """Synthesize one dialogue turn in authentic Northeast prosody as 48kHz Stereo SoXR WAV."""
     out_wav.parent.mkdir(parents=True, exist_ok=True)
@@ -1125,18 +1351,25 @@ def synthesize_regional_turn(
 
     eff_colab_url = (colab_url or env_map.get("COLAB_GPU_URL") or "").strip()
     eff_colab_tok = (colab_token or env_map.get("COLAB_GPU_TOKEN") or "").strip()
-    processed_text = apply_nordestino_prosody(tts_text, character=cid, emotion=emotion, mode="gemini")
+    processed_text = (
+        sanitize_northeast_slang(tts_text)
+        if drama_pacing
+        else apply_nordestino_prosody(tts_text, character=cid, emotion=emotion, mode="gemini")
+    )
     gem_voice = (voice_override or prof.get("gemini_voice") or "Kore").strip()
 
-    # 0) Persistent SHA-256 Voice Cache (<5ms instant hit, ZERO API calls)
+    # 0) Persistent SHA-256 Voice Cache (<5ms instant hit, ZERO API calls, protected by Acoustic Gate)
     cache_eligible = not (eff_engine == "seed_vc_guide" and guide_audio_path) and not (
         eff_engine == "f5_tts_clone" and eff_colab_url
     )
-    cache_key = _cache_key_for_turn(cid, gem_voice, emotion, eff_engine, processed_text)
+    cache_key = _cache_key_for_turn(cid, gem_voice, emotion, eff_engine, processed_text, drama_pacing=drama_pacing)
     cache_wav = VOICES_CACHE_DIR / f"{cache_key}.wav"
     if cache_eligible and cache_wav.is_file() and cache_wav.stat().st_size > 8000:
         dur_cached = _read_wav_duration_fast(cache_wav)
-        if dur_cached > 0.35:
+        ok_cache, cache_reason = validate_generated_speech_wav(
+            cache_wav, expected_text=tts_text, whisper_model=None
+        )
+        if dur_cached > 0.35 and ok_cache:
             shutil.copyfile(cache_wav, out_wav)
             qt = _get_qt()
             if qt is not None:
@@ -1153,6 +1386,9 @@ def synthesize_regional_turn(
                 "duration": round(dur_cached, 3),
                 "wav_path": str(out_wav),
             }
+        # Purge corrupted cache file so it can never poison future episodes (e.g. Corte 3 hum bug)
+        print(f"[AudioGate v4] Cache corrompido purgado ({cache_wav.name}): {cache_reason}", flush=True)
+        cache_wav.unlink(missing_ok=True)
 
     # 1) Direct / Seed-VC Speech-to-Speech when user recorded a guide clip for this line
     if eff_engine == "seed_vc_guide" and guide_audio_path and Path(guide_audio_path).is_file():
@@ -1227,11 +1463,19 @@ def synthesize_regional_turn(
             except Exception:
                 pass
 
-    # 3) Primary Engine (v2.9): Gemini Live Audio (Unlimited RPM) -> Round-Robin REST Pool (5x3 RPM)
+    # 3) Primary Engine (v2.9/v4.0): Gemini Live Audio -> Round-Robin REST Pool, both gated by Audio Quality Gate
     gem_keys = _collect_gemini_keys(env_map)
     if gem_keys:
         emo_cue = EMOTION_ACTING_CUES_PT.get(emotion, EMOTION_ACTING_CUES_PT["warm"])
-        style_inst = prof.get("style_instruction") or NORDESTE_FAST_DIRECTOR_PROMPT
+        if performance_direction:
+            emo_cue = f"{emo_cue} {performance_direction}".strip()
+        if drama_pacing:
+            style_inst = (
+                f"Atuação dramática brasileira de micro-novela realista para {speaker}. "
+                "Voz natural, intensa e expressiva, com ritmo dramático autêntico (sem pressa de desenho animado)."
+            )
+        else:
+            style_inst = prof.get("style_instruction") or NORDESTE_FAST_DIRECTOR_PROMPT
 
         # 3A) Primary: Gemini Live Audio WebSocket (BidiGenerateContent, zero RPD/3-RPM bottleneck)
         try:
@@ -1242,6 +1486,7 @@ def synthesize_regional_turn(
                 emo_cue=emo_cue,
                 voice_name=gem_voice,
                 models=GEMINI_LIVE_AUDIO_MODELS,
+                drama_pacing=drama_pacing,
             )
             dur = _pcm_to_48k_stereo_wav(
                 pcm_bytes,
@@ -1251,8 +1496,11 @@ def synthesize_regional_turn(
                 tail_pad=tail_pad,
                 codec=codec,
                 src_channels=src_ch,
-                comedy_fast=True,
+                comedy_fast=not drama_pacing,
             )
+            ok_gate, gate_msg = validate_generated_speech_wav(out_wav, expected_text=tts_text, whisper_model="auto")
+            if not ok_gate:
+                raise RuntimeError(f"AudioGate v4 rejeitou Gemini Live ({gate_msg})")
             _save_voice_cache(cache_key, out_wav)
             return {
                 "ok": True,
@@ -1260,6 +1508,7 @@ def synthesize_regional_turn(
                 "accent_engine_requested": eff_engine,
                 "voice_engine_used": f"gemini_live:{live_voice}",
                 "gemini_model": live_model_info.split("|")[0],
+                "audio_gate": gate_msg,
                 "cache_hit": False,
                 "cache_key": cache_key,
                 "processed_text": processed_text,
@@ -1267,7 +1516,7 @@ def synthesize_regional_turn(
                 "wav_path": str(out_wav),
             }
         except Exception as live_exc:
-            print(f"[RVE LIVE INFO] Gemini Live indisponível para {cid}, acionando Pool REST: {live_exc}", flush=True)
+            print(f"[RVE LIVE INFO] Gemini Live indisponível/rejeitado para {cid}, acionando Pool REST: {live_exc}", flush=True)
 
         # 3B) Secondary: Round-Robin REST Pool across 5 Gemini TTS models
         def _build_turn_payload(model_name: str) -> Dict[str, Any]:
@@ -1275,9 +1524,10 @@ def synthesize_regional_turn(
             if "3.8" in (model_name or ""):
                 prompt_text = processed_text
             else:
+                cadence = "interpretação dramática intensa" if drama_pacing else "ritmo rápido nordestino"
                 prompt_text = (
                     f"{style_inst} {emo_cue} "
-                    f"Fale somente o texto entre aspas com ritmo rápido nordestino, sem comentários: "
+                    f"Fale somente o texto entre aspas com {cadence}, sem comentários: "
                     f"\"{processed_text}\""
                 )
             return {
@@ -1308,8 +1558,11 @@ def synthesize_regional_turn(
                 tail_pad=tail_pad,
                 codec=codec,
                 src_channels=src_ch,
-                comedy_fast=True,
+                comedy_fast=not drama_pacing,
             )
+            ok_gate, gate_msg = validate_generated_speech_wav(out_wav, expected_text=tts_text, whisper_model="auto")
+            if not ok_gate:
+                raise RuntimeError(f"AudioGate v4 rejeitou Gemini REST ({gate_msg})")
             _save_voice_cache(cache_key, out_wav)
             return {
                 "ok": True,
@@ -1317,6 +1570,7 @@ def synthesize_regional_turn(
                 "accent_engine_requested": eff_engine,
                 "voice_engine_used": f"gemini_tts:{gem_voice}",
                 "gemini_model": used_model,
+                "audio_gate": gate_msg,
                 "cache_hit": False,
                 "cache_key": cache_key,
                 "processed_text": processed_text,
@@ -1337,11 +1591,15 @@ def synthesize_regional_turn(
         lead_pad=lead_pad,
         tail_pad=tail_pad,
     )
+    ok_edge, edge_gate_msg = validate_generated_speech_wav(out_wav, expected_text=tts_text, whisper_model="auto")
+    if not ok_edge:
+        raise RuntimeError(f"AudioGate v4 rejeitou até o fallback Edge-TTS ({edge_gate_msg})")
     return {
         "ok": True,
         "character_id": cid,
         "accent_engine_requested": eff_engine,
         "voice_engine_used": "edge_tts_regional_fallback",
+        "audio_gate": edge_gate_msg,
         "processed_text": apply_nordestino_prosody(tts_text, character=cid, emotion=emotion, mode="phonetic"),
         "duration": round(dur, 3),
         "wav_path": str(out_wav),
