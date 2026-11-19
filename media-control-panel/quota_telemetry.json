@@ -1,0 +1,219 @@
+{
+  "date": "2026-11-19",
+  "active_by_specialty": {
+    "text": "nvidia/nemotron-3.5-lightning-30b-a3b",
+    "voice": "gemini-2.5-flash-native-audio-latest",
+    "vision": "gemini-3.5-flash-lite",
+    "image": "black-forest-labs/flux.1-dev",
+    "video": "google-flow-veo31"
+  },
+  "savings": {
+    "saved_gemini_text_calls": 4,
+    "saved_gemini_voice_cache_hits": 26,
+    "saved_gemini_live_audio_calls": 29
+  },
+  "rr_tts_cursor": 0,
+  "stats": {
+    "nvidia/nemotron-3.5-lightning-30b-a3b": {
+      "timestamps": [],
+      "rpd_used": 4,
+      "cache_hits": 0,
+      "total_calls": 15,
+      "cooldown_until": 0.0,
+      "last_error_code": null,
+      "last_error": "",
+      "last_called_at": 1795093722.07094
+    },
+    "nvidia/nemotron-3-ultra-550b-a55b": {
+      "timestamps": [],
+      "rpd_used": 0,
+      "cache_hits": 0,
+      "total_calls": 0,
+      "cooldown_until": 0.0,
+      "last_error_code": null,
+      "last_error": "",
+      "last_called_at": 0.0
+    },
+    "moonshotai/kimi-k3.1-pro": {
+      "timestamps": [],
+      "rpd_used": 0,
+      "cache_hits": 0,
+      "total_calls": 0,
+      "cooldown_until": 0.0,
+      "last_error_code": null,
+      "last_error": "",
+      "last_called_at": 0.0
+    },
+    "openrouter/nemotron-free": {
+      "timestamps": [],
+      "rpd_used": 0,
+      "cache_hits": 0,
+      "total_calls": 0,
+      "cooldown_until": 0.0,
+      "last_error_code": null,
+      "last_error": "",
+      "last_called_at": 0.0
+    },
+    "gemini-2.5-flash-native-audio-latest": {
+      "timestamps": [],
+      "rpd_used": 37,
+      "cache_hits": 48,
+      "total_calls": 86,
+      "cooldown_until": 0.0,
+      "last_error_code": null,
+      "last_error": "",
+      "last_called_at": 1795111596.4674618
+    },
+    "gemini-3.8-flash-tts": {
+      "timestamps": [],
+      "rpd_used": 2,
+      "cache_hits": 0,
+      "total_calls": 2,
+      "cooldown_until": 0.0,
+      "last_error_code": null,
+      "last_error": "",
+      "last_called_at": 1795093470.2934458
+    },
+    "gemini-3.8-flash-lite-tts": {
+      "timestamps": [],
+      "rpd_used": 0,
+      "cache_hits": 0,
+      "total_calls": 1,
+      "cooldown_until": 0.0,
+      "last_error_code": null,
+      "last_error": "",
+      "last_called_at": 1795029471.1074896
+    },
+    "gemini-2.5-flash-preview-tts": {
+      "timestamps": [],
+      "rpd_used": 1,
+      "cache_hits": 0,
+      "total_calls": 1,
+      "cooldown_until": 0.0,
+      "last_error_code": null,
+      "last_error": "",
+      "last_called_at": 1795051286.7510061
+    },
+    "gemini-3.1-flash-tts-preview": {
+      "timestamps": [],
+      "rpd_used": 1,
+      "cache_hits": 0,
+      "total_calls": 1,
+      "cooldown_until": 0.0,
+      "last_error_code": null,
+      "last_error": "",
+      "last_called_at": 1795089992.9316983
+    },
+    "gemini-2.5-pro-preview-tts": {
+      "timestamps": [],
+      "rpd_used": 1,
+      "cache_hits": 0,
+      "total_calls": 1,
+      "cooldown_until": 1795094458.2475793,
+      "last_error_code": 429,
+      "last_error": "{\n  \"error\": {\n    \"code\": 429,\n    \"message\": \"You exceeded your current quota, please check your plan and billing details. For more information on this error,",
+      "last_called_at": 1795090858.2475793
+    },
+    "gemma-4-31b-it": {
+      "timestamps": [],
+      "rpd_used": 0,
+      "cache_hits": 0,
+      "total_calls": 0,
+      "cooldown_until": 0.0,
+      "last_error_code": null,
+      "last_error": "",
+      "last_called_at": 0.0
+    },
+    "gemini-3.5-flash-lite": {
+      "timestamps": [],
+      "rpd_used": 0,
+      "cache_hits": 0,
+      "total_calls": 0,
+      "cooldown_until": 0.0,
+      "last_error_code": null,
+      "last_error": "",
+      "last_called_at": 0.0
+    },
+    "gemini-3.1-flash-lite": {
+      "timestamps": [],
+      "rpd_used": 0,
+      "cache_hits": 0,
+      "total_calls": 0,
+      "cooldown_until": 0.0,
+      "last_error_code": null,
+      "last_error": "",
+      "last_called_at": 0.0
+    },
+    "gemini-2.5-flash-lite": {
+      "timestamps": [],
+      "rpd_used": 0,
+      "cache_hits": 0,
+      "total_calls": 0,
+      "cooldown_until": 0.0,
+      "last_error_code": null,
+      "last_error": "",
+      "last_called_at": 0.0
+    },
+    "gemini-3.8-flash": {
+      "timestamps": [],
+      "rpd_used": 0,
+      "cache_hits": 0,
+      "total_calls": 0,
+      "cooldown_until": 0.0,
+      "last_error_code": null,
+      "last_error": "",
+      "last_called_at": 0.0
+    },
+    "gemini-2.5-flash": {
+      "timestamps": [],
+      "rpd_used": 0,
+      "cache_hits": 0,
+      "total_calls": 0,
+      "cooldown_until": 0.0,
+      "last_error_code": null,
+      "last_error": "",
+      "last_called_at": 0.0
+    },
+    "black-forest-labs/flux.1-dev": {
+      "timestamps": [],
+      "rpd_used": 2,
+      "cache_hits": 0,
+      "total_calls": 31,
+      "cooldown_until": 0.0,
+      "last_error_code": null,
+      "last_error": "",
+      "last_called_at": 1795051202.0166397
+    },
+    "zerogpu-a10g-video": {
+      "timestamps": [],
+      "rpd_used": 2,
+      "cache_hits": 0,
+      "total_calls": 26,
+      "cooldown_until": 1795051770.205549,
+      "last_error_code": 429,
+      "last_error": "You have exceeded your free ZeroGPU quota (180s requested vs. 0s left). Try again in 0:00:00. Subscribe to Hugging Face PRO to get 25 min of ZeroGPU quota a day",
+      "last_called_at": 1795051705.205549
+    },
+    "colab-t4-gpu": {
+      "timestamps": [],
+      "rpd_used": 4,
+      "cache_hits": 0,
+      "total_calls": 12,
+      "cooldown_until": 0.0,
+      "last_error_code": null,
+      "last_error": "",
+      "last_called_at": 1795051411.666424
+    },
+    "google-flow-veo31": {
+      "timestamps": [],
+      "rpd_used": 2,
+      "cache_hits": 0,
+      "total_calls": 2,
+      "cooldown_until": 0.0,
+      "last_error_code": null,
+      "last_error": "",
+      "last_called_at": 1795092570.139766
+    }
+  },
+  "updated_at": 1795116069.2792945
+}

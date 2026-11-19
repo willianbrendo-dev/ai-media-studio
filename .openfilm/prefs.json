@@ -1,0 +1,11 @@
+{
+  "proxies": {
+    "on": true,
+    "height": 720
+  },
+  "seenVersion": "0.3.2",
+  "keys": null,
+  "autoVersions": false,
+  "showAutoVersions": false,
+  "libraryCategories": null
+}

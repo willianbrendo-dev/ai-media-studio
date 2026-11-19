@@ -283,15 +283,12 @@ MANAGED_KEYS = [
     "GROQ_API_KEY",
     "OPENAI_API_KEY",
     "PEXELS_API_KEY",
-    "COLAB_GPU_URL",
-    "COLAB_GPU_TOKEN",
 ]
 
 DEFAULT_URLS = {
     "ANTHROPIC_BASE_URL": "https://api.anthropic.com/v1",
     "NVIDIA_BASE_URL": "https://integrate.api.nvidia.com/v1",
     "OPENROUTER_BASE_URL": "https://openrouter.ai/api/v1",
-    "COLAB_GPU_URL": "",
 }
 
 
@@ -341,16 +338,13 @@ def read_env_value(file_path: Path, key: str) -> str:
     return ""
 
 
-def sanitize_base_url(raw: str, default: str, *, require_https: bool = False) -> str:
+def sanitize_base_url(raw: str, default: str) -> str:
     val = (raw or "").strip()
     if not val:
         return default
     m = re.search(r"https?://[^\s\]\)\"\'<>]+", val)
     if m:
-        url = m.group(0).rstrip("/")
-        if require_https and not url.startswith("https://"):
-            return default
-        return url
+        return m.group(0).rstrip("/")
     return default
 
 
@@ -362,8 +356,7 @@ def load_vault() -> Dict[str, str]:
                 for k in MANAGED_KEYS:
                     data.setdefault(k, DEFAULT_URLS.get(k, ""))
                 for k, default_val in DEFAULT_URLS.items():
-                    require_https = (k == "COLAB_GPU_URL")
-                    data[k] = sanitize_base_url(data.get(k, ""), default_val, require_https=require_https)
+                    data[k] = sanitize_base_url(data.get(k, ""), default_val)
                 return data
         except Exception:
             pass
@@ -3460,9 +3453,7 @@ async def api_colab_status():
 @app.post("/api/colab/config")
 async def api_colab_config(req: ColabConfigRequest):
     vault = load_vault()
-    clean_url = sanitize_base_url(req.colab_url, "", require_https=True)
-    if not clean_url:
-        raise HTTPException(status_code=400, detail="COLAB_GPU_URL inválida: deve ser uma URL https:// válida")
+    clean_url = sanitize_base_url(req.colab_url, "")
     vault["COLAB_GPU_URL"] = clean_url
     if req.colab_token is not None:
         vault["COLAB_GPU_TOKEN"] = req.colab_token.strip()

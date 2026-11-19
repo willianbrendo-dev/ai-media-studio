@@ -682,7 +682,7 @@ else:
                 "mdef = s.get_model_def(model_id) or {}\n"
                 "schema = (s.get_model_schema(model_id) or {}).get('metadata', {})\n"
                 "f_min = int(schema.get('frames_minimum') or mdef.get('frames_minimum') or 17)\n"
-                "res = '512x896' if 'ltx2' in model_id else '480x832'\n"
+                "res = '384x640' if 'ltx2' in model_id else '480x832'\n"
                 "cfg['model_type'] = model_id\n"
                 "cfg['prompt'] = 'Cinematic still person standing in warm candlelit room, subtle natural breathing motion.'\n"
                 "cfg['negative_prompt'] = 'watermark, overlaid text'\n"

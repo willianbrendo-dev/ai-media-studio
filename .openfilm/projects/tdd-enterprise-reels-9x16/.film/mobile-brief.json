@@ -1,0 +1,9 @@
+{
+  "name": "TDD Enterprise Reels 9x16",
+  "aspect_ratio": "9:16",
+  "fps": 30,
+  "subtitle_preset": "reels_viral",
+  "motion_blur": true,
+  "scene_prompt": "Abertura com gancho de impacto, legenda pop verde esmeralda e corte dinâmico.",
+  "created_from": "Estúdio Rápido Mobile"
+}
